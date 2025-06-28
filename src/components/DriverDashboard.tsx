@@ -20,7 +20,7 @@ import {
 import { User as UserType, Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats } from '@/types'
 import DriverVacationRequest from './DriverVacationRequest'
 import DriverVehicleInfo from './DriverVehicleInfo'
-import { initialVacationRequests, initialDrivers } from '@/data/sampleData'
+import { initialVacationRequests } from '@/data/sampleData'
 
 interface DriverDashboardProps {
   currentUser: UserType
@@ -298,7 +298,6 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
       monthlyStats={monthlyVacationStats}
       onRequestSubmit={handleVacationRequest}
       onRequestDelete={handleVacationDelete}
-      allUsers={initialDrivers}
     />
   )
 
