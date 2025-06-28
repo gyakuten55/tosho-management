@@ -301,6 +301,17 @@ export default function VacationManagement({
     }
   }
 
+  const sendPushNotification = useCallback(async (notification: VacationNotification) => {
+    console.log('プッシュ通知送信:', notification.message)
+    
+    const updatedNotifications = vacationNotifications.map(notif => 
+      notif.id === notification.id 
+        ? { ...notif, pushNotificationSent: true }
+        : notif
+    )
+    onVacationNotificationsChange(updatedNotifications)
+  }, [vacationNotifications, onVacationNotificationsChange])
+
   const checkAndSendNotifications = useCallback(() => {
     const today = new Date()
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
@@ -342,17 +353,6 @@ export default function VacationManagement({
       checkAndSendNotifications()
     }
   }, [vacationSettings.notificationDate, checkAndSendNotifications])
-
-  const sendPushNotification = useCallback(async (notification: VacationNotification) => {
-    console.log('プッシュ通知送信:', notification.message)
-    
-    const updatedNotifications = vacationNotifications.map(notif => 
-      notif.id === notification.id 
-        ? { ...notif, pushNotificationSent: true }
-        : notif
-    )
-    onVacationNotificationsChange(updatedNotifications)
-  }, [vacationNotifications, onVacationNotificationsChange])
 
   // カレンダービューのレンダリング
   const renderCalendarView = () => {
