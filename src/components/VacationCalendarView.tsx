@@ -32,13 +32,13 @@ export default function VacationCalendarView({
   // フィルタリングされた休暇申請
   const filteredRequests = vacationRequests.filter(request => {
     if (selectedTeam !== 'all' && request.team !== selectedTeam) return false
-    return request.status === 'approved' || request.status === 'pending'
+    return request.isOff === true  // 休暇の申請のみ表示
   })
 
   // 指定日の休暇申請を取得
   const getRequestsForDate = (date: Date) => {
     return filteredRequests.filter(request => {
-      return date >= request.startDate && date <= request.endDate
+      return format(date, 'yyyy-MM-dd') === format(request.date, 'yyyy-MM-dd')
     })
   }
 
@@ -77,21 +77,7 @@ export default function VacationCalendarView({
     }
   }
 
-  // 休暇タイプの色を取得
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'annual':
-        return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'sick':
-        return 'bg-red-100 text-red-800 border-red-200'
-      case 'personal':
-        return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'emergency':
-        return 'bg-orange-100 text-orange-800 border-orange-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
-  }
+
 
   return (
     <div className="space-y-6">
@@ -140,19 +126,7 @@ export default function VacationCalendarView({
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center">
             <div className="w-4 h-4 bg-blue-100 border border-blue-200 rounded mr-2"></div>
-            <span>年次有給</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-red-100 border border-red-200 rounded mr-2"></div>
-            <span>病気休暇</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-purple-100 border border-purple-200 rounded mr-2"></div>
-            <span>私用休暇</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-orange-100 border border-orange-200 rounded mr-2"></div>
-            <span>緊急休暇</span>
+            <span>休暇申請</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-gray-300 rounded mr-2"></div>
@@ -227,8 +201,8 @@ export default function VacationCalendarView({
                   {requests.slice(0, 3).map((request) => (
                     <div
                       key={request.id}
-                      className={`text-xs px-1 py-0.5 rounded border truncate ${getTypeColor(request.type)}`}
-                      title={`${request.driverName} (${request.team}) - ${request.reason}`}
+                      className="text-xs px-1 py-0.5 rounded border truncate bg-blue-100 text-blue-800 border-blue-200"
+                      title={`${request.driverName} (${request.team}) - 休暇申請`}
                     >
                       {request.driverName}
                     </div>
@@ -264,8 +238,7 @@ export default function VacationCalendarView({
               <p className="text-sm font-medium text-gray-600">今月の休暇申請</p>
               <p className="text-2xl font-bold text-gray-900">
                 {filteredRequests.filter(req => 
-                  isSameMonth(req.startDate, currentDate) || 
-                  isSameMonth(req.endDate, currentDate)
+                  isSameMonth(req.date, currentDate)
                 ).length}
               </p>
             </div>
@@ -278,18 +251,15 @@ export default function VacationCalendarView({
         <div className="card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">承認待ち</p>
-              <p className="text-2xl font-bold text-yellow-600">
+              <p className="text-sm font-medium text-gray-600">総休暇日数</p>
+              <p className="text-2xl font-bold text-green-600">
                 {filteredRequests.filter(req => 
-                  req.status === 'pending' && (
-                    isSameMonth(req.startDate, currentDate) || 
-                    isSameMonth(req.endDate, currentDate)
-                  )
+                  isSameMonth(req.date, currentDate)
                 ).length}
               </p>
             </div>
-            <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <AlertTriangle className="h-6 w-6 text-yellow-600" />
+            <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-green-600" />
             </div>
           </div>
         </div>
