@@ -35,9 +35,9 @@ import {
   initialVacationNotifications,
   initialVehicleAssignmentChanges,
   initialDriverVehicleNotifications,
-  initialPerformanceMetrics, 
-  initialMaintenanceReports,
-  initialFinancialReports
+  samplePerformanceMetrics, 
+  sampleMaintenanceReport,
+  sampleFinancialReport
 } from '@/data/sampleData'
 import VacationManagement from '@/components/VacationManagement'
 
@@ -54,9 +54,9 @@ export default function Home() {
   const [vacationNotifications, setVacationNotifications] = useState(initialVacationNotifications)
   const [vehicleAssignmentChanges, setVehicleAssignmentChanges] = useState(initialVehicleAssignmentChanges)
   const [driverVehicleNotifications, setDriverVehicleNotifications] = useState(initialDriverVehicleNotifications)
-  const [performanceMetrics, setPerformanceMetrics] = useState(initialPerformanceMetrics)
-  const [maintenanceReports, setMaintenanceReports] = useState(initialMaintenanceReports)
-  const [financialReports, setFinancialReports] = useState(initialFinancialReports)
+  const [performanceMetrics, setPerformanceMetrics] = useState(samplePerformanceMetrics)
+  const [maintenanceReports, setMaintenanceReports] = useState(sampleMaintenanceReport)
+  const [financialReports, setFinancialReports] = useState(sampleFinancialReport)
   const [notifications, setNotifications] = useState<DriverNotification[]>([])
 
   const handleLogin = (user: User) => {
