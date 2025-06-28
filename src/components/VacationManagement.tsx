@@ -333,7 +333,7 @@ export default function VacationManagement({
         }
       }
     })
-  }, [currentStats, vacationNotifications, onVacationNotificationsChange])
+  }, [currentStats, vacationNotifications, onVacationNotificationsChange, sendPushNotification])
 
   // 25日の通知チェック
   useEffect(() => {
@@ -343,7 +343,7 @@ export default function VacationManagement({
     }
   }, [vacationSettings.notificationDate, checkAndSendNotifications])
 
-  const sendPushNotification = async (notification: VacationNotification) => {
+  const sendPushNotification = useCallback(async (notification: VacationNotification) => {
     console.log('プッシュ通知送信:', notification.message)
     
     const updatedNotifications = vacationNotifications.map(notif => 
@@ -352,7 +352,7 @@ export default function VacationManagement({
         : notif
     )
     onVacationNotificationsChange(updatedNotifications)
-  }
+  }, [vacationNotifications, onVacationNotificationsChange])
 
   // カレンダービューのレンダリング
   const renderCalendarView = () => {

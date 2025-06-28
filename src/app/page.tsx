@@ -139,7 +139,7 @@ export default function Home() {
           </div>
         )
       case 'vehicles':
-        return <VehicleManagement vehicles={vehicles} drivers={drivers} onVehiclesChange={setVehicles} />
+        return <VehicleManagement vehicles={vehicles} onVehiclesChange={setVehicles} />
       case 'drivers':
         return <DriverManagement 
           drivers={drivers} 
