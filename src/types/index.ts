@@ -321,4 +321,49 @@ export interface VehicleOperationCalendarDay {
   inactiveVehicles: number
 }
 
+// 配車スケジュール管理システムの型定義
+export interface DispatchSchedule {
+  id: number
+  driverId: number
+  vehicleId: number
+  driverName: string
+  vehicleNumber: string
+  date: Date
+  timeSlot: {
+    start: string
+    end: string
+  }
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'urgent' | 'high' | 'normal' | 'low'
+  team: string
+  route: {
+    origin: string
+    destination: string
+    waypoints?: string[]
+  }
+  clientInfo?: {
+    name: string
+    contact?: string
+    notes?: string
+  }
+  cargoInfo?: {
+    type: string
+    count: number
+    notes?: string
+  }
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface VehicleSwap {
+  id: number
+  originalVehicleId: number
+  newVehicleId: number
+  status: 'pending' | 'approved' | 'completed'
+  swapTime: Date
+  reason: string
+  approvedBy?: string
+}
+
  
