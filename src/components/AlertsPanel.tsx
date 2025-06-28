@@ -31,15 +31,15 @@ export default function AlertsPanel({ vehicles }: AlertsPanelProps) {
     vehicles.forEach((vehicle) => {
       const daysUntilInspection = differenceInDays(vehicle.nextInspection, new Date())
       
-      // 故障車両のアラート
-      if (vehicle.status === 'breakdown') {
+      // 修理中車両のアラート
+      if (vehicle.status === 'repair') {
         vehicleAlerts.push({
-          id: `breakdown-${vehicle.id}`,
+          id: `repair-${vehicle.id}`,
           type: 'emergency',
-          title: '車両故障発生',
-          message: `${vehicle.plateNumber}（${vehicle.driver || '未割当'}）にて故障が発生しました。代替車両の手配が必要です。`,
+          title: '車両修理中',
+          message: `${vehicle.plateNumber}（${vehicle.driver || '未割当'}）が修理中です。代替車両の手配が必要です。`,
           time: new Date(Date.now() - 1000 * 60 * 15),
-          status: alertStatuses[`breakdown-${vehicle.id}`] || 'new',
+          status: alertStatuses[`repair-${vehicle.id}`] || 'new',
           priority: 'high',
         })
       }
