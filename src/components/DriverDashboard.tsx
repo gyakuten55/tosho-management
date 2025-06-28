@@ -96,13 +96,14 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
     setMonthlyVacationStats({
       driverId: currentUser.id,
       driverName: currentUser.name,
+      team: currentUser.team,
       employeeId: currentUser.employeeId,
       month: currentMonth,
       year: currentYear,
-      currentVacationDays: userVacations.length,
-      minimumRequired: 9,
-      remainingRequired: Math.max(0, 9 - userVacations.length),
-      isExternalDriver: currentUser.employeeId.startsWith('E')
+      totalOffDays: userVacations.length,
+      requiredMinimumDays: 9,
+      remainingRequiredDays: Math.max(0, 9 - userVacations.length),
+      maxAllowedDays: 12
     })
   }, [currentUser, vacationRequests])
 
