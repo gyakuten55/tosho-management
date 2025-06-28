@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { 
   Calendar,
   Plus,
@@ -301,15 +301,7 @@ export default function VacationManagement({
     }
   }
 
-  // 25日の通知チェック
-  useEffect(() => {
-    const today = new Date()
-    if (today.getDate() === vacationSettings.notificationDate) {
-      checkAndSendNotifications()
-    }
-  }, [vacationSettings.notificationDate])
-
-  const checkAndSendNotifications = () => {
+  const checkAndSendNotifications = useCallback(() => {
     const today = new Date()
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
     
@@ -341,7 +333,15 @@ export default function VacationManagement({
         }
       }
     })
-  }
+  }, [currentStats, vacationNotifications, onVacationNotificationsChange])
+
+  // 25日の通知チェック
+  useEffect(() => {
+    const today = new Date()
+    if (today.getDate() === vacationSettings.notificationDate) {
+      checkAndSendNotifications()
+    }
+  }, [vacationSettings.notificationDate, checkAndSendNotifications])
 
   const sendPushNotification = async (notification: VacationNotification) => {
     console.log('プッシュ通知送信:', notification.message)

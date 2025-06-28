@@ -99,8 +99,6 @@ export default function Home() {
       <DriverDashboard 
         currentUser={currentUser} 
         onLogout={handleLogout}
-        vehicles={vehicles}
-        vacationRequests={vacationRequests}
       />
     )
   }
