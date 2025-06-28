@@ -40,7 +40,7 @@ export default function DriverSchedule({ drivers, vehicles }: DriverScheduleProp
     }
 
     // 車両変更チェック（簡易実装）
-    if (assignedVehicle && (assignedVehicle.status === 'maintenance' || assignedVehicle.status === 'inspection')) {
+    if (assignedVehicle && (assignedVehicle.status === 'repair' || assignedVehicle.status === 'inspection')) {
       statusText = '車両変更'
       vehicle = `${driver.assignedVehicle} → 代替車両`
     }
