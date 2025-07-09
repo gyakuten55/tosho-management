@@ -545,7 +545,7 @@ export default function VehicleOperationManagement({
                     ].filter(date => date)
                     
                     return inspections.some(inspectionDate => {
-                      const date = new Date(inspectionDate)
+                      const date = new Date(inspectionDate!)
                       return date.getMonth() === currentMonth && date.getFullYear() === currentYear
                     })
                   }).length
@@ -565,7 +565,7 @@ export default function VehicleOperationManagement({
                   ].filter(item => item.date)
                   
                   return inspections.some(inspection => {
-                    const date = new Date(inspection.date)
+                    const date = new Date(inspection.date!)
                     return date.getMonth() === currentMonth && date.getFullYear() === currentYear
                   })
                 }).map(vehicle => {
@@ -578,7 +578,7 @@ export default function VehicleOperationManagement({
                   ].filter(item => item.date)
                   
                   const thisMonthInspections = inspections.filter(inspection => {
-                    const date = new Date(inspection.date)
+                    const date = new Date(inspection.date!)
                     return date.getMonth() === currentMonth && date.getFullYear() === currentYear
                   })
                   
@@ -609,7 +609,7 @@ export default function VehicleOperationManagement({
                           <div key={index} className="text-xs">
                             <div className="font-medium text-blue-800">{inspection.type}</div>
                             <div className="text-blue-600">
-                              {format(new Date(inspection.date), 'MM/dd', { locale: ja })}
+                              {format(new Date(inspection.date!), 'MM/dd', { locale: ja })}
                             </div>
                           </div>
                         ))}
