@@ -28,7 +28,7 @@ export default function DriverVehicleInfo({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return 'bg-green-100 text-green-800'
       case 'maintenance':
         return 'bg-yellow-100 text-yellow-800'
@@ -43,7 +43,7 @@ export default function DriverVehicleInfo({
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return '稼働中'
       case 'maintenance':
         return 'メンテナンス中'

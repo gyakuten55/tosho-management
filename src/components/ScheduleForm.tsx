@@ -41,7 +41,7 @@ export default function ScheduleForm({ schedule, drivers, vehicles, onSave, onCa
   const availableDrivers = drivers.filter(d => d.status === 'working' || d.status === 'available')
   
   // 利用可能な車両を取得（稼働中でメンテナンス中でない）
-  const availableVehicles = vehicles.filter(v => v.status === 'active')
+  const availableVehicles = vehicles.filter(v => v.status === 'normal')
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}

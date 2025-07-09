@@ -39,7 +39,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return 'bg-green-100 text-green-800 border-green-200'
       case 'inspection':
         return 'bg-blue-100 text-blue-800 border-blue-200'
@@ -52,7 +52,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return <CheckCircle className="h-4 w-4" />
       case 'inspection':
         return <Calendar className="h-4 w-4" />
@@ -65,7 +65,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return '稼働中'
       case 'inspection':
         return '点検中'
@@ -214,7 +214,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
             <div>
               <p className="text-sm text-gray-600">今日動いている車両台数</p>
               <p className="text-2xl font-bold text-green-600">
-                {vehicles.filter(v => v.status === 'active').length}
+                {vehicles.filter(v => v.status === 'normal').length}
               </p>
             </div>
             <CheckCircle className="h-8 w-8 text-green-500" />

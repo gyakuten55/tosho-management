@@ -26,7 +26,7 @@ interface VehicleDetailProps {
 export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetailProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return 'bg-green-100 text-green-800 border-green-200'
       case 'inspection':
         return 'bg-blue-100 text-blue-800 border-blue-200'
@@ -39,7 +39,7 @@ export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetail
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return <CheckCircle className="h-5 w-5" />
       case 'inspection':
         return <Calendar className="h-5 w-5" />
@@ -52,7 +52,7 @@ export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetail
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'normal':
         return '稼働中'
       case 'inspection':
         return '点検中'
