@@ -1,19 +1,28 @@
 'use client'
 
-import { Car, Users, Settings, Home, CalendarDays, Bell, Truck } from 'lucide-react'
+import { Car, Users, Settings, Home, CalendarDays, Bell, Truck, FileText } from 'lucide-react'
 
 interface NavigationProps {
   currentView: string
   onViewChange: (view: string) => void
 }
 
+interface MenuItem {
+  id: string
+  label: string
+  icon: any
+  isExternal?: boolean
+  url?: string
+}
+
 export default function Navigation({ currentView, onViewChange }: NavigationProps) {
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'ダッシュボード', icon: Home },
     { id: 'vehicles', label: '車両管理', icon: Car },
     { id: 'drivers', label: 'ドライバー管理', icon: Users },
     { id: 'vacation', label: '休暇管理', icon: CalendarDays },
     { id: 'vehicle-operation', label: '車両稼働管理', icon: Truck },
+    { id: 'stock-system', label: '資料ストック', icon: FileText, isExternal: true, url: 'https://tosho-stock.vercel.app/' },
     { id: 'notifications', label: '通知システム', icon: Bell },
     { id: 'settings', label: '設定', icon: Settings },
   ]
@@ -43,7 +52,13 @@ export default function Navigation({ currentView, onViewChange }: NavigationProp
             return (
               <li key={item.id}>
                 <button
-                  onClick={() => onViewChange(item.id)}
+                  onClick={() => {
+                    if (item.isExternal && item.url) {
+                      window.open(item.url, '_blank', 'noopener,noreferrer')
+                    } else {
+                      onViewChange(item.id)
+                    }
+                  }}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
                     isActive
                       ? 'bg-primary-50 text-primary-700 border border-primary-200'
@@ -52,6 +67,21 @@ export default function Navigation({ currentView, onViewChange }: NavigationProp
                 >
                   <Icon className={`h-5 w-5 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
                   <span className="font-medium">{item.label}</span>
+                  {item.isExternal && (
+                    <svg 
+                      className="h-4 w-4 text-gray-400 ml-auto" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" 
+                      />
+                    </svg>
+                  )}
                 </button>
               </li>
             )
