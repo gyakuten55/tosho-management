@@ -358,8 +358,8 @@ export default function VehicleOperationManagement({
       type: inoperativeType,
       originalDriverId: originalDriver?.id,
       originalDriverName: originalDriver?.name,
-      tempAssignmentDriverId: tempAssignmentDriverId,
-      tempAssignmentVehicleId: tempAssignmentVehicleId,
+      tempAssignmentDriverId: tempAssignmentDriverId ?? undefined,
+      tempAssignmentVehicleId: tempAssignmentVehicleId ?? undefined,
       status: 'active',
       createdAt: new Date(),
       createdBy: '管理者', // 実際の実装では現在のユーザー名を使用
