@@ -46,7 +46,7 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
       year: 2022,
       driver: currentUser.name,
       team: currentUser.team,
-      status: 'active',
+      status: 'normal',
       lastInspection: new Date('2024-11-15'),
       nextInspection: new Date('2025-02-15'),
       garage: '本社車庫',
@@ -166,11 +166,11 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
               <div className="flex items-center justify-between">
                 <span className="text-lg font-bold text-blue-700">{assignedVehicle.plateNumber}</span>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  assignedVehicle.status === 'active' ? 'bg-green-100 text-green-800' :
+                  assignedVehicle.status === 'normal' ? 'bg-green-100 text-green-800' :
                   assignedVehicle.status === 'inspection' ? 'bg-yellow-100 text-yellow-800' :
                   'bg-red-100 text-red-800'
                 }`}>
-                  {assignedVehicle.status === 'active' ? '稼働中' :
+                  {assignedVehicle.status === 'normal' ? '稼働中' :
                    assignedVehicle.status === 'inspection' ? '点検中' : '修理中'}
                 </span>
               </div>
