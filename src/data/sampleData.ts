@@ -89,7 +89,13 @@ export const initialVacationSettings: VacationSettings = {
     new Date('2025-10-13'),  // スポーツの日
     new Date('2025-11-03'),  // 文化の日
     new Date('2025-11-23'),  // 勤労感謝の日
-  ]
+  ],
+  maxDriversOffPerDay: {
+    'A-1': 2,  // A-1チームは1日最大2人まで
+    'A-2': 2,  // A-2チームは1日最大2人まで
+    'B': 1     // Bチームは1日最大1人まで
+  },
+  globalMaxDriversOffPerDay: 5  // 全体で1日最大5人まで
 }
 
 // 通知データ（空）
