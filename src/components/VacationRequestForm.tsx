@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { X, Calendar, User, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { VacationRequest, VacationSettings, Driver } from '@/types'
@@ -35,7 +35,7 @@ export default function VacationRequestForm({
   const selectedDriver = drivers.find(d => d.id === formData.driverId)
 
   // バリデーション
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const errors: string[] = []
     const warnings: string[] = []
 
@@ -85,7 +85,7 @@ export default function VacationRequestForm({
     setValidationErrors(errors)
     setConflictWarnings(warnings)
     return errors.length === 0
-  }
+  }, [formData, selectedDriver, vacationSettings, existingRequests, editingRequest])
 
   // フォーム送信
   const handleSubmit = (e: React.FormEvent) => {
@@ -103,8 +103,12 @@ export default function VacationRequestForm({
       team: selectedDriver.team,
       employeeId: selectedDriver.employeeId,
       date: new Date(formData.date),
+      workStatus: formData.isOff ? 'day_off' : 'working',
       isOff: formData.isOff,
-      requestedAt: editingRequest?.requestedAt || new Date(),
+      type: formData.isOff ? 'day_off' : 'working',
+      reason: '',
+      status: 'approved',
+      requestDate: editingRequest?.requestDate || new Date(),
       isExternalDriver: selectedDriver.employeeId.startsWith('E') // 外部ドライバーの判定
     }
 

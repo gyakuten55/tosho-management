@@ -41,7 +41,6 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
     setAssignedVehicle({
       id: 1,
       plateNumber: '品川 501 あ 1234',
-      type: '2トントラック',
       model: 'いすゞエルフ',
       year: 2022,
       driver: currentUser.name,
@@ -49,6 +48,9 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
       status: 'normal',
       lastInspection: new Date('2024-11-15'),
       nextInspection: new Date('2025-02-15'),
+      vehicleInspectionDate: new Date('2025-12-15'),
+      threeMonthInspection: new Date('2025-03-15'),
+      sixMonthInspection: new Date('2025-06-15'),
       garage: '本社車庫',
       notes: '定期点検予定あり'
     })

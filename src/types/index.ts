@@ -73,6 +73,8 @@ export interface VacationSettings {
   notificationDate: number  // 通知日（月の何日に通知するか、デフォルト25日）
   blackoutDates: Date[]  // 休暇取得不可日
   holidayDates: Date[]  // 祝日
+  maxDriversOffPerDay: { [teamName: string]: number }  // チーム別の1日の最大休暇者数
+  globalMaxDriversOffPerDay: number  // 全体の1日の最大休暇者数
 }
 
 export interface VacationNotification {
