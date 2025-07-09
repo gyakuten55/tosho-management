@@ -111,7 +111,6 @@ export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetail
           <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{vehicle.plateNumber}</h2>
             <p className="text-lg text-gray-600">{vehicle.model} ({vehicle.year}年)</p>
-            <p className="text-sm text-gray-500">{vehicle.type}</p>
           </div>
           <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(vehicle.status)}`}>
             {getStatusIcon(vehicle.status)}
