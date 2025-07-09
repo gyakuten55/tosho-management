@@ -45,7 +45,7 @@ export default function Settings({}: SettingsProps) {
 
   // システム設定の状態
   const [systemSettings, setSystemSettings] = useState({
-    defaultTeam: 'Bチーム',
+    defaultTeam: 'B',
     workingHours: {
       start: '08:00',
       end: '18:00'
@@ -238,8 +238,9 @@ export default function Settings({}: SettingsProps) {
             onChange={(e) => setSystemSettings(prev => ({ ...prev, defaultTeam: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           >
-            <option value="Bチーム">Bチーム</option>
-            <option value="Cチーム">Cチーム</option>
+                            <option value="A-1">A-1</option>
+                <option value="A-2">A-2</option>
+                <option value="B">B</option>
           </select>
         </div>
 

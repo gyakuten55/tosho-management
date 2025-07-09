@@ -11,6 +11,7 @@
 
 - **フレームワーク**: Next.js 15 (App Router)
 - **言語**: TypeScript
+- **データベース**: PostgreSQL / SQLite
 - **スタイリング**: Tailwind CSS
 - **アイコン**: Lucide React
 - **日付処理**: date-fns
@@ -29,12 +30,22 @@
 npm install
 ```
 
-2. 開発サーバーを起動:
+2. 環境変数の設定:
+プロジェクトルートに `.env.local` ファイルを作成し、以下の内容を設定してください:
+
+```bash
+# 開発環境設定
+NODE_ENV=development
+```
+
+3. 開発サーバーを起動:
 ```bash
 npm run dev
 ```
 
-3. ブラウザで [http://localhost:3000](http://localhost:3000) を開く
+4. ブラウザで [http://localhost:3000](http://localhost:3000) を開く
+
+
 
 ## 📁 プロジェクト構造
 

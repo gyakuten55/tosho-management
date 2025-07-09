@@ -21,7 +21,7 @@ export default function DriverPage() {
   // ドライバー情報（サンプル）
   const driverInfo = {
     name: '田中太郎',
-    team: 'Bチーム',
+    team: 'B',
     employeeId: 'B001',
     assignedVehicle: '品川 501 あ 1234',
   }

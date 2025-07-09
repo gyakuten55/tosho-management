@@ -153,13 +153,7 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
                   <span className="text-gray-600">チーム:</span>
                   <span className="ml-2 text-gray-900">{driver.team}</span>
                 </div>
-                <div className="flex items-center text-sm">
-                  <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                  <span className="text-gray-600">入社日:</span>
-                  <span className="ml-2 text-gray-900">
-                    {(driver as any).hireDate ? format(new Date((driver as any).hireDate), 'yyyy年MM月dd日', { locale: ja }) : '未設定'}
-                  </span>
-                </div>
+
               </div>
             </div>
 

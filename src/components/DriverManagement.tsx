@@ -44,7 +44,10 @@ export default function DriverManagement({
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterTeam, setFilterTeam] = useState<string>('all')
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, isNightShift?: boolean) => {
+    if (isNightShift) {
+      return 'bg-green-200 text-green-900 border-2 border-green-400'
+    }
     switch (status) {
       case 'working':
         return 'bg-green-100 text-green-800'
@@ -54,12 +57,17 @@ export default function DriverManagement({
         return 'bg-red-100 text-red-800'
       case 'available':
         return 'bg-gray-100 text-gray-800'
+      case 'night_shift':
+        return 'bg-green-200 text-green-900 border-2 border-green-400'
       default:
         return 'bg-gray-100 text-gray-800'
     }
   }
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string, isNightShift?: boolean) => {
+    if (isNightShift) {
+      return '夜勤中'
+    }
     switch (status) {
       case 'working':
         return '出勤中'
@@ -69,9 +77,26 @@ export default function DriverManagement({
         return '病気休暇'
       case 'available':
         return '待機中'
+      case 'night_shift':
+        return '夜勤中'
       default:
         return '不明'
     }
+  }
+
+  const toggleNightShift = (driverId: number) => {
+    const updatedDrivers = drivers.map(driver => {
+      if (driver.id === driverId) {
+        const isCurrentlyNightShift = driver.isNightShift
+        return {
+          ...driver,
+          isNightShift: !isCurrentlyNightShift,
+          status: !isCurrentlyNightShift ? 'night_shift' : 'working'
+        }
+      }
+      return driver
+    })
+    onDriversChange(updatedDrivers)
   }
 
   const handleDelete = (driverId: number) => {
@@ -127,7 +152,7 @@ export default function DriverManagement({
     } else {
       // 新規追加
       const newDriver: Driver = {
-        id: Math.max(...drivers.map(d => d.id)) + 1,
+        id: drivers.length > 0 ? Math.max(...drivers.map(d => d.id)) + 1 : 1,
         ...driverData
       } as Driver
       onDriversChange([...drivers, newDriver])
@@ -168,10 +193,22 @@ export default function DriverManagement({
       <DriverForm
         driver={selectedDriver}
         vehicles={vehicles.filter(v => !v.driver || v.driver === selectedDriver?.name)}
+        existingDrivers={drivers}
         onSave={handleSave}
         onCancel={() => {
           setCurrentView('list')
           setSelectedDriver(null)
+        }}
+        onVehicleUpdate={(updates) => {
+          // 車両の担当ドライバーを自動更新
+          const updatedVehicles = vehicles.map(vehicle => {
+            const update = updates.find(u => u.plateNumber === vehicle.plateNumber)
+            if (update) {
+              return { ...vehicle, driver: update.driverName || undefined }
+            }
+            return vehicle
+          })
+          onVehiclesChange(updatedVehicles)
         }}
       />
     )
@@ -297,8 +334,9 @@ export default function DriverManagement({
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="all">すべてのチーム</option>
-              <option value="Bチーム">Bチーム</option>
-              <option value="Cチーム">Cチーム</option>
+                              <option value="A-1">A-1</option>
+                <option value="A-2">A-2</option>
+                <option value="B">B</option>
             </select>
           </div>
         </div>
@@ -357,8 +395,8 @@ export default function DriverManagement({
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(driver.status)}`}>
-                      {getStatusText(driver.status)}
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(driver.status, driver.isNightShift)}`}>
+                      {getStatusText(driver.status, driver.isNightShift)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -371,31 +409,47 @@ export default function DriverManagement({
                       <span className="text-gray-500">未割当</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => {
-                        setSelectedDriver(driver)
-                        setCurrentView('detail')
-                      }}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedDriver(driver)
-                        setCurrentView('form')
-                      }}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(driver.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setSelectedDriver(driver)
+                          setCurrentView('detail')
+                        }}
+                        className="text-primary-600 hover:text-primary-900"
+                        title="詳細表示"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedDriver(driver)
+                          setCurrentView('form')
+                        }}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="編集"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => toggleNightShift(driver.id)}
+                        className={`${
+                          driver.isNightShift 
+                            ? 'text-green-600 hover:text-green-900' 
+                            : 'text-orange-600 hover:text-orange-900'
+                        }`}
+                        title={driver.isNightShift ? '夜勤解除' : '夜勤設定'}
+                      >
+                        <Clock className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(driver.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="削除"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

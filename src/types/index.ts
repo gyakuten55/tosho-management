@@ -1,15 +1,18 @@
 export interface Vehicle {
   id: number
   plateNumber: string // 車両番号（6桁程度）
-  type: string
   model: string
   year: number
   driver?: string
   team: string
-  status: 'active' | 'inspection' | 'repair' // 稼働中 | 点検中 | 修理中
+  status: 'normal' | 'inspection' | 'repair' | 'maintenance_due' | 'breakdown' // 正常 | 点検中 | 修理中 | 点検期限
   lastInspection: Date
   nextInspection: Date
-  garage: string // 車庫情報（新規追加）
+  vehicleInspectionDate: Date // 車検日
+  craneAnnualInspection?: Date // クレーン年次点検（クレーン車のみ）
+  threeMonthInspection: Date // 3カ月点検（自動）
+  sixMonthInspection: Date // 6カ月点検（自動）
+  garage: string // 車庫情報
   notes?: string
 }
 
@@ -18,8 +21,9 @@ export interface Driver {
   name: string
   team: string
   employeeId: string
-  status: 'working' | 'vacation' | 'sick' | 'available'
+  status: 'working' | 'vacation' | 'sick' | 'available' | 'night_shift'
   assignedVehicle?: string
+  isNightShift?: boolean  // 夜勤状態かどうか
 }
 
 export interface InspectionSchedule {
@@ -33,7 +37,7 @@ export interface InspectionSchedule {
   team: string
 }
 
-// 休暇管理システムの型定義（東翔運輸仕様）
+// 勤務状態管理システムの型定義（東翔運輸仕様）
 export interface VacationRequest {
   id: number
   driverId: number
@@ -41,8 +45,12 @@ export interface VacationRequest {
   team: string
   employeeId: string
   date: Date  // 単日のみ（開始日・終了日は廃止）
-  isOff: boolean  // 休みかどうか（true: 休み, false: 出勤）
-  requestedAt: Date
+  workStatus: 'working' | 'day_off' | 'night_shift'  // 勤務状態（出勤、休暇、夜勤）
+  isOff: boolean  // 休みかどうか（workStatus === 'day_off'）
+  type: 'day_off' | 'night_shift' | 'working'  // 勤務タイプ
+  reason: string  // 理由（使用しないが互換性のため保持）
+  status: 'approved'  // 承認機能なしなので常に承認済み
+  requestDate: Date  // 申請日
   isExternalDriver: boolean  // 外部ドライバーかどうか
 }
 
@@ -63,10 +71,6 @@ export interface VacationSettings {
   minimumOffDaysPerMonth: number  // 月の最低休暇日数（デフォルト9日）
   maximumOffDaysPerMonth: number  // 月の最大休暇日数
   notificationDate: number  // 通知日（月の何日に通知するか、デフォルト25日）
-  maxDriversOffPerDay: {
-    [team: string]: number  // チームごとの1日の最大休暇取得者数
-  }
-  globalMaxDriversOffPerDay: number  // 全体の1日最大休暇人数
   blackoutDates: Date[]  // 休暇取得不可日
   holidayDates: Date[]  // 祝日
 }
@@ -75,14 +79,11 @@ export interface VacationNotification {
   id: number
   driverId: number
   driverName: string
-  team: string
-  type: 'insufficient_vacation' | 'vacation_reminder' | 'blackout_date'
+  type: 'vacation_reminder' | 'blackout_date' | 'schedule_change'
   message: string
-  targetMonth: string  // 'YYYY-MM'形式
-  remainingDays: number
-  sentAt: Date
+  date: Date
   isRead: boolean
-  pushNotificationSent: boolean  // スマホ通知送信済みかどうか
+  priority: 'low' | 'medium' | 'high'
 }
 
 export interface DailyVacationInfo {
@@ -364,6 +365,46 @@ export interface VehicleSwap {
   swapTime: Date
   reason: string
   approvedBy?: string
+}
+
+// 車両稼働不可期間管理の型定義
+export interface VehicleInoperativePeriod {
+  id: number
+  vehicleId: number
+  plateNumber: string
+  startDate: Date
+  endDate: Date
+  reason: string
+  type: 'repair' | 'maintenance' | 'breakdown' | 'other'
+  originalDriverId?: number
+  originalDriverName?: string
+  tempAssignmentDriverId?: number  // 一時的に別車両に割り当てられたドライバー
+  tempAssignmentVehicleId?: number  // 一時的に割り当てられた車両
+  status: 'active' | 'completed' | 'cancelled'
+  createdAt: Date
+  createdBy: string
+  notes?: string
+}
+
+// 車両稼働不可通知の型定義
+export interface VehicleInoperativeNotification {
+  id: number
+  vehicleInoperativePeriodId: number
+  driverId: number
+  driverName: string
+  vehicleId: number
+  plateNumber: string
+  type: 'period_start' | 'period_end' | 'temp_assignment' | 'return_assignment'
+  message: string
+  startDate: Date
+  endDate?: Date
+  tempVehicleInfo?: {
+    vehicleId: number
+    plateNumber: string
+  }
+  isRead: boolean
+  sentAt: Date
+  priority: 'low' | 'medium' | 'high'
 }
 
  

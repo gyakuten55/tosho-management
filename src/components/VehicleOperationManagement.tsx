@@ -21,9 +21,10 @@ import {
   Save,
   Clock,
   Car,
-  User
+  User,
+  Info
 } from 'lucide-react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import {
   Vehicle,
@@ -32,7 +33,9 @@ import {
   VehicleOperationStatus,
   VehicleAssignmentChange,
   DriverVehicleNotification,
-  VehicleOperationCalendarDay
+  VehicleOperationCalendarDay,
+  VehicleInoperativePeriod,
+  VehicleInoperativeNotification
 } from '@/types'
 
 interface VehicleOperationManagementProps {
@@ -41,8 +44,13 @@ interface VehicleOperationManagementProps {
   vacationRequests: VacationRequest[]
   vehicleAssignmentChanges: VehicleAssignmentChange[]
   driverVehicleNotifications: DriverVehicleNotification[]
+  vehicleInoperativePeriods: VehicleInoperativePeriod[]
+  vehicleInoperativeNotifications: VehicleInoperativeNotification[]
   onVehicleAssignmentChangesChange: (changes: VehicleAssignmentChange[]) => void
   onDriverVehicleNotificationsChange: (notifications: DriverVehicleNotification[]) => void
+  onVehicleInoperativePeriodsChange: (periods: VehicleInoperativePeriod[]) => void
+  onVehicleInoperativeNotificationsChange: (notifications: VehicleInoperativeNotification[]) => void
+  onVehiclesChange: (vehicles: Vehicle[]) => void
 }
 
 export default function VehicleOperationManagement({
@@ -51,13 +59,26 @@ export default function VehicleOperationManagement({
   vacationRequests,
   vehicleAssignmentChanges,
   driverVehicleNotifications,
+  vehicleInoperativePeriods,
+  vehicleInoperativeNotifications,
   onVehicleAssignmentChangesChange,
-  onDriverVehicleNotificationsChange
+  onDriverVehicleNotificationsChange,
+  onVehicleInoperativePeriodsChange,
+  onVehicleInoperativeNotificationsChange,
+  onVehiclesChange
 }: VehicleOperationManagementProps) {
   const [currentView, setCurrentView] = useState('calendar')
   const [calendarDate, setCalendarDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showAssignmentModal, setShowAssignmentModal] = useState(false)
+  const [showInoperativeModal, setShowInoperativeModal] = useState(false)
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  const [inoperativeStartDate, setInoperativeStartDate] = useState('')
+  const [inoperativeEndDate, setInoperativeEndDate] = useState('')
+  const [inoperativeReason, setInoperativeReason] = useState('')
+  const [inoperativeType, setInoperativeType] = useState<'repair' | 'maintenance' | 'breakdown' | 'other'>('repair')
+  const [tempAssignmentDriverId, setTempAssignmentDriverId] = useState<number | null>(null)
+  const [tempAssignmentVehicleId, setTempAssignmentVehicleId] = useState<number | null>(null)
   const [vehicleAssignments, setVehicleAssignments] = useState<{[vehicleId: number]: {driverId: string, reason: string}}>({})
 
   const tabs = [
@@ -68,7 +89,29 @@ export default function VehicleOperationManagement({
 
   // 車両稼働状況を計算
   const calculateVehicleOperationStatus = (vehicle: Vehicle, date: Date): VehicleOperationStatus => {
-    // 1. 車両自体の状態チェック
+    // 1. 稼働不可期間チェック（最優先）
+    const inoperativePeriod = vehicleInoperativePeriods.find(period => 
+      period.vehicleId === vehicle.id &&
+      period.status === 'active' &&
+      date >= period.startDate && 
+      date <= period.endDate
+    )
+
+    if (inoperativePeriod) {
+      return {
+        vehicleId: vehicle.id,
+        plateNumber: vehicle.plateNumber,
+        date,
+        status: 'inactive_repair',
+        reason: `${inoperativePeriod.type === 'repair' ? '修理中' : 
+                 inoperativePeriod.type === 'maintenance' ? '整備中' :
+                 inoperativePeriod.type === 'breakdown' ? '故障' : 
+                 'その他'}: ${inoperativePeriod.reason}`,
+        assignedDriverName: inoperativePeriod.originalDriverName
+      }
+    }
+
+    // 2. 車両自体の状態チェック
     if (vehicle.status === 'inspection') {
       return {
         vehicleId: vehicle.id,
@@ -91,7 +134,7 @@ export default function VehicleOperationManagement({
       }
     }
 
-    // 2. 割り当て変更チェック
+    // 3. 割り当て変更チェック
     const assignmentChange = vehicleAssignmentChanges.find(change => 
       change.vehicleId === vehicle.id &&
       isSameDay(change.date, date) &&
@@ -113,7 +156,7 @@ export default function VehicleOperationManagement({
       }
     }
 
-    // 3. ドライバー休暇チェック
+    // 4. ドライバー休暇チェック
     if (vehicle.driver) {
       const assignedDriver = drivers.find(d => d.name === vehicle.driver)
       if (assignedDriver) {
@@ -137,7 +180,7 @@ export default function VehicleOperationManagement({
       }
     }
 
-    // 4. 通常稼働
+    // 5. 通常稼働
     const assignedDriver = drivers.find(d => d.name === vehicle.driver)
     return {
       vehicleId: vehicle.id,
@@ -150,11 +193,16 @@ export default function VehicleOperationManagement({
     }
   }
 
-  // カレンダーの日付情報を生成
+  // カレンダーの日付情報を生成（6週間分の完全なカレンダーグリッド）
   const generateCalendarDays = (): VehicleOperationCalendarDay[] => {
     const monthStart = startOfMonth(calendarDate)
     const monthEnd = endOfMonth(calendarDate)
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
+    
+    // カレンダーグリッドの開始と終了（前月末から翌月初まで含む）
+    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 }) // 日曜日開始
+    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 }) // 日曜日開始
+    
+    const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
     return days.map(day => {
       const allVehicleStatuses = vehicles.map(vehicle => {
@@ -281,64 +329,295 @@ export default function VehicleOperationManagement({
     onDriverVehicleNotificationsChange([...driverVehicleNotifications, notification])
   }
 
+  // 車両稼働不可期間設定関数
+  const handleVehicleInoperative = () => {
+    if (!selectedVehicle || !inoperativeStartDate || !inoperativeEndDate || !inoperativeReason) {
+      alert('すべての項目を入力してください。')
+      return
+    }
+
+    const startDate = new Date(inoperativeStartDate)
+    const endDate = new Date(inoperativeEndDate)
+
+    if (startDate > endDate) {
+      alert('開始日は終了日より前に設定してください。')
+      return
+    }
+
+    // 元のドライバー情報を取得
+    const originalDriver = drivers.find(d => d.name === selectedVehicle.driver)
+
+    // 新しい稼働不可期間を作成
+    const newInoperativePeriod: VehicleInoperativePeriod = {
+      id: Date.now(),
+      vehicleId: selectedVehicle.id,
+      plateNumber: selectedVehicle.plateNumber,
+      startDate,
+      endDate,
+      reason: inoperativeReason,
+      type: inoperativeType,
+      originalDriverId: originalDriver?.id,
+      originalDriverName: originalDriver?.name,
+      tempAssignmentDriverId: tempAssignmentDriverId,
+      tempAssignmentVehicleId: tempAssignmentVehicleId,
+      status: 'active',
+      createdAt: new Date(),
+      createdBy: '管理者', // 実際の実装では現在のユーザー名を使用
+      notes: tempAssignmentDriverId ? `一時割り当て: ドライバーID ${tempAssignmentDriverId} → 車両ID ${tempAssignmentVehicleId}` : undefined
+    }
+
+    // 稼働不可期間を追加
+    onVehicleInoperativePeriodsChange([...vehicleInoperativePeriods, newInoperativePeriod])
+
+    // 担当ドライバーへの通知を作成
+    if (originalDriver) {
+      const notification: VehicleInoperativeNotification = {
+        id: Date.now() + 1,
+        vehicleInoperativePeriodId: newInoperativePeriod.id,
+        driverId: originalDriver.id,
+        driverName: originalDriver.name,
+        vehicleId: selectedVehicle.id,
+        plateNumber: selectedVehicle.plateNumber,
+        type: 'period_start',
+        message: `担当車両 ${selectedVehicle.plateNumber} が ${startDate.getFullYear()}年${startDate.getMonth() + 1}月${startDate.getDate()}日から${endDate.getFullYear()}年${endDate.getMonth() + 1}月${endDate.getDate()}日まで${
+          inoperativeType === 'repair' ? '修理' :
+          inoperativeType === 'maintenance' ? '整備' :
+          inoperativeType === 'breakdown' ? '故障' : 'その他'
+        }のため稼働停止となります。理由: ${inoperativeReason}`,
+        startDate,
+        endDate,
+        tempVehicleInfo: tempAssignmentVehicleId ? {
+          vehicleId: tempAssignmentVehicleId,
+          plateNumber: vehicles.find(v => v.id === tempAssignmentVehicleId)?.plateNumber || '不明'
+        } : undefined,
+        isRead: false,
+        sentAt: new Date(),
+        priority: 'medium'
+      }
+      
+      onVehicleInoperativeNotificationsChange([...vehicleInoperativeNotifications, notification])
+    }
+
+    // 一時的にドライバーを別の車両に割り当てる場合の処理
+    if (tempAssignmentDriverId && tempAssignmentVehicleId && originalDriver) {
+      const tempVehicle = vehicles.find(v => v.id === tempAssignmentVehicleId)
+      const tempDriver = drivers.find(d => d.id === tempAssignmentDriverId)
+      
+      if (tempVehicle && tempDriver) {
+        // 一時割り当て通知
+        const tempNotification: VehicleInoperativeNotification = {
+          id: Date.now() + 2,
+          vehicleInoperativePeriodId: newInoperativePeriod.id,
+          driverId: originalDriver.id,
+          driverName: originalDriver.name,
+          vehicleId: tempVehicle.id,
+          plateNumber: tempVehicle.plateNumber,
+          type: 'temp_assignment',
+          message: `一時的に車両 ${tempVehicle.plateNumber} に割り当てられました。期間: ${startDate.getFullYear()}年${startDate.getMonth() + 1}月${startDate.getDate()}日〜${endDate.getFullYear()}年${endDate.getMonth() + 1}月${endDate.getDate()}日`,
+          startDate,
+          endDate,
+          tempVehicleInfo: {
+            vehicleId: tempVehicle.id,
+            plateNumber: tempVehicle.plateNumber
+          },
+          isRead: false,
+          sentAt: new Date(),
+          priority: 'medium'
+        }
+        
+        onVehicleInoperativeNotificationsChange([...vehicleInoperativeNotifications, tempNotification])
+      }
+    }
+
+    // モーダルを閉じてフォームをリセット
+    setShowInoperativeModal(false)
+    setSelectedVehicle(null)
+    setInoperativeStartDate('')
+    setInoperativeEndDate('')
+    setInoperativeReason('')
+    setInoperativeType('repair')
+    setTempAssignmentDriverId(null)
+    setTempAssignmentVehicleId(null)
+
+    alert('稼働不可期間を設定しました。')
+  }
+
+  // 車両選択処理
+  const handleVehicleSelect = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle)
+    
+    // デフォルト値設定
+    const today = new Date()
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    
+    setInoperativeStartDate(today.toISOString().split('T')[0])
+    setInoperativeEndDate(tomorrow.toISOString().split('T')[0])
+    setInoperativeReason('')
+    setInoperativeType('repair')
+    setTempAssignmentDriverId(null)
+    setTempAssignmentVehicleId(null)
+  }
+
   // カレンダービューのレンダリング
   const renderCalendarView = () => {
     const calendarDays = generateCalendarDays()
-    const monthlyStats = {
-      totalVehicles: vehicles.length,
-      totalInactiveVehicles: calendarDays.reduce((sum, day) => sum + day.inactiveVehicles, 0),
-      totalInactiveVacation: calendarDays.reduce((sum, day) => 
-        sum + day.vehicles.filter(v => v.status === 'inactive_vacation').length, 0),
-      totalInactiveInspection: calendarDays.reduce((sum, day) => 
-        sum + day.vehicles.filter(v => v.status === 'inactive_inspection').length, 0),
-      totalInactiveRepair: calendarDays.reduce((sum, day) => 
-        sum + day.vehicles.filter(v => v.status === 'inactive_repair').length, 0),
-      averageInactiveRate: calendarDays.length > 0 
-        ? Math.round((calendarDays.reduce((sum, day) => sum + day.inactiveVehicles, 0) / (calendarDays.length * vehicles.length)) * 100)
-        : 0
-    }
 
     return (
       <div className="space-y-6">
-        {/* 統計サマリー */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* 車両稼働不可設定ボタン */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">車両稼働管理</h3>
+              <p className="text-sm text-gray-600">車両の稼働不可期間を設定し、ドライバーの一時割り当てを管理できます。</p>
+            </div>
+            <button
+              onClick={() => setShowInoperativeModal(true)}
+              className="flex items-center space-x-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <AlertTriangle className="h-5 w-5" />
+              <span>稼働不可期間を設定</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 車両管理情報 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 担当者未割当車両 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">総車両数</p>
-                <p className="text-3xl font-bold text-gray-900">{monthlyStats.totalVehicles}</p>
-              </div>
-              <Truck className="h-8 w-8 text-gray-500" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <AlertTriangle className="h-5 w-5 mr-2 text-orange-500" />
+                担当者未割当車両
+              </h3>
+              <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
+                {vehicles.filter(v => !v.driver).length}台
+              </span>
+            </div>
+            <div className="space-y-2">
+              {vehicles.filter(v => !v.driver).length === 0 ? (
+                <p className="text-sm text-gray-600">全ての車両に担当者が割り当てられています。</p>
+              ) : (
+                vehicles.filter(v => !v.driver).map(vehicle => (
+                  <div key={vehicle.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex items-center space-x-3">
+                      <Truck className="h-4 w-4 text-orange-600" />
+                      <div>
+                        <div className="font-medium text-gray-900">{vehicle.plateNumber}</div>
+                        <div className="text-sm text-gray-600">チーム: {vehicle.team}</div>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      vehicle.status === 'normal' ? 'bg-green-100 text-green-800' :
+                      vehicle.status === 'inspection' ? 'bg-yellow-100 text-yellow-800' :
+                      vehicle.status === 'repair' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {vehicle.status === 'normal' ? '正常' :
+                       vehicle.status === 'inspection' ? '点検中' :
+                       vehicle.status === 'repair' ? '修理中' :
+                       vehicle.status}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
+          {/* 点検対象車両（表示月） */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">月間未稼働率</p>
-                <p className="text-3xl font-bold text-red-600">{monthlyStats.averageInactiveRate}%</p>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-red-500" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Wrench className="h-5 w-5 mr-2 text-blue-500" />
+                {format(calendarDate, 'yyyy年MM月', { locale: ja })}の点検対象車両
+              </h3>
+              <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                {(() => {
+                  const currentMonth = calendarDate.getMonth()
+                  const currentYear = calendarDate.getFullYear()
+                  return vehicles.filter(vehicle => {
+                    const inspections = [
+                      vehicle.vehicleInspectionDate,
+                      vehicle.craneAnnualInspection,
+                      vehicle.threeMonthInspection,
+                      vehicle.sixMonthInspection
+                    ].filter(date => date)
+                    
+                    return inspections.some(inspectionDate => {
+                      const date = new Date(inspectionDate)
+                      return date.getMonth() === currentMonth && date.getFullYear() === currentYear
+                    })
+                  }).length
+                })()}台
+              </span>
             </div>
-          </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {(() => {
+                const currentMonth = calendarDate.getMonth()
+                const currentYear = calendarDate.getFullYear()
+                const inspectionVehicles = vehicles.filter(vehicle => {
+                  const inspections = [
+                    { date: vehicle.vehicleInspectionDate, type: '車検' },
+                    { date: vehicle.craneAnnualInspection, type: 'クレーン年次点検' },
+                    { date: vehicle.threeMonthInspection, type: '3ヶ月点検' },
+                    { date: vehicle.sixMonthInspection, type: '6ヶ月点検' }
+                  ].filter(item => item.date)
+                  
+                  return inspections.some(inspection => {
+                    const date = new Date(inspection.date)
+                    return date.getMonth() === currentMonth && date.getFullYear() === currentYear
+                  })
+                }).map(vehicle => {
+                  // この車両の今月の点検種類を特定
+                  const inspections = [
+                    { date: vehicle.vehicleInspectionDate, type: '車検' },
+                    { date: vehicle.craneAnnualInspection, type: 'クレーン年次点検' },
+                    { date: vehicle.threeMonthInspection, type: '3ヶ月点検' },
+                    { date: vehicle.sixMonthInspection, type: '6ヶ月点検' }
+                  ].filter(item => item.date)
+                  
+                  const thisMonthInspections = inspections.filter(inspection => {
+                    const date = new Date(inspection.date)
+                    return date.getMonth() === currentMonth && date.getFullYear() === currentYear
+                  })
+                  
+                  return {
+                    ...vehicle,
+                    inspections: thisMonthInspections
+                  }
+                })
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">休暇による未稼働</p>
-                <p className="text-3xl font-bold text-orange-600">{monthlyStats.totalInactiveVacation}</p>
-              </div>
-              <UserCheck className="h-8 w-8 text-orange-500" />
-            </div>
-          </div>
+                if (inspectionVehicles.length === 0) {
+                  return (
+                    <p className="text-sm text-gray-600">この月の点検対象車両はありません。</p>
+                  )
+                }
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">点検・修理</p>
-                <p className="text-3xl font-bold text-blue-600">{monthlyStats.totalInactiveInspection + monthlyStats.totalInactiveRepair}</p>
-              </div>
-              <Wrench className="h-8 w-8 text-blue-500" />
+                return inspectionVehicles.map(vehicle => (
+                  <div key={vehicle.id} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <Truck className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium text-gray-900">{vehicle.plateNumber}</div>
+                          <div className="text-sm text-gray-600">担当: {vehicle.driver || '未割当'}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {vehicle.inspections.map((inspection, index) => (
+                          <div key={index} className="text-xs">
+                            <div className="font-medium text-blue-800">{inspection.type}</div>
+                            <div className="text-blue-600">
+                              {format(new Date(inspection.date), 'MM/dd', { locale: ja })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              })()}
             </div>
           </div>
         </div>
@@ -393,7 +672,12 @@ export default function VehicleOperationManagement({
             {/* 曜日ヘッダー */}
             <div className="grid grid-cols-7 border-b border-gray-200">
               {['日', '月', '火', '水', '木', '金', '土'].map((day, index) => (
-                <div key={index} className="p-3 text-center text-sm font-medium text-gray-500">
+                <div 
+                  key={index} 
+                  className={`p-3 text-center text-sm font-medium ${
+                    index === 0 ? 'text-red-600' : index === 6 ? 'text-blue-600' : 'text-gray-500'
+                  }`}
+                >
                   {day}
                 </div>
               ))}
@@ -401,69 +685,82 @@ export default function VehicleOperationManagement({
 
             {/* カレンダー日付 */}
             <div className="grid grid-cols-7">
-              {calendarDays.map((dayInfo, index) => (
-                <div
-                  key={index}
-                  className={`min-h-[120px] p-3 border-r border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    isToday(dayInfo.date) ? 'bg-blue-50' : ''
-                  }`}
-                  onClick={() => handleDateClick(dayInfo.date)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`text-sm font-medium ${
-                      isToday(dayInfo.date) ? 'text-blue-600' : 'text-gray-700'
-                    }`}>
-                      {format(dayInfo.date, 'd')}
-                    </span>
-                    {dayInfo.inactiveVehicles > 0 && (
-                      <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                        未稼働: {dayInfo.inactiveVehicles}台
+              {calendarDays.map((dayInfo, index) => {
+                const isCurrentDate = isToday(dayInfo.date)
+                const isCurrentMonth = isSameMonth(dayInfo.date, calendarDate)
+                
+                return (
+                  <div
+                    key={index}
+                    className={`min-h-[120px] p-3 border-r border-b border-gray-100 transition-colors ${
+                      isCurrentMonth ? 'cursor-pointer' : 'cursor-default'
+                    } ${
+                      isCurrentDate ? 'bg-blue-50' : 
+                      !isCurrentMonth ? 'bg-gray-50' :
+                      'hover:bg-gray-50'
+                    }`}
+                    onClick={() => isCurrentMonth ? handleDateClick(dayInfo.date) : undefined}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-sm font-medium ${
+                        isCurrentDate ? 'text-blue-600' : 
+                        !isCurrentMonth ? 'text-gray-400' :
+                        'text-gray-700'
+                      }`}>
+                        {format(dayInfo.date, 'd')}
                       </span>
-                    )}
-                  </div>
+                      {isCurrentMonth && dayInfo.inactiveVehicles > 0 && (
+                        <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                          未稼働: {dayInfo.inactiveVehicles}台
+                        </span>
+                      )}
+                    </div>
 
-                  {/* 未稼働車両詳細 */}
-                  <div className="space-y-1">
-                    {dayInfo.vehicles.slice(0, 4).map((vehicle, vIndex) => (
-                      <div
-                        key={vIndex}
-                        className={`text-xs p-2 rounded border-l-3 ${
-                          vehicle.status === 'inactive_vacation' ? 'bg-orange-50 border-orange-400 text-orange-800' :
-                          vehicle.status === 'inactive_inspection' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
-                          vehicle.status === 'inactive_repair' ? 'bg-red-50 border-red-400 text-red-800' :
-                          'bg-gray-50 border-gray-400 text-gray-800'
-                        }`}
-                        title={`${vehicle.plateNumber} - ${vehicle.reason}`}
-                      >
-                        <div className="font-medium truncate">
-                          {vehicle.plateNumber.split(' ').pop()}
-                        </div>
-                        <div className="text-xs opacity-75 truncate">
-                          {vehicle.assignedDriverName}
-                        </div>
-                        <div className="text-xs opacity-60 truncate">
-                          {vehicle.status === 'inactive_vacation' ? '休暇' :
-                           vehicle.status === 'inactive_inspection' ? '点検' :
-                           vehicle.status === 'inactive_repair' ? '修理' : ''}
-                          {vehicle.isTemporary && (
-                            <Clock className="inline h-3 w-3 ml-1" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {dayInfo.vehicles.length > 4 && (
-                      <div className="text-xs text-gray-500 text-center bg-gray-50 p-1 rounded">
-                        他 {dayInfo.vehicles.length - 4} 台
-                      </div>
-                    )}
-                    {dayInfo.vehicles.length === 0 && (
-                      <div className="text-xs text-green-600 text-center py-2 bg-green-50 rounded">
-                        全車両稼働中
+                    {/* 未稼働車両詳細 - 現在の月のみ表示 */}
+                    {isCurrentMonth && (
+                      <div className="space-y-1">
+                        {dayInfo.vehicles.slice(0, 4).map((vehicle, vIndex) => (
+                          <div
+                            key={vIndex}
+                            className={`text-xs p-2 rounded border-l-3 ${
+                              vehicle.status === 'inactive_vacation' ? 'bg-orange-50 border-orange-400 text-orange-800' :
+                              vehicle.status === 'inactive_inspection' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+                              vehicle.status === 'inactive_repair' ? 'bg-red-50 border-red-400 text-red-800' :
+                              'bg-gray-50 border-gray-400 text-gray-800'
+                            }`}
+                            title={`${vehicle.plateNumber} - ${vehicle.reason}`}
+                          >
+                            <div className="font-medium truncate">
+                              {vehicle.plateNumber.split(' ').pop()}
+                            </div>
+                            <div className="text-xs opacity-75 truncate">
+                              {vehicle.assignedDriverName}
+                            </div>
+                            <div className="text-xs opacity-60 truncate">
+                              {vehicle.status === 'inactive_vacation' ? '休暇' :
+                               vehicle.status === 'inactive_inspection' ? '点検' :
+                               vehicle.status === 'inactive_repair' ? '修理' : ''}
+                              {vehicle.isTemporary && (
+                                <Clock className="inline h-3 w-3 ml-1" />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {dayInfo.vehicles.length > 4 && (
+                          <div className="text-xs text-gray-500 text-center bg-gray-50 p-1 rounded">
+                            他 {dayInfo.vehicles.length - 4} 台
+                          </div>
+                        )}
+                        {dayInfo.vehicles.length === 0 && (
+                          <div className="text-xs text-green-600 text-center py-2 bg-green-50 rounded">
+                            全車両稼働中
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
@@ -962,6 +1259,235 @@ export default function VehicleOperationManagement({
                   閉じる
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 車両稼働不可期間設定モーダル */}
+      {showInoperativeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                  <AlertTriangle className="h-6 w-6 mr-2 text-red-500" />
+                  車両稼働不可期間設定
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowInoperativeModal(false)
+                    setSelectedVehicle(null)
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {!selectedVehicle ? (
+                // 車両選択画面
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">稼働不可設定を行う車両を選択してください</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {vehicles.map(vehicle => (
+                      <button
+                        key={vehicle.id}
+                        onClick={() => handleVehicleSelect(vehicle)}
+                        className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                      >
+                        <div className="text-left">
+                          <div className="font-medium text-gray-900">{vehicle.plateNumber}</div>
+                          <div className="text-sm text-gray-600">担当: {vehicle.driver || '未割当'}</div>
+                          <div className="text-xs text-gray-500">チーム: {vehicle.team}</div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <Truck className="h-6 w-6 text-gray-500" />
+                          <span className={`text-xs px-2 py-1 rounded-full mt-1 ${
+                            vehicle.status === 'normal' ? 'bg-green-100 text-green-800' :
+                            vehicle.status === 'inspection' ? 'bg-yellow-100 text-yellow-800' :
+                            vehicle.status === 'repair' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {vehicle.status === 'normal' ? '正常' :
+                             vehicle.status === 'inspection' ? '点検中' :
+                             vehicle.status === 'repair' ? '修理中' :
+                             vehicle.status}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // 稼働不可設定画面
+                <div>
+                  {/* 車両情報 */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium text-gray-900 mb-2">対象車両</h3>
+                        <div className="flex items-center space-x-4">
+                          <div>
+                            <div className="font-medium">{selectedVehicle.plateNumber}</div>
+                            <div className="text-sm text-gray-600">現在の担当ドライバー: {selectedVehicle.driver || '未割当'}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setSelectedVehicle(null)}
+                        className="px-3 py-1 text-sm text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                      >
+                        車両を変更
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 稼働不可期間設定 */}
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          開始日 *
+                        </label>
+                        <input
+                          type="date"
+                          value={inoperativeStartDate}
+                          onChange={(e) => setInoperativeStartDate(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          終了日 *
+                        </label>
+                        <input
+                          type="date"
+                          value={inoperativeEndDate}
+                          onChange={(e) => setInoperativeEndDate(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        稼働不可の種類 *
+                      </label>
+                      <select
+                        value={inoperativeType}
+                        onChange={(e) => setInoperativeType(e.target.value as 'repair' | 'maintenance' | 'breakdown' | 'other')}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="repair">修理</option>
+                        <option value="maintenance">整備</option>
+                        <option value="breakdown">故障</option>
+                        <option value="other">その他</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        理由 *
+                      </label>
+                      <textarea
+                        value={inoperativeReason}
+                        onChange={(e) => setInoperativeReason(e.target.value)}
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="稼働不可の具体的な理由を入力してください"
+                      />
+                    </div>
+
+                    {/* 一時的な割り当て設定 */}
+                    <div className="border-t border-gray-200 pt-6">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                        担当ドライバーの一時割り当て（オプション）
+                      </h4>
+                      <p className="text-sm text-gray-600 mb-4">
+                        この車両の担当ドライバーを期間中、他の車両に一時的に割り当てることができます。
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            一時割り当て先車両
+                          </label>
+                          <select
+                            value={tempAssignmentVehicleId || ''}
+                            onChange={(e) => setTempAssignmentVehicleId(e.target.value ? parseInt(e.target.value) : null)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">車両を選択してください</option>
+                            {vehicles
+                              .filter(v => v.id !== selectedVehicle.id) // 現在の車両以外
+                              .map(vehicle => (
+                                <option key={vehicle.id} value={vehicle.id}>
+                                  {vehicle.plateNumber} ({vehicle.driver || '未割当'})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            割り当てるドライバー
+                          </label>
+                          <select
+                            value={tempAssignmentDriverId || ''}
+                            onChange={(e) => setTempAssignmentDriverId(e.target.value ? parseInt(e.target.value) : null)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            disabled={!tempAssignmentVehicleId}
+                          >
+                            <option value="">ドライバーを選択してください</option>
+                            {drivers
+                              .filter(d => d.name === selectedVehicle.driver) // 現在の担当ドライバーのみ
+                              .map(driver => (
+                                <option key={driver.id} value={driver.id}>
+                                  {driver.name} ({driver.team})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {tempAssignmentVehicleId && tempAssignmentDriverId && (
+                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                          <div className="flex items-center text-blue-800">
+                            <Info className="h-5 w-5 mr-2" />
+                            <span className="font-medium">一時割り当て予約</span>
+                          </div>
+                          <p className="text-sm text-blue-700 mt-1">
+                            {drivers.find(d => d.id === tempAssignmentDriverId)?.name} を 
+                            {vehicles.find(v => v.id === tempAssignmentVehicleId)?.plateNumber} に
+                            期間中一時的に割り当てます。期間終了後、自動的に元の担当に戻ります。
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 確認ボタン */}
+                    <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                      <button
+                        onClick={() => {
+                          setShowInoperativeModal(false)
+                          setSelectedVehicle(null)
+                        }}
+                        className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        onClick={handleVehicleInoperative}
+                        className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2"
+                      >
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>稼働不可期間を設定</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

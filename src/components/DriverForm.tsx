@@ -7,26 +7,27 @@ import { Driver, Vehicle } from '@/types'
 interface DriverFormProps {
   driver?: Driver | null
   vehicles: Vehicle[]
+  existingDrivers: Driver[]
   onSave: (driverData: Partial<Driver>) => void
   onCancel: () => void
+  onVehicleUpdate?: (vehicleUpdates: { plateNumber: string; driverName: string }[]) => void
 }
 
-export default function DriverForm({ driver, vehicles, onSave, onCancel }: DriverFormProps) {
+export default function DriverForm({ driver, vehicles, existingDrivers, onSave, onCancel, onVehicleUpdate }: DriverFormProps) {
   const [formData, setFormData] = useState({
     name: driver?.name || '',
-    employeeId: driver?.employeeId || '',
-    team: driver?.team || 'Bチーム',
+    team: driver?.team || 'B',
     status: driver?.status || 'available',
     assignedVehicle: driver?.assignedVehicle || '',
     phoneNumber: (driver as any)?.phoneNumber || '',
     email: (driver as any)?.email || '',
     licenseNumber: (driver as any)?.licenseNumber || '',
     licenseExpiry: (driver as any)?.licenseExpiry || '',
-    hireDate: (driver as any)?.hireDate || '',
     address: (driver as any)?.address || '',
     emergencyContact: (driver as any)?.emergencyContact || '',
     emergencyPhone: (driver as any)?.emergencyPhone || '',
-    notes: (driver as any)?.notes || ''
+    notes: (driver as any)?.notes || '',
+    driverType: driver ? (driver.employeeId.startsWith('E') ? 'external' : 'internal') : 'internal' // 正社員 or 外部ドライバー
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -36,10 +37,6 @@ export default function DriverForm({ driver, vehicles, onSave, onCancel }: Drive
 
     if (!formData.name.trim()) {
       newErrors.name = '氏名は必須です'
-    }
-
-    if (!formData.employeeId.trim()) {
-      newErrors.employeeId = '社員IDは必須です'
     }
 
     if (!formData.team) {
@@ -58,6 +55,18 @@ export default function DriverForm({ driver, vehicles, onSave, onCancel }: Drive
     return Object.keys(newErrors).length === 0
   }
 
+  // 社員ID自動生成
+  const generateEmployeeId = (driverType: string, existingDrivers: Driver[]) => {
+    const prefix = driverType === 'external' ? 'E' : 'B'
+    const existingIds = existingDrivers
+      .filter(d => d.employeeId.startsWith(prefix))
+      .map(d => parseInt(d.employeeId.substring(1)))
+      .filter(num => !isNaN(num))
+    
+    const nextNumber = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1
+    return `${prefix}${nextNumber.toString().padStart(3, '0')}`
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -65,11 +74,38 @@ export default function DriverForm({ driver, vehicles, onSave, onCancel }: Drive
       return
     }
 
-    onSave(formData)
+    // 新規登録の場合は社員IDを自動生成
+    const employeeId = driver ? driver.employeeId : generateEmployeeId(formData.driverType, existingDrivers)
+    
+    const saveData = {
+      ...formData,
+      employeeId
+    }
+
+    onSave(saveData)
   }
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    
+    // 車両割り当てが変更された場合、車両側の担当ドライバーも自動更新
+    if (field === 'assignedVehicle' && onVehicleUpdate) {
+      const updates: { plateNumber: string; driverName: string }[] = []
+      
+      // 前の車両から割り当て解除
+      if (formData.assignedVehicle) {
+        updates.push({ plateNumber: formData.assignedVehicle, driverName: '' })
+      }
+      
+      // 新しい車両に割り当て
+      if (value) {
+        updates.push({ plateNumber: value, driverName: formData.name })
+      }
+      
+      if (updates.length > 0) {
+        onVehicleUpdate(updates)
+      }
+    }
     
     // エラーをクリア
     if (errors[field]) {
@@ -137,18 +173,22 @@ export default function DriverForm({ driver, vehicles, onSave, onCancel }: Drive
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                社員ID <span className="text-red-500">*</span>
+                ドライバー区分
               </label>
-              <input
-                type="text"
-                value={formData.employeeId}
-                onChange={(e) => handleChange('employeeId', e.target.value)}
-                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                  errors.employeeId ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="B001"
-              />
-              {errors.employeeId && <p className="text-red-500 text-sm mt-1">{errors.employeeId}</p>}
+              <select
+                value={formData.driverType}
+                onChange={(e) => handleChange('driverType', e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                disabled={!!driver} // 編集時は変更不可
+              >
+                <option value="internal">正社員</option>
+                <option value="external">外部ドライバー</option>
+              </select>
+              {driver && (
+                <p className="text-sm text-gray-500 mt-1">
+                  社員ID: {driver.employeeId} (編集時は変更できません)
+                </p>
+              )}
             </div>
 
             <div>
@@ -162,8 +202,9 @@ export default function DriverForm({ driver, vehicles, onSave, onCancel }: Drive
                   errors.team ? 'border-red-500' : 'border-gray-300'
                 }`}
               >
-                <option value="Bチーム">Bチーム</option>
-                <option value="Cチーム">Cチーム</option>
+                <option value="A-1">A-1</option>
+                <option value="A-2">A-2</option>
+                <option value="B">B</option>
               </select>
               {errors.team && <p className="text-red-500 text-sm mt-1">{errors.team}</p>}
             </div>
@@ -184,17 +225,7 @@ export default function DriverForm({ driver, vehicles, onSave, onCancel }: Drive
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                入社日
-              </label>
-              <input
-                type="date"
-                value={formData.hireDate}
-                onChange={(e) => handleChange('hireDate', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-            </div>
+
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

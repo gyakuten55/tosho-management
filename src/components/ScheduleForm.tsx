@@ -18,7 +18,7 @@ export default function ScheduleForm({ schedule, drivers, vehicles, onSave, onCa
     date: schedule?.date ? format(schedule.date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
     driverId: schedule?.driverId || '',
     vehicleId: schedule?.vehicleId || '',
-    team: schedule?.team || 'Bチーム',
+    team: schedule?.team || 'B',
     origin: schedule?.route?.origin || '',
     destination: schedule?.route?.destination || '',
     waypoints: schedule?.route?.waypoints?.join(', ') || '',
@@ -214,8 +214,9 @@ export default function ScheduleForm({ schedule, drivers, vehicles, onSave, onCa
                 onChange={(e) => handleChange('team', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="Bチーム">Bチーム</option>
-                <option value="Cチーム">Cチーム</option>
+                <option value="A-1">A-1</option>
+                <option value="A-2">A-2</option>
+                <option value="B">B</option>
               </select>
             </div>
 

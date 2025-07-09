@@ -108,8 +108,9 @@ export default function VacationCalendarView({
             className="form-select"
           >
             <option value="all">すべてのチーム</option>
-            <option value="Bチーム">Bチーム</option>
-            <option value="Cチーム">Cチーム</option>
+                              <option value="A-1">A-1</option>
+                  <option value="A-2">A-2</option>
+                  <option value="B">B</option>
           </select>
           <button
             onClick={() => setCurrentDate(new Date())}

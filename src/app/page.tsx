@@ -25,7 +25,7 @@ import DriverVacationRequest from '@/components/DriverVacationRequest'
 import DriverVehicleInfo from '@/components/DriverVehicleInfo'
 import VehicleInspectionNotificationSystem from '@/components/VehicleInspectionNotificationSystem'
 import VehicleOperationManagement from '@/components/VehicleOperationManagement'
-import { Vehicle, Driver, User, VacationRequest, DriverNotification, VehicleAssignmentChange, DriverVehicleNotification } from '@/types'
+import { Vehicle, Driver, VacationRequest, DriverNotification, VehicleAssignmentChange, DriverVehicleNotification, VehicleInoperativePeriod, VehicleInoperativeNotification } from '@/types'
 import { 
   initialVehicles, 
   initialDrivers, 
@@ -35,17 +35,18 @@ import {
   initialVacationNotifications,
   initialVehicleAssignmentChanges,
   initialDriverVehicleNotifications,
+  initialVehicleInoperativePeriods,
+  initialVehicleInoperativeNotifications,
   samplePerformanceMetrics, 
   sampleMaintenanceReport,
   sampleFinancialReport
 } from '@/data/sampleData'
 import VacationManagement from '@/components/VacationManagement'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Home() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [loginError, setLoginError] = useState<string>('')
+  const { user, loading, signOut, isAdmin, isDriver } = useAuth()
   const [currentView, setCurrentView] = useState('dashboard')
-  const [isDriverMode, setIsDriverMode] = useState(false)
   const [vehicles, setVehicles] = useState(initialVehicles)
   const [drivers, setDrivers] = useState(initialDrivers)
   const [vacationRequests, setVacationRequests] = useState(initialVacationRequests)
@@ -54,50 +55,52 @@ export default function Home() {
   const [vacationNotifications, setVacationNotifications] = useState(initialVacationNotifications)
   const [vehicleAssignmentChanges, setVehicleAssignmentChanges] = useState(initialVehicleAssignmentChanges)
   const [driverVehicleNotifications, setDriverVehicleNotifications] = useState(initialDriverVehicleNotifications)
+  const [vehicleInoperativePeriods, setVehicleInoperativePeriods] = useState(initialVehicleInoperativePeriods)
+  const [vehicleInoperativeNotifications, setVehicleInoperativeNotifications] = useState(initialVehicleInoperativeNotifications)
   const [performanceMetrics, setPerformanceMetrics] = useState(samplePerformanceMetrics)
   const [maintenanceReports, setMaintenanceReports] = useState(sampleMaintenanceReport)
   const [financialReports, setFinancialReports] = useState(sampleFinancialReport)
   const [notifications, setNotifications] = useState<DriverNotification[]>([])
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user)
-    setLoginError('')
-    // 運転手の場合は専用ダッシュボードに遷移
-    if (user.role === 'driver') {
-      setCurrentView('driver-dashboard')
-      setIsDriverMode(true)
+  const handleLogout = async () => {
+    try {
+      await signOut()
+      setCurrentView('dashboard')
+    } catch (error) {
+      console.error('ログアウトに失敗しました:', error)
     }
   }
 
-  const handleLoginError = (message: string) => {
-    setLoginError(message)
-  }
-
-  const handleLogout = () => {
-    setCurrentUser(null)
-    setCurrentView('dashboard')
-    setIsDriverMode(false)
-  }
-
-  // ログインしていない場合はログイン画面を表示
-  if (!currentUser) {
+  // ローディング中
+  if (loading) {
     return (
-      <div>
-        <Login onLogin={handleLogin} onError={handleLoginError} />
-        {loginError && (
-          <div className="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg">
-            {loginError}
-          </div>
-        )}
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">読み込み中...</p>
+        </div>
       </div>
     )
   }
 
+  // ログインしていない場合はログイン画面を表示
+  if (!user) {
+    return <Login />
+  }
+
   // 運転手の場合は専用UIを表示
-  if (isDriverMode) {
+  if (isDriver) {
     return (
       <DriverDashboard 
-        currentUser={currentUser} 
+        currentUser={{
+          id: parseInt(user.uid.replace(/[^0-9]/g, '')) || 1,
+          name: user.displayName,
+          role: user.role,
+          employeeId: user.employeeId,
+          team: 'チーム1', // デフォルトチーム名
+          isActive: true,
+          lastLogin: user.lastLogin
+        }} 
         onLogout={handleLogout}
       />
     )
@@ -118,7 +121,7 @@ export default function Home() {
                 >
                   <Bell className="h-6 w-6" />
                 </button>
-                <span className="text-gray-600">{currentUser.name}</span>
+                <span className="text-gray-600">{user.displayName}</span>
                 <button
                   onClick={handleLogout}
                   className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
@@ -139,7 +142,12 @@ export default function Home() {
           </div>
         )
       case 'vehicles':
-        return <VehicleManagement vehicles={vehicles} onVehiclesChange={setVehicles} />
+        return <VehicleManagement 
+          vehicles={vehicles} 
+          drivers={drivers} 
+          onVehiclesChange={setVehicles}
+          onDriversChange={setDrivers}
+        />
       case 'drivers':
         return <DriverManagement 
           drivers={drivers} 
@@ -154,10 +162,12 @@ export default function Home() {
           vacationSettings={vacationSettings}
           vacationNotifications={vacationNotifications}
           drivers={drivers}
+          vehicles={vehicles}
           onVacationRequestsChange={setVacationRequests}
           onVacationStatsChange={setVacationStats}
           onVacationSettingsChange={setVacationSettings}
           onVacationNotificationsChange={setVacationNotifications}
+          onVehiclesChange={setVehicles}
         />
       case 'notifications':
         return <VehicleInspectionNotificationSystem 
@@ -176,8 +186,13 @@ export default function Home() {
           vacationRequests={vacationRequests}
           vehicleAssignmentChanges={vehicleAssignmentChanges}
           driverVehicleNotifications={driverVehicleNotifications}
+          vehicleInoperativePeriods={vehicleInoperativePeriods}
+          vehicleInoperativeNotifications={vehicleInoperativeNotifications}
           onVehicleAssignmentChangesChange={setVehicleAssignmentChanges}
           onDriverVehicleNotificationsChange={setDriverVehicleNotifications}
+          onVehicleInoperativePeriodsChange={setVehicleInoperativePeriods}
+          onVehicleInoperativeNotificationsChange={setVehicleInoperativeNotifications}
+          onVehiclesChange={setVehicles}
         />
       default:
         return null

@@ -1,4 +1,4 @@
-import { Vehicle, Driver, PerformanceMetrics, MaintenanceReport, FinancialReport, VacationRequest, VacationQuota, VacationSettings, MonthlyVacationStats, VacationNotification, VehicleAssignmentChange, DriverVehicleNotification } from '@/types'
+import { Vehicle, Driver, PerformanceMetrics, MaintenanceReport, FinancialReport, VacationRequest, VacationQuota, VacationSettings, MonthlyVacationStats, VacationNotification, VehicleAssignmentChange, DriverVehicleNotification, VehicleInoperativePeriod, VehicleInoperativeNotification } from '@/types'
 
 // 車両データ（空）
 export const initialVehicles: Vehicle[] = []
@@ -69,11 +69,6 @@ export const initialVacationSettings: VacationSettings = {
   minimumOffDaysPerMonth: 9,
   maximumOffDaysPerMonth: 12,
   notificationDate: 25,
-  maxDriversOffPerDay: {
-    'Aチーム': 2,
-    'Bチーム': 2
-  },
-  globalMaxDriversOffPerDay: 3,
   blackoutDates: [
     new Date('2025-01-01'),  // 元日
     new Date('2025-12-31')   // 大晦日
@@ -107,4 +102,10 @@ export const initialVacationQuotas: VacationQuota[] = []
 export const initialVehicleAssignmentChanges: VehicleAssignmentChange[] = []
 
 // ドライバー車両通知データ（空）
-export const initialDriverVehicleNotifications: DriverVehicleNotification[] = [] 
+export const initialDriverVehicleNotifications: DriverVehicleNotification[] = []
+
+// 車両稼働不可期間データ（空）
+export const initialVehicleInoperativePeriods: VehicleInoperativePeriod[] = []
+
+// 車両稼働不可通知データ（空）
+export const initialVehicleInoperativeNotifications: VehicleInoperativeNotification[] = [] 

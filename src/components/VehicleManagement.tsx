@@ -21,14 +21,16 @@ import { ja } from 'date-fns/locale'
 import VehicleForm from './VehicleForm'
 import VehicleDetail from './VehicleDetail'
 
-import { Vehicle } from '@/types'
+import { Vehicle, Driver } from '@/types'
 
 interface VehicleManagementProps {
   vehicles: Vehicle[]
+  drivers?: Driver[]
   onVehiclesChange: (vehicles: Vehicle[]) => void
+  onDriversChange?: (drivers: Driver[]) => void
 }
 
-export default function VehicleManagement({ vehicles, onVehiclesChange }: VehicleManagementProps) {
+export default function VehicleManagement({ vehicles, drivers = [], onVehiclesChange, onDriversChange }: VehicleManagementProps) {
   const [currentView, setCurrentView] = useState<'list' | 'form' | 'detail'>('list')
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -136,7 +138,7 @@ export default function VehicleManagement({ vehicles, onVehiclesChange }: Vehicl
     } else {
       // 新規追加
       const newVehicle: Vehicle = {
-        id: Math.max(...vehicles.map(v => v.id)) + 1,
+        id: vehicles.length > 0 ? Math.max(...vehicles.map(v => v.id)) + 1 : 1,
         ...vehicleData
       } as Vehicle
       onVehiclesChange([...vehicles, newVehicle])
@@ -149,10 +151,24 @@ export default function VehicleManagement({ vehicles, onVehiclesChange }: Vehicl
     return (
       <VehicleForm
         vehicle={selectedVehicle}
+        drivers={drivers}
         onSave={handleSave}
         onCancel={() => {
           setCurrentView('list')
           setSelectedVehicle(null)
+        }}
+        onDriverUpdate={(updates) => {
+          // ドライバーの車両割り当てを自動更新
+          if (onDriversChange && drivers) {
+            const updatedDrivers = drivers.map(driver => {
+              const update = updates.find(u => u.driverName === driver.name)
+              if (update) {
+                return { ...driver, assignedVehicle: update.vehiclePlateNumber || undefined }
+              }
+              return driver
+            })
+            onDriversChange(updatedDrivers)
+          }
         }}
       />
     )
@@ -271,8 +287,9 @@ export default function VehicleManagement({ vehicles, onVehiclesChange }: Vehicl
               onChange={(e) => setFilterTeam(e.target.value)}
             >
               <option value="all">すべてのチーム</option>
-              <option value="Aチーム">Aチーム</option>
-              <option value="Bチーム">Bチーム</option>
+                              <option value="A-1">A-1</option>
+                <option value="A-2">A-2</option>
+                <option value="B">B</option>
             </select>
           </div>
         </div>

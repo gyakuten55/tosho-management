@@ -1,89 +1,29 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Eye, EyeOff, Building } from 'lucide-react'
-import { User as UserType } from '@/types'
+import { User, Eye, EyeOff, Building, AlertCircle } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
-interface LoginProps {
-  onLogin: (user: UserType) => void
-  onError: (message: string) => void
-}
+interface LoginProps {}
 
-export default function Login({ onLogin, onError }: LoginProps) {
+export default function Login({}: LoginProps) {
   const [employeeId, setEmployeeId] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // サンプルユーザーデータ（実際の実装ではAPIから取得）
-  const sampleUsers: UserType[] = [
-    {
-      id: 1,
-      employeeId: 'ADMIN001',
-      name: '管理者',
-      team: '管理',
-      role: 'admin',
-      isActive: true
-    },
-    {
-      id: 2,
-      employeeId: 'B001',
-      name: '田中太郎',
-      team: 'Bチーム',
-      role: 'driver',
-      isActive: true
-    },
-    {
-      id: 3,
-      employeeId: 'C001',
-      name: '佐藤花子',
-      team: 'Cチーム',
-      role: 'driver',
-      isActive: true
-    },
-    {
-      id: 4,
-      employeeId: 'B002',
-      name: '鈴木一郎',
-      team: 'Bチーム',
-      role: 'driver',
-      isActive: true
-    },
-    {
-      id: 5,
-      employeeId: 'C002',
-      name: '高橋二郎',
-      team: 'Cチーム',
-      role: 'driver',
-      isActive: true
-    }
-  ]
+  const { signIn } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError('')
 
     try {
-      // 簡単な認証ロジック（実際の実装ではAPIを使用）
-      await new Promise(resolve => setTimeout(resolve, 1000)) // ローディング演出
-
-      // 社員番号とパスワードの両方をチェック
-      const user = sampleUsers.find(u => u.employeeId === employeeId && u.isActive)
-      
-      if (user && password.length > 0) {
-        // パスワードが入力されていれば認証成功
-        const authenticatedUser: UserType = {
-          ...user,
-          lastLogin: new Date()
-        }
-        onLogin(authenticatedUser)
-      } else if (!user) {
-        onError('社員番号が見つかりません。正しい社員番号を入力してください。')
-      } else {
-        onError('パスワードを入力してください。')
-      }
-    } catch (error) {
-      onError('ログインに失敗しました。しばらく時間をおいて再度お試しください。')
+      await signIn(employeeId, password)
+    } catch (error: any) {
+      setError(error.message)
     } finally {
       setIsLoading(false)
     }
@@ -142,6 +82,26 @@ export default function Login({ onLogin, onError }: LoginProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6" style={{ display: 'block' }}>
+            {error && (
+              <div 
+                className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3"
+                style={{
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '0.5rem',
+                  padding: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginBottom: '1.5rem'
+                }}
+              >
+                <AlertCircle className="h-5 w-5 text-red-500" style={{ width: '1.25rem', height: '1.25rem', color: '#ef4444', flexShrink: 0 }} />
+                <span className="text-red-700 text-sm" style={{ color: '#b91c1c', fontSize: '0.875rem' }}>
+                  {error}
+                </span>
+              </div>
+            )}
+
             <div style={{ marginBottom: '1.5rem' }}>
               <label 
                 htmlFor="employeeId" 
@@ -260,99 +220,39 @@ export default function Login({ onLogin, onError }: LoginProps) {
 
             <button
               type="submit"
-              disabled={isLoading || !employeeId || !password}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 width: '100%',
-                backgroundColor: isLoading || !employeeId || !password ? '#d1d5db' : '#2563eb',
+                backgroundColor: isLoading ? '#9ca3af' : '#2563eb',
                 color: 'white',
-                paddingTop: '0.75rem',
-                paddingBottom: '0.75rem',
-                paddingLeft: '1rem',
-                paddingRight: '1rem',
+                padding: '0.75rem 1rem',
                 borderRadius: '0.5rem',
-                fontWeight: '500',
                 border: 'none',
-                cursor: isLoading || !employeeId || !password ? 'not-allowed' : 'pointer',
-                fontSize: '1rem'
+                fontSize: '1rem',
+                fontWeight: '500',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                transition: 'background-color 0.15s ease-in-out'
               }}
             >
-              {isLoading ? (
-                <div className="flex items-center justify-center" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div 
-                    className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"
-                    style={{
-                      width: '1.25rem',
-                      height: '1.25rem',
-                      borderRadius: '50%',
-                      border: '2px solid transparent',
-                      borderBottomColor: 'white',
-                      marginRight: '0.5rem',
-                      animation: 'spin 1s linear infinite'
-                    }}
-                  ></div>
-                  ログイン中...
-                </div>
-              ) : (
-                'ログイン'
-              )}
+              {isLoading ? 'ログイン中...' : 'ログイン'}
             </button>
           </form>
 
-          <div 
-            className="mt-6 text-center"
-            style={{ marginTop: '1.5rem', textAlign: 'center' }}
-          >
-            <p 
-              className="text-sm text-gray-500"
-              style={{ fontSize: '0.875rem', color: '#6b7280' }}
-            >
-              ログインに問題がある場合は、管理者にお問い合わせください
-            </p>
+          <div className="mt-6 text-center text-sm text-gray-600" style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.875rem', color: '#4b5563' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}>ログインに問題がある場合は、管理者にお問い合わせください</p>
           </div>
 
-          <div 
-            className="mt-4 p-3 bg-gray-50 rounded-lg"
-            style={{
-              marginTop: '1rem',
-              padding: '0.75rem',
-              backgroundColor: '#f9fafb',
-              borderRadius: '0.5rem'
-            }}
-          >
-            <p 
-              className="text-xs text-gray-600 text-center"
-              style={{
-                fontSize: '0.75rem',
-                color: '#4b5563',
-                textAlign: 'center',
-                lineHeight: '1.4'
-              }}
-            >
-              <strong style={{ fontWeight: 'bold' }}>テスト用社員番号:</strong><br />
-              管理者: ADMIN001 | 運転手: B001, C001, B002, C002<br />
-              パスワード: 任意の文字列
-            </p>
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg border text-sm" style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #e5e7eb', fontSize: '0.875rem' }}>
+            <p className="font-medium text-gray-700 mb-2" style={{ fontWeight: '500', color: '#374151', margin: '0 0 0.5rem 0' }}>テスト用認証情報:</p>
+            <div className="space-y-1" style={{ lineHeight: '1.25' }}>
+              <p style={{ margin: '0', color: '#374151' }}>管理者: ADMIN001</p>
+              <p style={{ margin: '0', color: '#374151' }}>運転手: B001, C001, B002, C002</p>
+              <p style={{ margin: '0', color: '#374151' }}>パスワード: 任意の文字列</p>
+            </div>
           </div>
         </div>
       </div>
-      
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
-        input:focus {
-          outline: none !important;
-          box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
-          border-color: #2563eb !important;
-        }
-        
-        button:hover:not(:disabled) {
-          background-color: #1d4ed8 !important;
-        }
-      `}</style>
     </div>
   )
 } 
