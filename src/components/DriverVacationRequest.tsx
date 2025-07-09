@@ -21,7 +21,7 @@ interface DriverVacationRequestProps {
   currentUser: User
   existingRequests: VacationRequest[]
   monthlyStats: MonthlyVacationStats | null
-  onRequestSubmit: (request: Omit<VacationRequest, 'id' | 'requestedAt'>) => void
+  onRequestSubmit: (request: Omit<VacationRequest, 'id' | 'requestDate'>) => void
   onRequestDelete?: (requestId: number) => void
   allUsers?: User[]
 }
@@ -43,13 +43,17 @@ export default function DriverVacationRequest({
     
     if (!selectedDate) return
 
-    const newRequest: Omit<VacationRequest, 'id' | 'requestedAt'> = {
+    const newRequest: Omit<VacationRequest, 'id' | 'requestDate'> = {
       driverId: currentUser.id,
       driverName: currentUser.name,
       team: currentUser.team,
       employeeId: currentUser.employeeId,
       date: selectedDate,
+      workStatus: 'day_off',
       isOff: true,
+      type: 'day_off',
+      reason: '',
+      status: 'approved',
       isExternalDriver: currentUser.employeeId.startsWith('E')
     }
 
