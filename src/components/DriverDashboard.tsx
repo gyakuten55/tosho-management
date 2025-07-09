@@ -109,11 +109,11 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
     })
   }, [currentUser, vacationRequests])
 
-  const handleVacationRequest = (request: Omit<VacationRequest, 'id' | 'requestedAt'>) => {
+  const handleVacationRequest = (request: Omit<VacationRequest, 'id' | 'requestDate'>) => {
     const newRequest: VacationRequest = {
       ...request,
       id: Math.max(...vacationRequests.map(r => r.id), 0) + 1,
-      requestedAt: new Date()
+      requestDate: new Date()
     }
     setVacationRequests(prev => [...prev, newRequest])
   }
