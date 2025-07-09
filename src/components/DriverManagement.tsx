@@ -91,7 +91,7 @@ export default function DriverManagement({
         return {
           ...driver,
           isNightShift: !isCurrentlyNightShift,
-          status: !isCurrentlyNightShift ? 'night_shift' : 'working'
+          status: (!isCurrentlyNightShift ? 'night_shift' : 'working') as Driver['status']
         }
       }
       return driver
