@@ -364,8 +364,8 @@ export default function VacationManagement({
       const existingVacations = getExistingVacations()
       const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
       
-      if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationSettings.maxVacationsPerDay) {
-        alert(`この日は既に${vacationSettings.maxVacationsPerDay}人が休暇を取得しています。`)
+      if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationSettings.globalMaxDriversOffPerDay) {
+        alert(`この日は既に${vacationSettings.globalMaxDriversOffPerDay}人が休暇を取得しています。`)
         return
       }
     }
