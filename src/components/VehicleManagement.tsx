@@ -336,7 +336,16 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="font-medium text-gray-900">
-                          {vehicle.driver || '未割当'}
+                          {vehicle.driver ? (
+                            vehicle.driver
+                          ) : (
+                            <button
+                              onClick={() => handleView(vehicle)}
+                              className="text-blue-600 hover:text-blue-800 cursor-pointer"
+                            >
+                              未割当
+                            </button>
+                          )}
                         </div>
                         <div className="text-sm text-gray-500">{vehicle.team}</div>
                       </div>

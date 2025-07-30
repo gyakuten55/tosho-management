@@ -400,7 +400,12 @@ export default function DriverManagement({
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {driver.assignedVehicle ? (
+                    {driver.team === 'B' ? (
+                      <div className="flex items-center">
+                        <Car className="h-4 w-4 text-orange-400 mr-1" />
+                        <span className="text-orange-600 font-medium">都度割り当て</span>
+                      </div>
+                    ) : driver.assignedVehicle ? (
                       <div className="flex items-center">
                         <Car className="h-4 w-4 text-gray-400 mr-1" />
                         {driver.assignedVehicle}

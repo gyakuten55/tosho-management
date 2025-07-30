@@ -13,7 +13,7 @@ import {
   X,
   UserX
 } from 'lucide-react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, addDays, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { User, VacationRequest, MonthlyVacationStats } from '@/types'
 
@@ -62,12 +62,45 @@ export default function DriverVacationRequest({
     setSelectedDate(null)
   }
 
+  // 申請制限の判定
+  const isWithinRestrictionPeriod = (date: Date) => {
+    const today = new Date()
+    const daysDifference = differenceInDays(date, today)
+    return daysDifference < 10 && daysDifference >= 0  // 直近10日間は申請不可
+  }
+
+  const canDeleteRequest = (request: VacationRequest) => {
+    const today = new Date()
+    const daysDifference = differenceInDays(request.date, today)
+    return daysDifference > 30  // 1ヶ月（30日）先からのみ削除可能
+  }
+
   const handleDateClick = (date: Date) => {
+    const today = new Date()
+    const isPast = date < today && !isSameDay(date, today)
+    
+    if (isPast) {
+      return  // 過去の日付はクリック不可
+    }
+    
+    if (isWithinRestrictionPeriod(date)) {
+      alert('直近10日間の休暇申請はできません。余裕を持って申請してください。')
+      return
+    }
+    
     setSelectedDate(date)
     setIsFormOpen(true)
   }
 
   const handleDeleteRequest = (requestId: number) => {
+    const request = existingRequests.find(req => req.id === requestId)
+    if (!request) return
+    
+    if (!canDeleteRequest(request)) {
+      alert('1ヶ月以内の休暇申請の削除は管理者にお問い合わせください。')
+      return
+    }
+    
     if (onRequestDelete) {
       onRequestDelete(requestId)
     }
@@ -217,6 +250,7 @@ export default function DriverVacationRequest({
             const stats = getDayVacationStats(date)
             const isToday = isSameDay(date, new Date())
             const isPast = date < new Date() && !isToday
+            const isRestricted = isWithinRestrictionPeriod(date)
             const dayOfWeek = date.getDay()
             const userHasVacation = getUserRequests().some(req => 
               isSameDay(req.date, date) && req.isOff
@@ -225,13 +259,16 @@ export default function DriverVacationRequest({
             return (
               <div
                 key={date.toISOString()}
-                onClick={() => !isPast && handleDateClick(date)}
+                onClick={() => handleDateClick(date)}
                 className={`
-                  relative min-h-[80px] p-2 border rounded-lg cursor-pointer
-                  ${isPast ? 'bg-gray-50 cursor-not-allowed' : 'hover:bg-gray-50'}
+                  relative min-h-[80px] p-2 border rounded-lg
+                  ${isPast ? 'bg-gray-50 cursor-not-allowed' : 
+                    isRestricted ? 'bg-yellow-50 border-yellow-200 cursor-not-allowed' :
+                    'cursor-pointer hover:bg-gray-50'}
                   ${isToday ? 'ring-2 ring-blue-500' : ''}
                   ${userHasVacation ? 'bg-blue-50 border-blue-200' : ''}
                 `}
+                title={isRestricted ? '直近10日間は申請できません' : ''}
               >
                 <div className={`text-sm font-medium ${
                   isPast ? 'text-gray-400' :
@@ -304,12 +341,19 @@ export default function DriverVacationRequest({
                           </span>
                         </div>
                         {vacation.driverId === currentUser.id && onRequestDelete && (
+                          canDeleteRequest(vacation) ? (
                           <button
                             onClick={() => handleDeleteRequest(vacation.id)}
                             className="text-red-500 hover:text-red-700"
+                              title="削除"
                           >
                             <UserX className="h-4 w-4" />
                           </button>
+                          ) : (
+                            <div className="text-gray-400" title="1ヶ月以内の申請は管理者にお問い合わせください">
+                              <UserX className="h-4 w-4" />
+                            </div>
+                          )
                         )}
                       </div>
                     ))}

@@ -35,6 +35,9 @@ export interface InspectionSchedule {
   status: 'urgent' | 'warning' | 'normal'
   driver?: string
   team: string
+  isReservationCompleted?: boolean  // 予約完了フラグ
+  memo?: string  // メモ
+  hasAnnualCraneInspection?: boolean  // クレーン年次点検フラグ
 }
 
 // 勤務状態管理システムの型定義（東翔運輸仕様）
@@ -319,9 +322,18 @@ export interface VehicleOperationCalendarDay {
     reason?: string
     isTemporary?: boolean
   }[]
+  inspectionVehicles: {
+    vehicleId: number
+    plateNumber: string
+    inspectionType: string
+    model: string
+    driver?: string
+    team: string
+  }[]
   totalVehicles: number
   activeVehicles: number
   inactiveVehicles: number
+  totalInspectionCount: number
 }
 
 // 配車スケジュール管理システムの型定義
@@ -407,6 +419,33 @@ export interface VehicleInoperativeNotification {
   isRead: boolean
   sentAt: Date
   priority: 'low' | 'medium' | 'high'
+}
+
+// 車検通知用
+export interface VehicleInspectionNotification {
+  id: number
+  vehicleId: number
+  plateNumber: string
+  inspectionType: 'vehicle_inspection'  // 車検
+  inspectionDate: Date
+  notificationDate: Date  // 通知日（3ヶ月前）
+  isRead: boolean
+  priority: 'high'
+  message: string
+}
+
+// 1日途中での車両乗り換え記録（履歴は保存しない）
+export interface DailyVehicleSwap {
+  id: number
+  driverId: number
+  driverName: string
+  originalVehicleId: number
+  originalPlateNumber: string
+  newVehicleId: number
+  newPlateNumber: string
+  swapTime: Date
+  reason: string
+  status: 'active' | 'completed'
 }
 
  

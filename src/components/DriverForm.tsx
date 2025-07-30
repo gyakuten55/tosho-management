@@ -16,9 +16,10 @@ interface DriverFormProps {
 export default function DriverForm({ driver, vehicles, existingDrivers, onSave, onCancel, onVehicleUpdate }: DriverFormProps) {
   const [formData, setFormData] = useState({
     name: driver?.name || '',
-    team: driver?.team || 'B',
+    team: driver?.team || 'Bチーム',
     status: driver?.status || 'available',
     assignedVehicle: driver?.assignedVehicle || '',
+    employeeId: driver?.employeeId || '', // 手動入力用に追加
     phoneNumber: (driver as any)?.phoneNumber || '',
     email: (driver as any)?.email || '',
     licenseNumber: (driver as any)?.licenseNumber || '',
@@ -43,6 +44,20 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
       newErrors.team = 'チームは必須です'
     }
 
+    // 社員IDのバリデーション
+    if (!formData.employeeId.trim()) {
+      newErrors.employeeId = '社員IDは必須です'
+    } else {
+      // 重複チェック（編集時は自分以外をチェック）
+      const isDuplicate = existingDrivers.some(d => 
+        d.employeeId === formData.employeeId && 
+        (!driver || d.id !== driver.id)
+      )
+      if (isDuplicate) {
+        newErrors.employeeId = 'この社員IDは既に使用されています'
+      }
+    }
+
     if (formData.phoneNumber && !/^[\d-+()]+$/.test(formData.phoneNumber)) {
       newErrors.phoneNumber = '正しい電話番号を入力してください'
     }
@@ -55,7 +70,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     return Object.keys(newErrors).length === 0
   }
 
-  // 社員ID自動生成
+  // 社員ID自動生成（補助機能として提供）
   const generateEmployeeId = (driverType: string, existingDrivers: Driver[]) => {
     const prefix = driverType === 'external' ? 'E' : 'B'
     const existingIds = existingDrivers
@@ -67,6 +82,16 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     return `${prefix}${nextNumber.toString().padStart(3, '0')}`
   }
 
+  // 自動生成ボタンの処理
+  const handleAutoGenerate = () => {
+    const newId = generateEmployeeId(formData.driverType, existingDrivers)
+    setFormData(prev => ({ ...prev, employeeId: newId }))
+    // エラーをクリア
+    if (errors.employeeId) {
+      setErrors(prev => ({ ...prev, employeeId: '' }))
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -74,22 +99,37 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
       return
     }
 
-    // 新規登録の場合は社員IDを自動生成
-    const employeeId = driver ? driver.employeeId : generateEmployeeId(formData.driverType, existingDrivers)
-    
+    // 手動入力された社員IDをそのまま使用
     const saveData = {
       ...formData,
-      employeeId
+      // Bチームの場合は車両割り当てをクリア
+      assignedVehicle: formData.team === 'Bチーム' ? '' : formData.assignedVehicle
     }
 
     onSave(saveData)
   }
 
   const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value }
+      
+      // Bチームの場合は車両割り当てをクリア
+      if (field === 'team' && value === 'Bチーム') {
+        newData.assignedVehicle = ''
+      }
+      
+      return newData
+    })
     
-    // 車両割り当てが変更された場合、車両側の担当ドライバーも自動更新
-    if (field === 'assignedVehicle' && onVehicleUpdate) {
+    // Bチームになった場合、車両割り当てを解除
+    if (field === 'team' && value === 'Bチーム' && formData.assignedVehicle && onVehicleUpdate) {
+      const updates: { plateNumber: string; driverName: string }[] = []
+      updates.push({ plateNumber: formData.assignedVehicle, driverName: '' })
+      onVehicleUpdate(updates)
+    }
+    
+    // 車両割り当てが変更された場合（Bチーム以外）、車両側の担当ドライバーも自動更新
+    if (field === 'assignedVehicle' && formData.team !== 'Bチーム' && onVehicleUpdate) {
       const updates: { plateNumber: string; driverName: string }[] = []
       
       // 前の車両から割り当て解除
@@ -179,16 +219,39 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                 value={formData.driverType}
                 onChange={(e) => handleChange('driverType', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                disabled={!!driver} // 編集時は変更不可
               >
                 <option value="internal">正社員</option>
                 <option value="external">外部ドライバー</option>
               </select>
-              {driver && (
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                社員ID <span className="text-red-500">*</span>
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={formData.employeeId}
+                  onChange={(e) => handleChange('employeeId', e.target.value)}
+                  className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                    errors.employeeId ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="例: B001, E001"
+                />
+                <button
+                  type="button"
+                  onClick={handleAutoGenerate}
+                  className="btn-secondary whitespace-nowrap px-3 py-2"
+                  title="自動生成"
+                >
+                  自動生成
+                </button>
+              </div>
+              {errors.employeeId && <p className="text-red-500 text-sm mt-1">{errors.employeeId}</p>}
                 <p className="text-sm text-gray-500 mt-1">
-                  社員ID: {driver.employeeId} (編集時は変更できません)
+                会社で使用している既存の社員IDを入力してください
                 </p>
-              )}
             </div>
 
             <div>
@@ -202,9 +265,9 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                   errors.team ? 'border-red-500' : 'border-gray-300'
                 }`}
               >
-                <option value="A-1">A-1</option>
-                <option value="A-2">A-2</option>
-                <option value="B">B</option>
+                <option value="配送センターチーム">配送センターチーム</option>
+                <option value="常駐チーム">常駐チーム</option>
+                <option value="Bチーム">Bチーム</option>
               </select>
               {errors.team && <p className="text-red-500 text-sm mt-1">{errors.team}</p>}
             </div>
@@ -231,6 +294,25 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 割り当て車両
               </label>
+              {formData.team === 'Bチーム' ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-2">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-yellow-600" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium text-yellow-800">Bチーム - 都度車両割り当て</h4>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        Bチームのドライバーは固定の担当車両を持ちません。<br />
+                        車両運用管理画面で必要に応じて車両を割り当ててください。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
               <select
                 value={formData.assignedVehicle}
                 onChange={(e) => handleChange('assignedVehicle', e.target.value)}
@@ -243,6 +325,11 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                   </option>
                 ))}
               </select>
+                  <p className="text-sm text-gray-500 mt-1">
+                    配送センターチーム、常駐チームのドライバーには固定車両を割り当てます
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -42,20 +42,11 @@ interface DailyVacationInfo {
     team: string
     isExternalDriver: boolean
   }[]
-  inspectionVehicles: {
-    vehicleId: number
-    plateNumber: string
-    inspectionType: string
-    model: string
-    driver?: string
-    team: string
-  }[]
   totalOffCount: number
   internalDriverOffCount: number
   externalDriverOffCount: number
   nightShiftCount: number
   workingCount: number
-  totalInspectionCount: number
 }
 
 interface VacationManagementProps {
@@ -88,19 +79,16 @@ export default function VacationManagement({
   const [currentView, setCurrentView] = useState('calendar')
   const [calendarDate, setCalendarDate] = useState(new Date())
   const [showVacationForm, setShowVacationForm] = useState(false)
-  const [showInspectionModal, setShowInspectionModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedDriverId, setSelectedDriverId] = useState('')
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
   
-  // 設定編集用のstate
-  const [editingSettings, setEditingSettings] = useState(vacationSettings)
 
   // ソート用のstate
   const [sortField, setSortField] = useState<'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team'>('driverName')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
-  // 初期化時に月間統計を再計算
+  // 初期化時に月間統計を再計算と古いデータの削除
   useEffect(() => {
     const recalculateAllStats = () => {
       const currentYear = new Date().getFullYear()
@@ -146,11 +134,28 @@ export default function VacationManagement({
       
       onVacationStatsChange(newStats)
     }
+
+    // 1年以上前の休暇データを自動削除
+    const cleanupOldVacationData = () => {
+      const oneYearAgo = new Date()
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+      
+      const filteredRequests = vacationRequests.filter(request => 
+        request.date >= oneYearAgo
+      )
+      
+      if (filteredRequests.length !== vacationRequests.length) {
+        const deletedCount = vacationRequests.length - filteredRequests.length
+        onVacationRequestsChange(filteredRequests)
+        console.log(`古い休暇データを自動削除しました: ${deletedCount}件`)
+      }
+    }
     
     if (drivers.length > 0) {
       recalculateAllStats()
+      cleanupOldVacationData()
     }
-  }, [drivers, vacationRequests, vacationSettings, onVacationStatsChange])
+  }, [drivers, vacationRequests, vacationSettings, onVacationStatsChange, onVacationRequestsChange])
 
   // 月25日に未達成ドライバーに通知
   useEffect(() => {
@@ -201,43 +206,6 @@ export default function VacationManagement({
       Math.round((currentStats.reduce((sum, stat) => sum + stat.totalOffDays, 0) / currentStats.length) * 10) / 10 : 0
   }
 
-  // 指定日の点検車両を取得する関数
-  const getInspectionVehiclesForDate = (date: Date) => {
-    const inspectionVehicles: {
-      vehicleId: number
-      plateNumber: string
-      inspectionType: string
-      model: string
-      driver?: string
-      team: string
-    }[] = []
-
-    vehicles.forEach(vehicle => {
-      // 各種点検日をチェック
-      const inspectionDates = [
-        { date: vehicle.vehicleInspectionDate, type: '車検' },
-        { date: vehicle.threeMonthInspection, type: '3ヶ月点検' },
-        { date: vehicle.sixMonthInspection, type: '6ヶ月点検' },
-        { date: vehicle.nextInspection, type: '定期点検' },
-        ...(vehicle.craneAnnualInspection ? [{ date: vehicle.craneAnnualInspection, type: 'クレーン年次点検' }] : [])
-      ]
-
-      inspectionDates.forEach(inspection => {
-        if (inspection.date && isSameDay(new Date(inspection.date), date)) {
-          inspectionVehicles.push({
-            vehicleId: vehicle.id,
-            plateNumber: vehicle.plateNumber,
-            inspectionType: inspection.type,
-            model: vehicle.model,
-            driver: vehicle.driver,
-            team: vehicle.team
-          })
-        }
-      })
-    })
-
-    return inspectionVehicles
-  }
 
   // カレンダーの日付情報を生成（6週間分の完全なカレンダーグリッド）
   const generateCalendarDays = () => {
@@ -259,9 +227,6 @@ export default function VacationManagement({
       
       const internalDriverVacations = dayVacations.filter(v => !v.isExternalDriver)
       const externalDriverVacations = dayVacations.filter(v => v.isExternalDriver)
-      
-      // その日の点検車両を取得
-      const dayInspectionVehicles = getInspectionVehiclesForDate(day)
 
       return {
         date: day,
@@ -283,13 +248,11 @@ export default function VacationManagement({
           team: v.team,
           isExternalDriver: v.isExternalDriver
         })),
-        inspectionVehicles: dayInspectionVehicles,
         totalOffCount: dayVacations.length,
         internalDriverOffCount: internalDriverVacations.length,
         externalDriverOffCount: externalDriverVacations.length,
         nightShiftCount: dayNightShifts.length,
-        workingCount: dayWorking.length,
-        totalInspectionCount: dayInspectionVehicles.length
+        workingCount: dayWorking.length
       } as DailyVacationInfo
     })
   }
@@ -307,20 +270,15 @@ export default function VacationManagement({
     return vacationRequests.filter(req => isSameDay(req.date, date))
   }
 
+  // ドライバー名から担当車両を取得するヘルパー関数
+  const getVehicleByDriverName = (driverName: string) => {
+    return vehicles.find(vehicle => vehicle.driver === driverName)
+  }
+
   // セルクリック時の処理
   const handleDateClick = (date: Date) => {
     setSelectedDate(date)
-    
-    // 点検車両がある場合は点検モーダルを表示、そうでなければ休暇フォームを表示
-    const inspectionVehicles = getInspectionVehiclesForDate(date)
-    if (inspectionVehicles.length > 0) {
-      setShowInspectionModal(true)
-      setShowVacationForm(false)
-    } else {
-      setShowVacationForm(true)
-      setShowInspectionModal(false)
-    }
-    
+    setShowVacationForm(true)
     setSelectedDriverId('')
     setSelectedWorkStatus('day_off')
   }
@@ -590,10 +548,6 @@ export default function VacationManagement({
                     }`}>
                       {format(dayInfo.date, 'd')}
                     </span>
-                    {/* 点検車両がある場合の赤い丸 */}
-                    {isCurrentMonth && dayInfo.totalInspectionCount > 0 && (
-                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    )}
                   </div>
 
                   {/* 勤務状態の表示（人数のみ） - 現在の月のみ表示 */}
@@ -631,15 +585,6 @@ export default function VacationManagement({
                         <div className="text-xs">
                           <span className="font-medium text-purple-600">
                             外部休: {dayInfo.externalDriverOffCount}人
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* 点検車両数 */}
-                      {dayInfo.totalInspectionCount > 0 && (
-                        <div className="text-xs">
-                          <span className="font-medium text-red-600">
-                            点検: {dayInfo.totalInspectionCount}台
                           </span>
                         </div>
                       )}
@@ -819,117 +764,11 @@ export default function VacationManagement({
     </div>
   )
 
-  // 設定更新処理
-  const handleSettingsUpdate = (e: React.FormEvent) => {
-    e.preventDefault()
-    onVacationSettingsChange(editingSettings)
-    alert('設定が更新されました。')
-  }
-
-  // 設定値の変更処理
-  const updateSettingsField = (field: string, value: any) => {
-    setEditingSettings(prev => ({
-      ...prev,
-      [field]: value
-    }))
-  }
-
-
-
-  // 設定画面のレンダリング
-  const renderSettingsView = () => (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <Settings className="h-5 w-5 mr-2 text-primary-600" />
-            休暇管理設定
-          </h3>
-        </div>
-        
-        <form onSubmit={handleSettingsUpdate} className="p-6 space-y-8">
-          {/* 基本設定 */}
-          <div>
-            <h4 className="text-md font-semibold text-gray-900 mb-4">基本設定</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  月間最低休暇日数
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={editingSettings.minimumOffDaysPerMonth}
-                  onChange={(e) => updateSettingsField('minimumOffDaysPerMonth', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">ドライバーが1ヶ月に取得すべき最低休暇日数</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  月間最大休暇日数
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={editingSettings.maximumOffDaysPerMonth}
-                  onChange={(e) => updateSettingsField('maximumOffDaysPerMonth', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">ドライバーが1ヶ月に取得できる最大休暇日数</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  通知日（毎月）
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={editingSettings.notificationDate}
-                  onChange={(e) => updateSettingsField('notificationDate', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">休暇不足の通知を送信する日（月の何日か）</p>
-              </div>
-            </div>
-          </div>
-          
-
-          
-          {/* 保存ボタン */}
-          <div className="border-t border-gray-200 pt-6">
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setEditingSettings(vacationSettings)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                リセット
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-              >
-                <CheckCircle className="h-4 w-4" />
-                <span>設定を保存</span>
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
 
   // タブナビゲーション
   const tabs = [
-          { id: 'calendar', label: 'カレンダー', icon: Calendar },
+    { id: 'calendar', label: 'カレンダー', icon: Calendar },
     { id: 'stats', label: '月間統計', icon: Users },
-    { id: 'settings', label: '設定', icon: Settings },
   ]
 
   const renderContent = () => {
@@ -938,10 +777,6 @@ export default function VacationManagement({
         return renderCalendarView()
       case 'stats':
         return renderStatsView()
-      case 'notifications':
-        return <div>通知管理（実装予定）</div>
-      case 'settings':
-        return renderSettingsView()
       default:
         return renderCalendarView()
     }
@@ -997,10 +832,6 @@ export default function VacationManagement({
     })
   }
 
-  // 設定値が変更されたときにeditingSettingsも更新
-  useEffect(() => {
-    setEditingSettings(vacationSettings)
-  }, [vacationSettings])
 
   return (
     <div className="space-y-6">
@@ -1135,6 +966,14 @@ export default function VacationManagement({
                                 </span>
                               )}
                             </p>
+                            {(() => {
+                              const assignedVehicle = getVehicleByDriverName(workStatus.driverName)
+                              return assignedVehicle && (
+                                <p className="text-sm text-blue-600 mt-1">
+                                  🚗 担当車両: {assignedVehicle.plateNumber} ({assignedVehicle.model})
+                                </p>
+                              )
+                            })()}
                           </div>
                         </div>
                         <button
@@ -1254,106 +1093,6 @@ export default function VacationManagement({
         </div>
       )}
 
-      {/* 点検車両情報モーダル */}
-      {showInspectionModal && selectedDate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
-                  {format(selectedDate, 'yyyy年MM月dd日', { locale: ja })} の点検予定車両
-                </h3>
-                <button
-                  onClick={() => setShowInspectionModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              {(() => {
-                const inspectionVehicles = getInspectionVehiclesForDate(selectedDate)
-                
-                if (inspectionVehicles.length === 0) {
-                  return (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500">この日に点検予定の車両はありません。</p>
-                    </div>
-                  )
-                }
-
-                return (
-                  <div className="space-y-4">
-                    <div className="text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                      <p className="font-medium">📋 点検予定車両一覧</p>
-                      <p className="mt-1">合計 {inspectionVehicles.length} 台の車両に点検が予定されています。</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      {inspectionVehicles.map((vehicle, index) => (
-                        <div
-                          key={`${vehicle.vehicleId}-${index}`}
-                          className="p-4 border border-red-200 bg-red-50 rounded-lg"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <span className="font-semibold text-gray-900 text-lg">
-                                  {vehicle.plateNumber}
-                                </span>
-                                <span className="text-sm bg-red-100 text-red-800 px-2 py-1 rounded-full font-medium">
-                                  {vehicle.inspectionType}
-                                </span>
-                              </div>
-                              <div className="space-y-1 text-sm text-gray-600">
-                                <p><span className="font-medium">車種:</span> {vehicle.model}</p>
-                                <p><span className="font-medium">チーム:</span> {vehicle.team}</p>
-                                {vehicle.driver && (
-                                  <p><span className="font-medium">担当ドライバー:</span> {vehicle.driver}</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                      <p className="text-sm text-blue-700">
-                        ※ 点検日程の変更は車両管理画面で行ってください<br/>
-                        ※ 点検当日は該当車両の稼働に影響が出る可能性があります
-                      </p>
-                    </div>
-                  </div>
-                )
-              })()}
-            </div>
-
-            <div className="p-6 border-t border-gray-200">
-              <div className="flex justify-between space-x-3">
-                <button
-                  onClick={() => {
-                    setShowInspectionModal(false)
-                    setShowVacationForm(true)
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  勤務状態設定へ
-                </button>
-                <button
-                  onClick={() => setShowInspectionModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                >
-                  閉じる
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 } 

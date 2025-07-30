@@ -163,7 +163,21 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
             <Car className="h-5 w-5 mr-2 text-blue-600" />
             担当車両
           </h2>
-          {assignedVehicle ? (
+          {currentUser.team === 'B' ? (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <Car className="h-5 w-5 text-orange-600" />
+                <span className="font-medium text-orange-900">都度車両割り当て</span>
+              </div>
+              <p className="text-orange-700 text-sm mb-3">
+                Bチームのドライバーは固定の担当車両を持ちません。<br />
+                管理者が車両運用管理画面で必要に応じて車両を割り当てます。
+              </p>
+              <div className="text-sm text-orange-600">
+                本日の車両割り当てについては管理者にお尋ねください。
+              </div>
+            </div>
+          ) : assignedVehicle ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-lg font-bold text-blue-700">{assignedVehicle.plateNumber}</span>

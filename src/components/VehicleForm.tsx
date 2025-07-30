@@ -35,7 +35,7 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
     model: '',
     year: new Date().getFullYear(),
     driver: '',
-    team: 'A-1',
+    team: '配送センターチーム',
     status: 'normal',
     lastInspection: format(new Date(), 'yyyy-MM-dd'),
     nextInspection: format(addMonths(new Date(), 6), 'yyyy-MM-dd'),
@@ -262,10 +262,15 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
                   onChange={(e) => handleChange('driver', e.target.value)}
                 >
                   <option value="">未割り当て</option>
-                  {drivers.map(driver => (
+                  {drivers
+                    .filter(driver => driver.team !== 'Bチーム') // Bチームは固定割り当て対象外
+                    .map(driver => (
                     <option key={driver.id} value={driver.name}>{driver.name} ({driver.team} - {driver.employeeId})</option>
                   ))}
                 </select>
+                <p className="text-sm text-gray-500 mt-1">
+                  ※ Bチームのドライバーは固定割り当て対象外です。車両運用管理画面で都度割り当てを行ってください。
+                </p>
               </div>
 
               <div>
@@ -283,9 +288,9 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
                   onChange={(e) => handleChange('team', e.target.value)}
                   disabled={!!formData.driver}
                 >
-                  <option value="A-1">A-1</option>
-                  <option value="A-2">A-2</option>
-                  <option value="B">B</option>
+                  <option value="配送センターチーム">配送センターチーム</option>
+                  <option value="常駐チーム">常駐チーム</option>
+                  <option value="Bチーム">Bチーム</option>
                 </select>
                 {formData.driver && (
                   <p className="mt-1 text-sm text-gray-600">

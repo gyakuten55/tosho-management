@@ -182,7 +182,20 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-medium text-gray-700 mb-2">車両情報</h4>
-              {driver.assignedVehicle ? (
+              {driver.team === 'B' ? (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2">
+                    <Car className="h-4 w-4 text-orange-600" />
+                    <span className="font-medium text-orange-900">都度車両割り当て</span>
+                  </div>
+                  <div className="mt-2">
+                    <p className="text-sm text-orange-700">
+                      Bチームのドライバーは固定の担当車両を持ちません。<br />
+                      必要に応じて車両運用管理画面で車両を割り当ててください。
+                    </p>
+                  </div>
+                </div>
+              ) : driver.assignedVehicle ? (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-center space-x-2">
                     <Car className="h-4 w-4 text-blue-600" />
