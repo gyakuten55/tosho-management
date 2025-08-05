@@ -82,10 +82,11 @@ export default function VacationManagement({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedDriverId, setSelectedDriverId] = useState('')
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
+  const [statsMonth, setStatsMonth] = useState(new Date()) // 統計タブ用の月選択state
   
 
   // ソート用のstate
-  const [sortField, setSortField] = useState<'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team'>('driverName')
+  const [sortField, setSortField] = useState<'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team' | 'employeeId' | 'requiredMinimumDays' | 'maxAllowedDays'>('driverName')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // 指定日付とチームに対する休暇上限を取得する関数
@@ -116,19 +117,33 @@ export default function VacationManagement({
   // 初期化時に月間統計を再計算と古いデータの削除、デフォルト出勤設定
   useEffect(() => {
     const recalculateAllStats = () => {
-      const currentYear = new Date().getFullYear()
-      const currentMonth = new Date().getMonth() + 1
+      // 統計データを生成する年月を取得
+      const allMonths = new Set<string>()
+      const today = new Date()
       
-      // 各ドライバーの最近3ヶ月分の統計を再計算
+      // 現在の月を含む前後12ヶ月を追加（より広い範囲をカバー）
+      for (let monthOffset = -12; monthOffset <= 12; monthOffset++) {
+        const targetDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1)
+        allMonths.add(`${targetDate.getFullYear()}-${targetDate.getMonth() + 1}`)
+      }
+      
+      // 休暇データから年月を抽出
+      vacationRequests.forEach(req => {
+        const year = req.date.getFullYear()
+        const month = req.date.getMonth() + 1
+        allMonths.add(`${year}-${month}`)
+      })
+      
       const newStats: MonthlyVacationStats[] = []
       
-      drivers.forEach(driver => {
-        if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
+      // 各月の統計を生成
+      allMonths.forEach(yearMonth => {
+        const [yearStr, monthStr] = yearMonth.split('-')
+        const year = parseInt(yearStr)
+        const month = parseInt(monthStr)
         
-        for (let monthOffset = -1; monthOffset <= 1; monthOffset++) {
-          const targetDate = new Date(currentYear, new Date().getMonth() + monthOffset, 1)
-          const year = targetDate.getFullYear()
-          const month = targetDate.getMonth() + 1
+        drivers.forEach(driver => {
+          if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
           
           // その月のドライバーの休暇数を計算
           const monthVacations = vacationRequests.filter(req => 
@@ -154,10 +169,56 @@ export default function VacationManagement({
             remainingRequiredDays,
             maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
           })
-        }
+        })
       })
       
       onVacationStatsChange(newStats)
+    }
+
+    // 特定の月の統計データを生成する関数
+    const generateStatsForMonth = (targetDate: Date) => {
+      const year = targetDate.getFullYear()
+      const month = targetDate.getMonth() + 1
+      const monthKey = `${year}-${month}`
+      
+      // 既存の統計データから該当月のものを除外
+      const existingStats = vacationStats.filter(stat => 
+        !(stat.year === year && stat.month === month)
+      )
+      
+      const monthStats: MonthlyVacationStats[] = []
+      
+      drivers.forEach(driver => {
+        if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
+        
+        // その月のドライバーの休暇数を計算
+        const monthVacations = vacationRequests.filter(req => 
+          req.driverId === driver.id && 
+          req.date.getFullYear() === year && 
+          req.date.getMonth() + 1 === month &&
+          req.workStatus === 'day_off' &&
+          !req.isExternalDriver
+        )
+        
+        const totalOffDays = monthVacations.length
+        const remainingRequiredDays = Math.max(0, vacationSettings.minimumOffDaysPerMonth - totalOffDays)
+        
+        monthStats.push({
+          driverId: driver.id,
+          driverName: driver.name,
+          team: driver.team,
+          employeeId: driver.employeeId,
+          year,
+          month,
+          totalOffDays,
+          requiredMinimumDays: vacationSettings.minimumOffDaysPerMonth,
+          remainingRequiredDays,
+          maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
+        })
+      })
+      
+      // 既存の統計データと新しい月の統計データを結合
+      onVacationStatsChange([...existingStats, ...monthStats])
     }
 
     // 1年以上前の休暇データを自動削除
@@ -261,8 +322,63 @@ export default function VacationManagement({
     checkAndSendNotifications()
   }, [vacationStats, vacationNotifications, onVacationNotificationsChange])
 
-  // 統計情報を計算
-  const currentMonth = format(calendarDate, 'yyyy-MM')
+  // 統計タブの月選択時に該当月の統計データを生成
+  useEffect(() => {
+    if (drivers.length > 0 && currentView === 'stats') {
+      const targetMonth = format(statsMonth, 'yyyy-MM')
+      const hasStatsForMonth = vacationStats.some(stat => 
+        `${stat.year}-${String(stat.month).padStart(2, '0')}` === targetMonth
+      )
+      
+      // 該当月の統計データが存在しない場合は生成する
+      if (!hasStatsForMonth) {
+        const year = statsMonth.getFullYear()
+        const month = statsMonth.getMonth() + 1
+        
+        // 既存の統計データから該当月のものを除外
+        const existingStats = vacationStats.filter(stat => 
+          !(stat.year === year && stat.month === month)
+        )
+        
+        const monthStats: MonthlyVacationStats[] = []
+        
+        drivers.forEach(driver => {
+          if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
+          
+          // その月のドライバーの休暇数を計算
+          const monthVacations = vacationRequests.filter(req => 
+            req.driverId === driver.id && 
+            req.date.getFullYear() === year && 
+            req.date.getMonth() + 1 === month &&
+            req.workStatus === 'day_off' &&
+            !req.isExternalDriver
+          )
+          
+          const totalOffDays = monthVacations.length
+          const remainingRequiredDays = Math.max(0, vacationSettings.minimumOffDaysPerMonth - totalOffDays)
+          
+          monthStats.push({
+            driverId: driver.id,
+            driverName: driver.name,
+            team: driver.team,
+            employeeId: driver.employeeId,
+            year,
+            month,
+            totalOffDays,
+            requiredMinimumDays: vacationSettings.minimumOffDaysPerMonth,
+            remainingRequiredDays,
+            maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
+          })
+        })
+        
+        // 既存の統計データと新しい月の統計データを結合
+        onVacationStatsChange([...existingStats, ...monthStats])
+      }
+    }
+  }, [statsMonth, currentView, drivers, vacationRequests, vacationSettings, vacationStats, onVacationStatsChange])
+
+  // 統計情報を計算（統計タブ用の月を使用）
+  const currentMonth = format(currentView === 'stats' ? statsMonth : calendarDate, 'yyyy-MM')
   const currentStats = vacationStats.filter(stat => 
     `${stat.year}-${String(stat.month).padStart(2, '0')}` === currentMonth
   )
@@ -794,56 +910,32 @@ export default function VacationManagement({
   // 月間統計ビューのレンダリング
   const renderStatsView = () => (
     <div className="space-y-6">
-      {/* 統計サマリー */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">総ドライバー数</p>
-              <p className="text-3xl font-bold text-gray-900">{monthlyStats.totalDrivers}</p>
-            </div>
-            <Users className="h-8 w-8 text-gray-500" />
+      {/* 月選択 */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setStatsMonth(subMonths(statsMonth, 1))}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h2 className="text-xl font-semibold">
+              {format(statsMonth, 'yyyy年MM月', { locale: ja })} の統計
+            </h2>
+            <button
+              onClick={() => setStatsMonth(addMonths(statsMonth, 1))}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">休暇充足</p>
-              <p className="text-3xl font-bold text-green-600">{monthlyStats.driversWithSufficientVacation}</p>
-            </div>
-            <CheckCircle className="h-8 w-8 text-green-500" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">休暇不足</p>
-              <p className="text-3xl font-bold text-red-600">{monthlyStats.driversNeedingVacation}</p>
-            </div>
-            <AlertTriangle className="h-8 w-8 text-red-500" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">総休暇日数</p>
-              <p className="text-3xl font-bold text-blue-600">{monthlyStats.totalVacationDays}</p>
-            </div>
-            <Calendar className="h-8 w-8 text-blue-500" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">平均休暇日数</p>
-              <p className="text-3xl font-bold text-purple-600">{monthlyStats.averageVacationDays}</p>
-            </div>
-            <Calendar className="h-8 w-8 text-purple-500" />
-          </div>
+          <button
+            onClick={() => setStatsMonth(new Date())}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            今月
+          </button>
         </div>
       </div>
 
@@ -852,7 +944,7 @@ export default function VacationManagement({
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">
-              {format(calendarDate, 'yyyy年MM月', { locale: ja })} ドライバー別休暇統計
+              ドライバー別休暇統計
             </h3>
             <div className="text-sm text-gray-600">
               ※ 外部ドライバーは統計に含まれません
@@ -877,6 +969,28 @@ export default function VacationManagement({
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('employeeId')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span>社員番号</span>
+                    {sortField === 'employeeId' && (
+                      sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('team')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span>チーム</span>
+                    {sortField === 'team' && (
+                      sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('totalOffDays')}
                 >
                   <div className="flex items-center space-x-2">
@@ -886,8 +1000,16 @@ export default function VacationManagement({
                     )}
                   </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  必要最低日数
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('requiredMinimumDays')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span>必要最低日数</span>
+                    {sortField === 'requiredMinimumDays' && (
+                      sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                    )}
+                  </div>
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
@@ -900,8 +1022,16 @@ export default function VacationManagement({
                     )}
                   </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  上限日数
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('maxAllowedDays')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span>上限日数</span>
+                    {sortField === 'maxAllowedDays' && (
+                      sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                    )}
+                  </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   ステータス
@@ -913,10 +1043,13 @@ export default function VacationManagement({
                 .map(stat => (
                 <tr key={`${stat.driverId}-${stat.year}-${stat.month}`}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="font-medium text-gray-900">{stat.driverName}</div>
-                      <div className="text-sm text-gray-500">{stat.team} - {stat.employeeId}</div>
-                    </div>
+                    <div className="font-medium text-gray-900">{stat.driverName}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-gray-700">{stat.employeeId}</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-gray-700">{stat.team}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-lg font-bold text-blue-600">{stat.totalOffDays}日</span>
@@ -975,7 +1108,7 @@ export default function VacationManagement({
   }
 
   // ソート処理
-  const handleSort = (field: 'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team') => {
+  const handleSort = (field: 'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team' | 'employeeId' | 'requiredMinimumDays' | 'maxAllowedDays') => {
     if (sortField === field) {
       setSortDirection(prevDirection => prevDirection === 'asc' ? 'desc' : 'asc')
     } else {
@@ -1006,6 +1139,18 @@ export default function VacationManagement({
         case 'team':
           aValue = a.team
           bValue = b.team
+          break
+        case 'employeeId':
+          aValue = a.employeeId
+          bValue = b.employeeId
+          break
+        case 'requiredMinimumDays':
+          aValue = a.requiredMinimumDays
+          bValue = b.requiredMinimumDays
+          break
+        case 'maxAllowedDays':
+          aValue = a.maxAllowedDays
+          bValue = b.maxAllowedDays
           break
         default:
           aValue = a.driverName
