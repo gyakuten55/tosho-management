@@ -21,12 +21,7 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
     driver: string
     team: string
     status: 'normal' | 'inspection' | 'repair' | 'maintenance_due' | 'breakdown'
-    lastInspection: string
-    nextInspection: string
-    vehicleInspectionDate: string
-    craneAnnualInspection: string
-    threeMonthInspection: string
-    sixMonthInspection: string
+    inspectionDate: string
     garage: string
     notes: string
     hasCrane: boolean
@@ -37,12 +32,7 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
     driver: '',
     team: '配送センターチーム',
     status: 'normal',
-    lastInspection: format(new Date(), 'yyyy-MM-dd'),
-    nextInspection: format(addMonths(new Date(), 6), 'yyyy-MM-dd'),
-    vehicleInspectionDate: format(addMonths(new Date(), 12), 'yyyy-MM-dd'),
-    craneAnnualInspection: '',
-    threeMonthInspection: format(addMonths(new Date(), 3), 'yyyy-MM-dd'),
-    sixMonthInspection: format(addMonths(new Date(), 6), 'yyyy-MM-dd'),
+    inspectionDate: format(new Date(), 'yyyy-MM-dd'),
     garage: '本社車庫',
     notes: '',
     hasCrane: false
@@ -59,15 +49,10 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
         driver: vehicle.driver || '',
         team: vehicle.team,
         status: vehicle.status,
-        lastInspection: format(vehicle.lastInspection, 'yyyy-MM-dd'),
-        nextInspection: format(vehicle.nextInspection, 'yyyy-MM-dd'),
-        vehicleInspectionDate: format(vehicle.vehicleInspectionDate, 'yyyy-MM-dd'),
-        craneAnnualInspection: vehicle.craneAnnualInspection ? format(vehicle.craneAnnualInspection, 'yyyy-MM-dd') : '',
-        threeMonthInspection: format(vehicle.threeMonthInspection, 'yyyy-MM-dd'),
-        sixMonthInspection: format(vehicle.sixMonthInspection, 'yyyy-MM-dd'),
+        inspectionDate: format(vehicle.inspectionDate, 'yyyy-MM-dd'),
         garage: vehicle.garage,
         notes: vehicle.notes || '',
-        hasCrane: !!vehicle.craneAnnualInspection
+        hasCrane: vehicle.model.includes('クレーン')
       })
     }
   }, [vehicle])
@@ -91,16 +76,7 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
       newErrors.garage = '車庫情報は必須です'
     }
 
-    const lastInspectionDate = new Date(formData.lastInspection)
-    const nextInspectionDate = new Date(formData.nextInspection)
 
-    if (nextInspectionDate <= lastInspectionDate) {
-      newErrors.nextInspection = '次回点検日は前回点検日より後の日付を入力してください'
-    }
-
-    if (formData.hasCrane && !formData.craneAnnualInspection) {
-      newErrors.craneAnnualInspection = 'クレーン車の場合はクレーン年次点検日を入力してください'
-    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -115,12 +91,7 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
 
     const vehicleData = {
       ...formData,
-      lastInspection: new Date(formData.lastInspection),
-      nextInspection: new Date(formData.nextInspection),
-      vehicleInspectionDate: new Date(formData.vehicleInspectionDate),
-      craneAnnualInspection: formData.hasCrane && formData.craneAnnualInspection ? new Date(formData.craneAnnualInspection) : undefined,
-      threeMonthInspection: new Date(formData.threeMonthInspection),
-      sixMonthInspection: new Date(formData.sixMonthInspection),
+      inspectionDate: new Date(formData.inspectionDate),
       driver: formData.driver.trim() || undefined
     }
     
@@ -351,86 +322,31 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
 
           {/* 点検・車検情報 */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">点検・車検情報</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">点検情報</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  車検日 <span className="text-red-500">*</span>
+                  点検日 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
                   className="input-field"
-                  value={formData.vehicleInspectionDate}
-                  onChange={(e) => handleChange('vehicleInspectionDate', e.target.value)}
+                  value={formData.inspectionDate}
+                  onChange={(e) => handleChange('inspectionDate', e.target.value)}
                 />
+                <p className="text-sm text-gray-500 mt-1">
+                  この日付を基準に3ヶ月ごとの点検日が自動計算されます（すべて同じ点検として扱われます）
+                </p>
               </div>
 
-              {formData.hasCrane && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    クレーン年次点検 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    className={`input-field ${errors.craneAnnualInspection ? 'border-red-500' : ''}`}
-                    value={formData.craneAnnualInspection}
-                    onChange={(e) => handleChange('craneAnnualInspection', e.target.value)}
-                  />
-                  {errors.craneAnnualInspection && (
-                    <p className="mt-1 text-sm text-red-600">{errors.craneAnnualInspection}</p>
-                  )}
+              <div className="md:col-span-2">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">点検日の統一管理について</h4>
+                  <p className="text-sm text-blue-700">
+                    設定した点検日とその3ヶ月間隔の日付がすべて「点検」として自動計算されます。<br/>
+                    車検やクレーン年次点検も含めて統一した点検として管理されます。
+                  </p>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  3カ月点検（自動設定）
-                </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={formData.threeMonthInspection}
-                  onChange={(e) => handleChange('threeMonthInspection', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  6カ月点検（自動設定）
-                </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={formData.sixMonthInspection}
-                  onChange={(e) => handleChange('sixMonthInspection', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  前回点検日
-                </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={formData.lastInspection}
-                  onChange={(e) => handleChange('lastInspection', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  次回点検日
-                </label>
-                <input
-                  type="date"
-                  className={`input-field ${errors.nextInspection ? 'border-red-500' : ''}`}
-                  value={formData.nextInspection}
-                  onChange={(e) => handleChange('nextInspection', e.target.value)}
-                />
-                {errors.nextInspection && (
-                  <p className="mt-1 text-sm text-red-600">{errors.nextInspection}</p>
-                )}
               </div>
             </div>
           </div>

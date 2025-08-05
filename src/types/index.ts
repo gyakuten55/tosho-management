@@ -6,12 +6,7 @@ export interface Vehicle {
   driver?: string
   team: string
   status: 'normal' | 'inspection' | 'repair' | 'maintenance_due' | 'breakdown' // 正常 | 点検中 | 修理中 | 点検期限
-  lastInspection: Date
-  nextInspection: Date
-  vehicleInspectionDate: Date // 車検日
-  craneAnnualInspection?: Date // クレーン年次点検（クレーン車のみ）
-  threeMonthInspection: Date // 3カ月点検（自動）
-  sixMonthInspection: Date // 6カ月点検（自動）
+  inspectionDate: Date // 点検日（3ヶ月ごとの点検基準日、車検・クレーン年次点検も含む）
   garage: string // 車庫情報
   notes?: string
 }
@@ -70,14 +65,70 @@ export interface MonthlyVacationStats {
   maxAllowedDays: number  // 月の上限休暇日数
 }
 
+// 期間設定の型定義
+export interface PeriodLimit {
+  id: string                      // 期間識別子
+  name: string                    // 期間名（例: "夏期休暇期間"）
+  startDate: string              // 開始日（MM-DD形式）
+  endDate: string                // 終了日（MM-DD形式）
+  limit: number                  // その期間の上限人数
+  description?: string           // 説明文
+  isActive: boolean              // 有効/無効フラグ
+}
+
+// 休暇上限設定の優先順位
+export enum VacationLimitPriority {
+  SPECIFIC_DATE = 1,       // 特定日付設定 (最優先)
+  MONTHLY_WEEKLY = 2,      // 月+曜日組み合わせ設定
+  PERIOD = 3,              // 期間設定
+  MONTHLY = 4,             // 月別設定  
+  WEEKLY = 5,              // 曜日設定
+  GLOBAL_DEFAULT = 6       // 基本設定 (最下位)
+}
+
+// 月別曜日上限設定の型定義
+export interface MonthlyWeekdayLimits {
+  [month: number]: {  // 月（1-12）
+    [weekday: number]: number  // 曜日（0-6）ごとの上限人数
+  }
+}
+
+// 新しい統一された休暇設定インターフェース
 export interface VacationSettings {
   minimumOffDaysPerMonth: number  // 月の最低休暇日数（デフォルト9日）
   maximumOffDaysPerMonth: number  // 月の最大休暇日数
   notificationDate: number  // 通知日（月の何日に通知するか、デフォルト25日）
+  
+  // 統一された休暇上限設定
+  teamMonthlyWeekdayLimits: TeamMonthlyWeekdayLimits  // チーム別月別曜日上限設定
+  specificDateLimits: { [dateString: string]: number }  // 特定日付設定（YYYY-MM-DD形式）
+  
+  // 後方互換性のために残しておく（削除予定）
   blackoutDates: Date[]  // 休暇取得不可日
   holidayDates: Date[]  // 祝日
   maxDriversOffPerDay: { [teamName: string]: number }  // チーム別の1日の最大休暇者数
   globalMaxDriversOffPerDay: number  // 全体の1日の最大休暇者数
+  monthlyWeekdayLimits: MonthlyWeekdayLimits  // 月別曜日上限設定
+  periodLimits: PeriodLimit[]  // 期間設定
+  monthlyLimits: { [month: number]: number }  // 月別上限設定
+  weeklyLimits: { [weekday: number]: number }  // 曜日別上限設定
+}
+
+// チーム別月別曜日上限設定の型定義
+export interface TeamMonthlyWeekdayLimits {
+  [teamName: string]: {  // チーム名
+    [month: number]: {   // 月（1-12）
+      [weekday: number]: number  // 曜日（0-6）ごとの上限人数
+    }
+  }
+}
+
+// 休暇上限計算結果
+export interface VacationLimitResult {
+  limit: number                    // 適用される上限人数
+  appliedRule: VacationLimitPriority  // 適用されたルールの優先順位
+  ruleName: string                // 適用されたルール名
+  ruleDetails: string            // ルールの詳細説明
 }
 
 export interface VacationNotification {

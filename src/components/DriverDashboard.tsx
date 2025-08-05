@@ -18,6 +18,7 @@ import {
   Home
 } from 'lucide-react'
 import { User as UserType, Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats } from '@/types'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import DriverVacationRequest from './DriverVacationRequest'
 import DriverVehicleInfo from './DriverVehicleInfo'
 import { initialVacationRequests } from '@/data/sampleData'
@@ -46,11 +47,7 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
       driver: currentUser.name,
       team: currentUser.team,
       status: 'normal',
-      lastInspection: new Date('2024-11-15'),
-      nextInspection: new Date('2025-02-15'),
-      vehicleInspectionDate: new Date('2025-12-15'),
-      threeMonthInspection: new Date('2025-03-15'),
-      sixMonthInspection: new Date('2025-06-15'),
+      inspectionDate: new Date('2025-02-15'),
       garage: '本社車庫',
       notes: '定期点検予定あり'
     })
@@ -199,7 +196,7 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">次回点検予定</span>
                   <span className="font-medium">
-                    {assignedVehicle.nextInspection.toLocaleDateString('ja-JP')}
+                    {getNextInspectionDate(assignedVehicle.inspectionDate).toLocaleDateString('ja-JP')}
                   </span>
                 </div>
               </div>

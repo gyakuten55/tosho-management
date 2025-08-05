@@ -180,13 +180,6 @@ export default function DriverManagement({
     return matchesSearch && matchesStatus && matchesTeam
   })
 
-  // 統計データ
-  const stats = {
-    total: drivers.length,
-    working: drivers.filter(d => d.status === 'working').length,
-    vacation: drivers.filter(d => d.status === 'vacation').length,
-    available: drivers.filter(d => d.status === 'available').length
-  }
 
   if (currentView === 'form') {
     return (
@@ -248,56 +241,6 @@ export default function DriverManagement({
         </button>
       </div>
 
-      {/* 統計カード */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">総ドライバー数</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">出勤中</p>
-              <p className="text-3xl font-bold text-green-600">{stats.working}</p>
-            </div>
-            <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <UserCheck className="h-6 w-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">休暇中</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.vacation}</p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Calendar className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">待機中</p>
-              <p className="text-3xl font-bold text-gray-600">{stats.available}</p>
-            </div>
-            <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Clock className="h-6 w-6 text-gray-600" />
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* 検索・フィルター */}
       <div className="card p-6">
@@ -334,9 +277,10 @@ export default function DriverManagement({
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="all">すべてのチーム</option>
-                              <option value="A-1">A-1</option>
-                <option value="A-2">A-2</option>
-                <option value="B">B</option>
+              <option value="配送センターチーム">配送センターチーム</option>
+              <option value="常駐チーム">常駐チーム</option>
+              <option value="Bチーム">Bチーム</option>
+              <option value="外部ドライバー">外部ドライバー</option>
             </select>
           </div>
         </div>
@@ -400,19 +344,41 @@ export default function DriverManagement({
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {driver.team === 'B' ? (
-                      <div className="flex items-center">
-                        <Car className="h-4 w-4 text-orange-400 mr-1" />
-                        <span className="text-orange-600 font-medium">都度割り当て</span>
-                      </div>
-                    ) : driver.assignedVehicle ? (
-                      <div className="flex items-center">
-                        <Car className="h-4 w-4 text-gray-400 mr-1" />
-                        {driver.assignedVehicle}
-                      </div>
-                    ) : (
-                      <span className="text-gray-500">未割当</span>
-                    )}
+                    <div className="space-y-1">
+                      {driver.team === 'B' ? (
+                        <div className="flex items-center">
+                          <Car className="h-4 w-4 text-orange-400 mr-1" />
+                          <span className="text-orange-600 font-medium">都度割り当て</span>
+                        </div>
+                      ) : driver.assignedVehicle ? (
+                        <div className="flex items-center">
+                          <Car className="h-4 w-4 text-gray-400 mr-1" />
+                          <div>
+                            <div className="font-medium">{driver.assignedVehicle}</div>
+                            <div className="text-xs text-gray-500">
+                              {(() => {
+                                const assignedVehicle = vehicles.find(v => v.plateNumber === driver.assignedVehicle)
+                                return assignedVehicle ? assignedVehicle.model : '車種不明'
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">未割当</span>
+                      )}
+                      
+                      {/* 祝日チーム表示 */}
+                      {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') && (driver as any).holidayTeams && (driver as any).holidayTeams.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="text-xs text-gray-500">祝日:</span>
+                          {(driver as any).holidayTeams.map((team: string) => (
+                            <span key={team} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              {team}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-2">

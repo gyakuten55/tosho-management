@@ -12,6 +12,7 @@ import {
   Info
 } from 'lucide-react'
 import { Vehicle, InspectionSchedule } from '@/types'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
 
 interface DriverVehicleInfoProps {
   assignedVehicle: Vehicle
@@ -119,20 +120,23 @@ export default function DriverVehicleInfo({
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Calendar className="h-4 w-4 text-gray-600" />
-              <span className="text-sm font-medium text-gray-600">前回点検</span>
+              <span className="text-sm font-medium text-gray-600">点検日</span>
             </div>
             <p className="text-lg font-bold text-gray-900">
-              {assignedVehicle.lastInspection.toLocaleDateString('ja-JP')}
+              {assignedVehicle.inspectionDate.toLocaleDateString('ja-JP')}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {assignedVehicle.model.includes('クレーン') ? '車検・クレーン年次点検・定期点検統合' : '車検・定期点検統合'}
             </p>
           </div>
 
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Wrench className="h-4 w-4 text-gray-600" />
-              <span className="text-sm font-medium text-gray-600">次回点検</span>
+              <span className="text-sm font-medium text-gray-600">次回点検予定</span>
             </div>
             <p className="text-lg font-bold text-gray-900">
-              {assignedVehicle.nextInspection.toLocaleDateString('ja-JP')}
+              {getNextInspectionDate(assignedVehicle.inspectionDate).toLocaleDateString('ja-JP')}
             </p>
           </div>
         </div>

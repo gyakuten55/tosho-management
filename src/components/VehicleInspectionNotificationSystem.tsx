@@ -14,6 +14,7 @@ import {
   VolumeX
 } from 'lucide-react'
 import { Vehicle, Driver, DriverNotification } from '@/types'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
 
 interface VehicleInspectionNotificationSystemProps {
   vehicles: Vehicle[]
@@ -51,8 +52,8 @@ export default function VehicleInspectionNotificationSystem({
     const newAlerts: InspectionAlert[] = []
 
     vehicles.forEach(vehicle => {
-      if (vehicle.driver && vehicle.nextInspection) {
-        const inspectionDate = new Date(vehicle.nextInspection)
+      if (vehicle.driver) {
+        const inspectionDate = getNextInspectionDate(vehicle.inspectionDate)
         const daysUntilInspection = Math.ceil((inspectionDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
         const driver = drivers.find(d => d.name === vehicle.driver)
 

@@ -88,7 +88,32 @@ export default function VacationManagement({
   const [sortField, setSortField] = useState<'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team'>('driverName')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
-  // 初期化時に月間統計を再計算と古いデータの削除
+  // 指定日付とチームに対する休暇上限を取得する関数
+  const getVacationLimitForDate = (date: Date, team: string): number => {
+    const dateString = date.toISOString().split('T')[0] // YYYY-MM-DD形式
+    const month = date.getMonth() + 1 // 1-12
+    const weekday = date.getDay() // 0-6（日曜日=0）
+
+    // 1. 特定日付設定（最優先）
+    if (vacationSettings.specificDateLimits[dateString]) {
+      return vacationSettings.specificDateLimits[dateString]
+    }
+
+    // 2. チーム別月別曜日設定
+    if (vacationSettings.teamMonthlyWeekdayLimits[team]?.[month]?.[weekday] !== undefined) {
+      return vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday]
+    }
+
+    // 3. 旧設定からのフォールバック（後方互換性）
+    if (vacationSettings.maxDriversOffPerDay[team] !== undefined) {
+      return vacationSettings.maxDriversOffPerDay[team]
+    }
+
+    // 4. デフォルト値
+    return vacationSettings.globalMaxDriversOffPerDay || 3
+  }
+
+  // 初期化時に月間統計を再計算と古いデータの削除、デフォルト出勤設定
   useEffect(() => {
     const recalculateAllStats = () => {
       const currentYear = new Date().getFullYear()
@@ -150,10 +175,55 @@ export default function VacationManagement({
         console.log(`古い休暇データを自動削除しました: ${deletedCount}件`)
       }
     }
+
+    // 今日から1ヶ月間の全ドライバーをデフォルト出勤に設定
+    const initializeDefaultWorkStatus = () => {
+      if (drivers.length === 0) return
+      
+      const today = new Date()
+      const oneMonthLater = new Date()
+      oneMonthLater.setMonth(oneMonthLater.getMonth() + 1)
+      
+      const defaultRequests: VacationRequest[] = []
+      
+      // 今日から1ヶ月間の各日をチェック
+      for (let d = new Date(today); d <= oneMonthLater; d.setDate(d.getDate() + 1)) {
+        const currentDate = new Date(d)
+        const existingRequests = vacationRequests.filter(req => isSameDay(req.date, currentDate))
+        const driversWithStatus = existingRequests.map(req => req.driverId)
+        const driversWithoutStatus = drivers.filter(driver => !driversWithStatus.includes(driver.id))
+        
+        driversWithoutStatus.forEach(driver => {
+          defaultRequests.push({
+            id: Date.now() + driver.id + currentDate.getTime() + Math.random(),
+            driverId: driver.id,
+            driverName: driver.name,
+            team: driver.team,
+            employeeId: driver.employeeId,
+            date: new Date(currentDate),
+            workStatus: 'working',
+            isOff: false,
+            type: 'working',
+            reason: 'デフォルト出勤',
+            status: 'approved',
+            requestDate: new Date(),
+            isExternalDriver: driver.employeeId.startsWith('E')
+          })
+        })
+      }
+      
+      if (defaultRequests.length > 0) {
+        // useEffectの外でsetTimeoutを使用してstate更新を遅延実行
+        setTimeout(() => {
+          onVacationRequestsChange([...vacationRequests, ...defaultRequests])
+        }, 0)
+      }
+    }
     
     if (drivers.length > 0) {
       recalculateAllStats()
       cleanupOldVacationData()
+      initializeDefaultWorkStatus()
     }
   }, [drivers, vacationRequests, vacationSettings, onVacationStatsChange, onVacationRequestsChange])
 
@@ -207,6 +277,36 @@ export default function VacationManagement({
   }
 
 
+  // 指定日の未設定ドライバーをデフォルト出勤に設定（非同期で実行）
+  const ensureAllDriversHaveWorkStatus = useCallback((date: Date) => {
+    const existingRequests = vacationRequests.filter(req => isSameDay(req.date, date))
+    const driversWithStatus = existingRequests.map(req => req.driverId)
+    const driversWithoutStatus = drivers.filter(driver => !driversWithStatus.includes(driver.id))
+    
+    if (driversWithoutStatus.length > 0) {
+      const newRequests: VacationRequest[] = driversWithoutStatus.map(driver => ({
+        id: Date.now() + driver.id + Math.random(),
+        driverId: driver.id,
+        driverName: driver.name,
+        team: driver.team,
+        employeeId: driver.employeeId,
+        date: date,
+        workStatus: 'working',
+        isOff: false,
+        type: 'working',
+        reason: 'デフォルト出勤',
+        status: 'approved',
+        requestDate: new Date(),
+        isExternalDriver: driver.employeeId.startsWith('E')
+      }))
+      
+      // レンダリング外でstate更新を実行
+      setTimeout(() => {
+        onVacationRequestsChange([...vacationRequests, ...newRequests])
+      }, 0)
+    }
+  }, [drivers, vacationRequests, onVacationRequestsChange])
+
   // カレンダーの日付情報を生成（6週間分の完全なカレンダーグリッド）
   const generateCalendarDays = () => {
     const monthStart = startOfMonth(calendarDate)
@@ -220,6 +320,18 @@ export default function VacationManagement({
 
     return days.map(day => {
       const dayRequests = vacationRequests.filter(req => isSameDay(req.date, day))
+      
+      // レンダリング中はstateを更新せず、データのみ計算
+      const driversWithStatus = dayRequests.map(req => req.driverId)
+      const driversWithoutStatus = drivers.filter(driver => !driversWithStatus.includes(driver.id))
+      
+      // デフォルト出勤ドライバーを仮想的に追加してカウント
+      const virtualWorkingDrivers = driversWithoutStatus.map(driver => ({
+        driverId: driver.id,
+        driverName: driver.name,
+        team: driver.team,
+        isExternalDriver: driver.employeeId.startsWith('E')
+      }))
       
       const dayVacations = dayRequests.filter(req => req.workStatus === 'day_off')
       const dayNightShifts = dayRequests.filter(req => req.workStatus === 'night_shift')
@@ -242,17 +354,17 @@ export default function VacationManagement({
           team: v.team,
           isExternalDriver: v.isExternalDriver
         })),
-        workingDrivers: dayWorking.map(v => ({
+        workingDrivers: [...dayWorking.map(v => ({
           driverId: v.driverId,
           driverName: v.driverName,
           team: v.team,
           isExternalDriver: v.isExternalDriver
-        })),
+        })), ...virtualWorkingDrivers],
         totalOffCount: dayVacations.length,
         internalDriverOffCount: internalDriverVacations.length,
         externalDriverOffCount: externalDriverVacations.length,
         nightShiftCount: dayNightShifts.length,
-        workingCount: dayWorking.length
+        workingCount: dayWorking.length + driversWithoutStatus.length
       } as DailyVacationInfo
     })
   }
@@ -277,6 +389,9 @@ export default function VacationManagement({
 
   // セルクリック時の処理
   const handleDateClick = (date: Date) => {
+    // その日のすべてのドライバーがデフォルト出勤状態になるようにする
+    ensureAllDriversHaveWorkStatus(date)
+    
     setSelectedDate(date)
     setShowVacationForm(true)
     setSelectedDriverId('')
@@ -322,8 +437,11 @@ export default function VacationManagement({
       const existingVacations = getExistingVacations()
       const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
       
-      if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationSettings.globalMaxDriversOffPerDay) {
-        alert(`この日は既に${vacationSettings.globalMaxDriversOffPerDay}人が休暇を取得しています。`)
+      // 新しい統一設定から上限を取得
+      const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
+      
+      if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
+        alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
         return
       }
     }
@@ -366,6 +484,63 @@ export default function VacationManagement({
     setSelectedWorkStatus('day_off')
   }
 
+  // 祝日チーム一括設定処理
+  const handleHolidayTeamBulkStatus = (holidayTeam: string, workStatus: 'working' | 'day_off') => {
+    if (!selectedDate) return
+    
+    const teamDrivers = drivers.filter(driver => 
+      (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
+      (driver as any).holidayTeams &&
+      (driver as any).holidayTeams.includes(holidayTeam)
+    )
+
+    if (teamDrivers.length === 0) {
+      alert(`祝日チーム${holidayTeam}に所属するドライバーがいません。`)
+      return
+    }
+
+    const statusText = workStatus === 'working' ? '出勤' : '休暇'
+    const confirmMessage = `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}に祝日チーム${holidayTeam}の全員（${teamDrivers.length}人）を${statusText}に設定しますか？\n\n対象ドライバー:\n${teamDrivers.map(d => `・${d.name} (${d.team})`).join('\n')}\n\n※ 既存の設定は上書きされます。`
+    
+    if (!confirm(confirmMessage)) return
+
+    // その日のチームドライバーの既存設定を削除
+    let updatedRequests = vacationRequests.filter(req => 
+      !(isSameDay(req.date, selectedDate) && teamDrivers.some(driver => driver.id === req.driverId))
+    )
+
+    // 指定された勤務状態でチームドライバーを設定
+    teamDrivers.forEach(driver => {
+      const newRequest: VacationRequest = {
+        id: Date.now() + driver.id + Math.random(), // ユニークなID生成
+        driverId: driver.id,
+        driverName: driver.name,
+        team: driver.team,
+        employeeId: driver.employeeId,
+        date: selectedDate,
+        workStatus: workStatus,
+        isOff: workStatus === 'day_off',
+        type: workStatus,
+        reason: `祝日チーム${holidayTeam}一括設定`,
+        status: 'approved',
+        requestDate: new Date(),
+        isExternalDriver: driver.employeeId.startsWith('E')
+      }
+      updatedRequests.push(newRequest)
+    })
+
+    onVacationRequestsChange(updatedRequests)
+
+    // チームドライバーの統計を更新
+    teamDrivers.forEach(driver => {
+      updateMonthlyStats(driver.id, selectedDate, updatedRequests)
+    })
+
+    // フォームをリセット
+    setSelectedDriverId('')
+    setSelectedWorkStatus('day_off')
+  }
+
   // 全員一括設定処理
   const handleBulkWorkStatus = (workStatus: 'working' | 'day_off', confirmMessage: string) => {
     if (!selectedDate) return
@@ -389,7 +564,7 @@ export default function VacationManagement({
         workStatus: workStatus,
         isOff: workStatus === 'day_off',
         type: workStatus,
-        reason: '一括設定',
+        reason: '全員一括設定',
         status: 'approved',
         requestDate: new Date(),
         isExternalDriver: driver.employeeId.startsWith('E')
@@ -553,23 +728,40 @@ export default function VacationManagement({
                   {/* 勤務状態の表示（人数のみ） - 現在の月のみ表示 */}
                   {isCurrentMonth && (
                     <div className="space-y-1">
-                      {/* 出勤者数 */}
-                      {dayInfo.workingCount > 0 && (
-                        <div className="text-xs">
-                          <span className="font-medium text-green-600">
-                            出勤: {dayInfo.workingCount}人
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* 休暇者数 */}
-                      {dayInfo.internalDriverOffCount > 0 && (
-                        <div className="text-xs">
-                          <span className="font-medium text-red-600">
-                            休暇: {dayInfo.internalDriverOffCount}人
-                          </span>
-                        </div>
-                      )}
+                      {/* 休暇者数/上限 - 各チーム別 */}
+                      {(() => {
+                        // チーム別に休暇者をグループ化
+                        const teamVacations: { [team: string]: number } = {}
+                        dayInfo.vacations.forEach(v => {
+                          if (!v.isExternalDriver) {
+                            teamVacations[v.team] = (teamVacations[v.team] || 0) + 1
+                          }
+                        })
+
+                        // 各チームの上限を取得して表示
+                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム']
+                        return teams.map(team => {
+                          const currentCount = teamVacations[team] || 0
+                          const limit = getVacationLimitForDate(dayInfo.date, team)
+                          
+                          // そのチームに休暇者がいるか、または上限が設定されている場合のみ表示
+                          if (currentCount > 0 || limit > 0) {
+                            const isOverLimit = currentCount > limit
+                            return (
+                              <div key={team} className="text-xs">
+                                <span className={`font-medium ${
+                                  isOverLimit ? 'text-red-600' : 
+                                  currentCount === limit ? 'text-yellow-600' : 
+                                  'text-blue-600'
+                                }`}>
+                                  {team.replace('チーム', '')}: {currentCount}/{limit}
+                                </span>
+                              </div>
+                            )
+                          }
+                          return null
+                        }).filter(Boolean)
+                      })()}
                       
                       {/* 夜勤者数 */}
                       {dayInfo.nightShiftCount > 0 && (
@@ -891,9 +1083,53 @@ export default function VacationManagement({
       </div>
 
             <div className="p-6 space-y-6">
-              {/* 一括設定ボタン */}
+              {/* 祝日チーム一括設定 */}
               <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-3">一括設定</h4>
+                <h4 className="text-md font-semibold text-gray-900 mb-3">祝日チーム一括設定</h4>
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-3">
+                    祝日チーム（A〜G）単位で一括して出勤・休暇を設定できます
+                  </p>
+                  <div className="grid grid-cols-7 gap-2">
+                    {['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((team) => {
+                      const teamDrivers = drivers.filter(driver => 
+                        (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
+                        (driver as any).holidayTeams &&
+                        (driver as any).holidayTeams.includes(team)
+                      )
+                      
+                      return (
+                        <div key={team} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                          <div className="text-center mb-2">
+                            <span className="font-bold text-lg text-gray-900">{team}</span>
+                            <p className="text-xs text-gray-600">{teamDrivers.length}人</p>
+                          </div>
+                          <div className="space-y-1">
+                            <button
+                              onClick={() => handleHolidayTeamBulkStatus(team, 'working')}
+                              className="w-full text-xs py-1 px-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                              disabled={teamDrivers.length === 0}
+                            >
+                              出勤
+                            </button>
+                            <button
+                              onClick={() => handleHolidayTeamBulkStatus(team, 'day_off')}
+                              className="w-full text-xs py-1 px-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                              disabled={teamDrivers.length === 0}
+                            >
+                              休暇
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 全員一括設定ボタン */}
+              <div>
+                <h4 className="text-md font-semibold text-gray-900 mb-3">全員一括設定</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => handleBulkWorkStatus('day_off', `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}に全員を休暇に設定しますか？\n\n※ 既存の設定はすべて上書きされます。`)}

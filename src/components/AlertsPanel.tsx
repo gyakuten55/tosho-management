@@ -5,6 +5,7 @@ import { AlertTriangle, Bell, CheckCircle, X, Clock, Car, Users } from 'lucide-r
 import { format, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Vehicle } from '@/types'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
 
 interface AlertsPanelProps {
   vehicles: Vehicle[]
@@ -29,7 +30,7 @@ export default function AlertsPanel({ vehicles }: AlertsPanelProps) {
     const vehicleAlerts: Alert[] = []
     
     vehicles.forEach((vehicle) => {
-      const daysUntilInspection = differenceInDays(vehicle.nextInspection, new Date())
+      const daysUntilInspection = differenceInDays(getNextInspectionDate(vehicle.inspectionDate), new Date())
       
       // 修理中車両のアラート
       if (vehicle.status === 'repair') {

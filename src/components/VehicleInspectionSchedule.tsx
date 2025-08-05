@@ -4,7 +4,8 @@ import { Calendar, Clock, AlertTriangle, CheckCircle, Car, Info } from 'lucide-r
 import { format, addDays, differenceInDays, subMonths } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Vehicle, InspectionSchedule, VehicleInspectionNotification } from '@/types'
-import { useState, useEffect } from 'react'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
+import { useState, useEffect, useCallback } from 'react'
 
 interface VehicleInspectionScheduleProps {
   vehicles: Vehicle[]
@@ -16,10 +17,46 @@ export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVe
   const [inspectionSchedules, setInspectionSchedules] = useState<InspectionSchedule[]>([])
   const [vehicleInspectionNotifications, setVehicleInspectionNotifications] = useState<VehicleInspectionNotification[]>([])
 
-  // 初期化時に車両データから点検予定を生成
+  // 点検3ヶ月前通知チェック
+  const checkVehicleInspectionNotifications = useCallback(() => {
+    const today = new Date()
+    const threeMonthsFromNow = new Date()
+    threeMonthsFromNow.setMonth(today.getMonth() + 3)
+
+    const notifications: VehicleInspectionNotification[] = []
+
+    vehicles.forEach(vehicle => {
+      // 基準点検日の3ヶ月前チェック
+      const inspectionDate = new Date(vehicle.inspectionDate)
+      const threeMonthsBefore = subMonths(inspectionDate, 3)
+      
+      // 今日が3ヶ月前の通知日かチェック
+      if (today.toDateString() === threeMonthsBefore.toDateString()) {
+        notifications.push({
+          id: Date.now() + vehicle.id,
+          vehicleId: vehicle.id,
+          plateNumber: vehicle.plateNumber,
+          inspectionType: 'vehicle_inspection',
+          inspectionDate: inspectionDate,
+          notificationDate: today,
+          isRead: false,
+          priority: 'high',
+          message: `車両番号 ${vehicle.plateNumber} の点検が3ヶ月後（${format(inspectionDate, 'yyyy年MM月dd日', { locale: ja })}）に迫っています。点検予約を行ってください。`
+        })
+      }
+    })
+
+    if (notifications.length > 0) {
+      setVehicleInspectionNotifications(notifications)
+      console.log(`点検3ヶ月前通知: ${notifications.length}件`)
+    }
+  }, [vehicles, setVehicleInspectionNotifications])
+
+  // 初期化時に車両データから点検予定を生成（点検日から3ヶ月間隔で自動計算）
   useEffect(() => {
     const inspections = vehicles.map(vehicle => {
-      const daysUntilInspection = differenceInDays(vehicle.nextInspection, new Date())
+      const nextInspection = getNextInspectionDate(vehicle.inspectionDate)
+      const daysUntilInspection = differenceInDays(nextInspection, new Date())
       let status: 'urgent' | 'warning' | 'normal' = 'normal'
       
       if (daysUntilInspection < 0) {
@@ -34,8 +71,8 @@ export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVe
         id: vehicle.id,
         vehicleId: vehicle.id,
         vehicleNumber: vehicle.plateNumber,
-        type: '定期点検',
-        date: vehicle.nextInspection,
+        type: '点検',
+        date: nextInspection,
         status,
         driver: vehicle.driver || '未割当',
         team: vehicle.team,
@@ -47,42 +84,7 @@ export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVe
     
     setInspectionSchedules(inspections)
     checkVehicleInspectionNotifications()
-  }, [vehicles])
-
-  // 車検3ヶ月前通知チェック
-  const checkVehicleInspectionNotifications = () => {
-    const today = new Date()
-    const threeMonthsFromNow = new Date()
-    threeMonthsFromNow.setMonth(today.getMonth() + 3)
-
-    const notifications: VehicleInspectionNotification[] = []
-
-    vehicles.forEach(vehicle => {
-      // 車検日の3ヶ月前チェック
-      const vehicleInspectionDate = new Date(vehicle.vehicleInspectionDate)
-      const threeMonthsBefore = subMonths(vehicleInspectionDate, 3)
-      
-      // 今日が3ヶ月前の通知日かチェック
-      if (today.toDateString() === threeMonthsBefore.toDateString()) {
-        notifications.push({
-          id: Date.now() + vehicle.id,
-          vehicleId: vehicle.id,
-          plateNumber: vehicle.plateNumber,
-          inspectionType: 'vehicle_inspection',
-          inspectionDate: vehicleInspectionDate,
-          notificationDate: today,
-          isRead: false,
-          priority: 'high',
-          message: `車両番号 ${vehicle.plateNumber} の車検が3ヶ月後（${format(vehicleInspectionDate, 'yyyy年MM月dd日', { locale: ja })}）に迫っています。車検予約を行ってください。`
-        })
-      }
-    })
-
-    if (notifications.length > 0) {
-      setVehicleInspectionNotifications(notifications)
-      console.log(`車検3ヶ月前通知: ${notifications.length}件`)
-    }
-  }
+  }, [vehicles, checkVehicleInspectionNotifications])
 
   // 最初の4件の点検予定のみ表示
   const displayedInspections = inspectionSchedules
@@ -191,30 +193,21 @@ export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVe
                     </div>
                   </div>
 
-                  {/* 点検予約は車両稼働管理ページで行えます */}
+                  {/* 点検予約は車両稼働管理ページで統一 */}
                   <div className="border-t border-gray-100 pt-3">
                     <div className="bg-blue-50 p-3 rounded-lg">
                       <p className="text-sm text-blue-700 flex items-center">
                         <Info className="h-4 w-4 mr-2" />
-                        点検予約管理は「車両稼働管理」ページで行えます
+                        点検予約は「車両稼働管理」ページで統一管理されています
                       </p>
                     </div>
                   </div>
                 </div>
                 
                 <div className="flex space-x-2 mt-3">
-                  <button 
-                    onClick={() => handleEditInspection(inspection.id)}
-                    className="px-3 py-1 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                  >
-                    編集
-                  </button>
-                  <button 
-                    onClick={() => handleSendNotification(inspection.vehicleNumber, inspection.driver || '未割当')}
-                    className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                  >
-                    通知送信
-                  </button>
+                  <div className="text-xs text-gray-500 italic">
+                    ※ 点検予約・編集は車両稼働管理ページで行ってください
+                  </div>
                 </div>
               </div>
             </div>

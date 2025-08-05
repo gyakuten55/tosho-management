@@ -152,7 +152,10 @@ export default function Home() {
           onVehiclesChange={setVehicles}
         />
       case 'settings':
-        return <SettingsComponent />
+        return <SettingsComponent 
+          vacationSettings={vacationSettings}
+          onVacationSettingsChange={handleVacationSettingsChange}
+        />
       case 'vehicle-operation':
         return <VehicleOperationManagement 
           vehicles={vehicles}

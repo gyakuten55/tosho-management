@@ -16,6 +16,7 @@ import {
 import { format, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Vehicle } from '@/types'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
 
 interface VehicleDetailProps {
   vehicle: Vehicle
@@ -63,8 +64,9 @@ export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetail
     }
   }
 
-  const daysUntilInspection = differenceInDays(vehicle.nextInspection, new Date())
-  const daysSinceLastInspection = differenceInDays(new Date(), vehicle.lastInspection)
+  const nextInspection = getNextInspectionDate(vehicle.inspectionDate)
+  const daysUntilInspection = differenceInDays(nextInspection, new Date())
+  const daysSinceInspectionDate = differenceInDays(new Date(), vehicle.inspectionDate)
 
   const inspectionStatus = () => {
     if (daysUntilInspection < 0) {
@@ -167,18 +169,18 @@ export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetail
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-600">前回点検日</p>
+              <p className="text-sm font-medium text-gray-600">点検日</p>
               <CheckCircle className="h-4 w-4 text-green-500" />
             </div>
             <p className="text-lg font-semibold text-gray-900">
-              {format(vehicle.lastInspection, 'yyyy年MM月dd日', { locale: ja })}
+              {format(vehicle.inspectionDate, 'yyyy年MM月dd日', { locale: ja })}
             </p>
-            <p className="text-sm text-gray-500">{daysSinceLastInspection}日前</p>
+            <p className="text-sm text-gray-500">{vehicle.model.includes('クレーン') ? '車検・クレーン年次点検・定期点検統合' : '車検・定期点検統合'}</p>
           </div>
 
           <div className={`p-4 rounded-lg ${inspection.urgent ? 'bg-red-50' : 'bg-blue-50'}`}>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-600">次回点検日</p>
+              <p className="text-sm font-medium text-gray-600">次回点検予定</p>
               {inspection.urgent ? (
                 <AlertTriangle className="h-4 w-4 text-red-500" />
               ) : (
@@ -186,7 +188,7 @@ export default function VehicleDetail({ vehicle, onEdit, onBack }: VehicleDetail
               )}
             </div>
             <p className="text-lg font-semibold text-gray-900">
-              {format(vehicle.nextInspection, 'yyyy年MM月dd日', { locale: ja })}
+              {format(nextInspection, 'yyyy年MM月dd日', { locale: ja })}
             </p>
             <p className={`text-sm font-medium ${inspection.color}`}>{inspection.text}</p>
           </div>

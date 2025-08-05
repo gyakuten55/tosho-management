@@ -28,7 +28,8 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     emergencyContact: (driver as any)?.emergencyContact || '',
     emergencyPhone: (driver as any)?.emergencyPhone || '',
     notes: (driver as any)?.notes || '',
-    driverType: driver ? (driver.employeeId.startsWith('E') ? 'external' : 'internal') : 'internal' // 正社員 or 外部ドライバー
+    driverType: driver ? (driver.employeeId.startsWith('E') ? 'external' : 'internal') : 'internal', // 正社員 or 外部ドライバー
+    holidayTeams: (driver as any)?.holidayTeams || [] // 祝日チーム（配送センター・外部ドライバー用）
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -109,13 +110,18 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     onSave(saveData)
   }
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: string | string[]) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
       
       // Bチームの場合は車両割り当てをクリア
       if (field === 'team' && value === 'Bチーム') {
         newData.assignedVehicle = ''
+      }
+
+      // チーム変更時に祝日チームをクリア（配送センター・外部ドライバー以外）
+      if (field === 'team' && value !== '配送センターチーム' && value !== '外部ドライバー') {
+        newData.holidayTeams = []
       }
       
       return newData
@@ -129,7 +135,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     }
     
     // 車両割り当てが変更された場合（Bチーム以外）、車両側の担当ドライバーも自動更新
-    if (field === 'assignedVehicle' && formData.team !== 'Bチーム' && onVehicleUpdate) {
+    if (field === 'assignedVehicle' && formData.team !== 'Bチーム' && onVehicleUpdate && typeof value === 'string') {
       const updates: { plateNumber: string; driverName: string }[] = []
       
       // 前の車両から割り当て解除
@@ -268,6 +274,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                 <option value="配送センターチーム">配送センターチーム</option>
                 <option value="常駐チーム">常駐チーム</option>
                 <option value="Bチーム">Bチーム</option>
+                <option value="外部ドライバー">外部ドライバー</option>
               </select>
               {errors.team && <p className="text-red-500 text-sm mt-1">{errors.team}</p>}
             </div>
@@ -288,7 +295,35 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               </select>
             </div>
 
-
+            {/* 祝日チーム選択（配送センターチーム・外部ドライバーのみ） */}
+            {(formData.team === '配送センターチーム' || formData.team === '外部ドライバー') && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  祝日チーム（複数選択可）
+                </label>
+                <div className="grid grid-cols-7 gap-2">
+                  {['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((team) => (
+                    <label key={team} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg cursor-pointer hover:bg-gray-100">
+                      <input
+                        type="checkbox"
+                        checked={formData.holidayTeams.includes(team)}
+                        onChange={(e) => {
+                          const updatedTeams = e.target.checked
+                            ? [...formData.holidayTeams, team]
+                            : formData.holidayTeams.filter((t: string) => t !== team)
+                          handleChange('holidayTeams', updatedTeams)
+                        }}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-sm font-medium">{team}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  祝日の際に所属するチームを選択してください。複数選択可能です。
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

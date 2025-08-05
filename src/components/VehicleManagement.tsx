@@ -22,6 +22,7 @@ import VehicleForm from './VehicleForm'
 import VehicleDetail from './VehicleDetail'
 
 import { Vehicle, Driver } from '@/types'
+import { getNextInspectionDate } from '@/utils/inspectionUtils'
 
 interface VehicleManagementProps {
   vehicles: Vehicle[]
@@ -95,7 +96,8 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
     return diffDays
   }
 
-  const getInspectionWarningLevel = (nextInspection: Date) => {
+  const getInspectionWarningLevel = (inspectionDate: Date) => {
+    const nextInspection = getNextInspectionDate(inspectionDate)
     const days = getInspectionDays(nextInspection)
     if (days <= 7) return 'urgent'
     if (days <= 30) return 'warning'
@@ -207,53 +209,6 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
         </button>
       </div>
 
-      {/* 統計カード - 要件定義書に基づく表示 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">今日動いている車両台数</p>
-              <p className="text-2xl font-bold text-green-600">
-                {vehicles.filter(v => v.status === 'normal').length}
-              </p>
-            </div>
-            <CheckCircle className="h-8 w-8 text-green-500" />
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">点検中車両台数</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {vehicles.filter(v => v.status === 'inspection').length}
-              </p>
-            </div>
-            <Calendar className="h-8 w-8 text-blue-500" />
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">修理中車両台数</p>
-              <p className="text-2xl font-bold text-red-600">
-                {vehicles.filter(v => v.status === 'repair').length}
-              </p>
-            </div>
-            <AlertTriangle className="h-8 w-8 text-red-500" />
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">点検が近い車両</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {vehicles.filter(v => getInspectionDays(v.nextInspection) <= 30).length}
-              </p>
-            </div>
-            <AlertTriangle className="h-8 w-8 text-yellow-500" />
-          </div>
-        </div>
-      </div>
 
       {/* 検索・フィルター */}
       <div className="card p-4">
@@ -323,8 +278,9 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredVehicles.map((vehicle) => {
-                const inspectionDays = getInspectionDays(vehicle.nextInspection)
-                const warningLevel = getInspectionWarningLevel(vehicle.nextInspection)
+                const nextInspection = getNextInspectionDate(vehicle.inspectionDate)
+                const inspectionDays = getInspectionDays(nextInspection)
+                const warningLevel = getInspectionWarningLevel(vehicle.inspectionDate)
                 return (
                   <tr key={vehicle.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -359,7 +315,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm text-gray-900">
-                          {format(vehicle.nextInspection, 'MM月dd日', { locale: ja })}
+                          {format(nextInspection, 'MM月dd日', { locale: ja })}
                         </div>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${getInspectionWarningColor(warningLevel)}`}>
                           {inspectionDays > 0 ? `あと${inspectionDays}日` : `${Math.abs(inspectionDays)}日経過`}
