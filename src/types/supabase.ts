@@ -14,39 +14,303 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_vehicle_swaps: {
+        Row: {
+          created_at: string
+          driver_id: number
+          driver_name: string
+          id: number
+          new_plate_number: string
+          new_vehicle_id: number
+          original_plate_number: string
+          original_vehicle_id: number
+          reason: string
+          status: string | null
+          swap_time: string
+        }
+        Insert: {
+          created_at?: string
+          driver_id: number
+          driver_name: string
+          id?: number
+          new_plate_number: string
+          new_vehicle_id: number
+          original_plate_number: string
+          original_vehicle_id: number
+          reason: string
+          status?: string | null
+          swap_time?: string
+        }
+        Update: {
+          created_at?: string
+          driver_id?: number
+          driver_name?: string
+          id?: number
+          new_plate_number?: string
+          new_vehicle_id?: number
+          original_plate_number?: string
+          original_vehicle_id?: number
+          reason?: string
+          status?: string | null
+          swap_time?: string
+        }
+        Relationships: []
+      }
+      dispatch_schedules: {
+        Row: {
+          cargo_count: number | null
+          cargo_notes: string | null
+          cargo_type: string | null
+          client_contact: string | null
+          client_name: string | null
+          client_notes: string | null
+          created_at: string
+          date: string
+          driver_id: number
+          driver_name: string
+          id: number
+          notes: string | null
+          priority: string | null
+          route_destination: string
+          route_origin: string
+          route_waypoints: Json | null
+          status: string | null
+          team: string
+          time_end: string
+          time_start: string
+          updated_at: string
+          vehicle_id: number
+          vehicle_number: string
+        }
+        Insert: {
+          cargo_count?: number | null
+          cargo_notes?: string | null
+          cargo_type?: string | null
+          client_contact?: string | null
+          client_name?: string | null
+          client_notes?: string | null
+          created_at?: string
+          date: string
+          driver_id: number
+          driver_name: string
+          id?: number
+          notes?: string | null
+          priority?: string | null
+          route_destination: string
+          route_origin: string
+          route_waypoints?: Json | null
+          status?: string | null
+          team: string
+          time_end: string
+          time_start: string
+          updated_at?: string
+          vehicle_id: number
+          vehicle_number: string
+        }
+        Update: {
+          cargo_count?: number | null
+          cargo_notes?: string | null
+          cargo_type?: string | null
+          client_contact?: string | null
+          client_name?: string | null
+          client_notes?: string | null
+          created_at?: string
+          date?: string
+          driver_id?: number
+          driver_name?: string
+          id?: number
+          notes?: string | null
+          priority?: string | null
+          route_destination?: string
+          route_origin?: string
+          route_waypoints?: Json | null
+          status?: string | null
+          team?: string
+          time_end?: string
+          time_start?: string
+          updated_at?: string
+          vehicle_id?: number
+          vehicle_number?: string
+        }
+        Relationships: []
+      }
+      driver_vehicle_notifications: {
+        Row: {
+          assignment_date: string
+          created_at: string
+          driver_id: number
+          driver_name: string
+          end_date: string | null
+          id: number
+          is_read: boolean | null
+          message: string
+          plate_number: string
+          priority: string | null
+          sent_at: string
+          type: string
+          updated_at: string
+          vehicle_id: number
+        }
+        Insert: {
+          assignment_date: string
+          created_at?: string
+          driver_id: number
+          driver_name: string
+          end_date?: string | null
+          id?: number
+          is_read?: boolean | null
+          message: string
+          plate_number: string
+          priority?: string | null
+          sent_at?: string
+          type: string
+          updated_at?: string
+          vehicle_id: number
+        }
+        Update: {
+          assignment_date?: string
+          created_at?: string
+          driver_id?: number
+          driver_name?: string
+          end_date?: string | null
+          id?: number
+          is_read?: boolean | null
+          message?: string
+          plate_number?: string
+          priority?: string | null
+          sent_at?: string
+          type?: string
+          updated_at?: string
+          vehicle_id?: number
+        }
+        Relationships: []
+      }
       drivers: {
         Row: {
+          address: string | null
           assigned_vehicle: string | null
+          birth_date: string | null
           created_at: string
+          email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
           employee_id: string
+          hire_date: string | null
+          holiday_teams: Json | null
           id: number
           is_night_shift: boolean | null
+          license_class: string | null
+          license_expiry_date: string | null
+          license_number: string | null
           name: string
+          notes: string | null
+          phone: string | null
           status: string
           team: string
           updated_at: string
         }
         Insert: {
+          address?: string | null
           assigned_vehicle?: string | null
+          birth_date?: string | null
           created_at?: string
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
           employee_id: string
+          hire_date?: string | null
+          holiday_teams?: Json | null
           id?: number
           is_night_shift?: boolean | null
+          license_class?: string | null
+          license_expiry_date?: string | null
+          license_number?: string | null
           name: string
+          notes?: string | null
+          phone?: string | null
           status?: string
           team: string
           updated_at?: string
         }
         Update: {
+          address?: string | null
           assigned_vehicle?: string | null
+          birth_date?: string | null
           created_at?: string
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
           employee_id?: string
+          hire_date?: string | null
+          holiday_teams?: Json | null
           id?: number
           is_night_shift?: boolean | null
+          license_class?: string | null
+          license_expiry_date?: string | null
+          license_number?: string | null
           name?: string
+          notes?: string | null
+          phone?: string | null
           status?: string
           team?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      holiday_teams: {
+        Row: {
+          created_at: string | null
+          holiday_pay_rate: number | null
+          id: number
+          team_name: string
+          updated_at: string | null
+          works_on_holidays: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          holiday_pay_rate?: number | null
+          id?: number
+          team_name: string
+          updated_at?: string | null
+          works_on_holidays?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          holiday_pay_rate?: number | null
+          id?: number
+          team_name?: string
+          updated_at?: string | null
+          works_on_holidays?: boolean | null
+        }
+        Relationships: []
+      }
+      holidays: {
+        Row: {
+          created_at: string | null
+          date: string
+          id: number
+          is_national_holiday: boolean | null
+          is_recurring: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          id?: number
+          is_national_holiday?: boolean | null
+          is_recurring?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          id?: number
+          is_national_holiday?: boolean | null
+          is_recurring?: boolean | null
+          name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -280,6 +544,198 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      vehicle_assignment_changes: {
+        Row: {
+          created_at: string
+          created_by: string
+          date: string
+          end_date: string | null
+          id: number
+          is_temporary: boolean | null
+          new_driver_id: number
+          new_driver_name: string
+          original_driver_id: number
+          original_driver_name: string
+          plate_number: string
+          reason: string
+          updated_at: string
+          vehicle_id: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          date: string
+          end_date?: string | null
+          id?: number
+          is_temporary?: boolean | null
+          new_driver_id: number
+          new_driver_name: string
+          original_driver_id: number
+          original_driver_name: string
+          plate_number: string
+          reason: string
+          updated_at?: string
+          vehicle_id: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          date?: string
+          end_date?: string | null
+          id?: number
+          is_temporary?: boolean | null
+          new_driver_id?: number
+          new_driver_name?: string
+          original_driver_id?: number
+          original_driver_name?: string
+          plate_number?: string
+          reason?: string
+          updated_at?: string
+          vehicle_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_assignment_changes_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_inoperative_notifications: {
+        Row: {
+          created_at: string
+          driver_id: number
+          driver_name: string
+          end_date: string | null
+          id: number
+          is_read: boolean | null
+          message: string
+          plate_number: string
+          priority: string | null
+          sent_at: string
+          start_date: string
+          temp_plate_number: string | null
+          temp_vehicle_id: number | null
+          type: string
+          updated_at: string
+          vehicle_id: number
+          vehicle_inoperative_period_id: number
+        }
+        Insert: {
+          created_at?: string
+          driver_id: number
+          driver_name: string
+          end_date?: string | null
+          id?: number
+          is_read?: boolean | null
+          message: string
+          plate_number: string
+          priority?: string | null
+          sent_at?: string
+          start_date: string
+          temp_plate_number?: string | null
+          temp_vehicle_id?: number | null
+          type: string
+          updated_at?: string
+          vehicle_id: number
+          vehicle_inoperative_period_id: number
+        }
+        Update: {
+          created_at?: string
+          driver_id?: number
+          driver_name?: string
+          end_date?: string | null
+          id?: number
+          is_read?: boolean | null
+          message?: string
+          plate_number?: string
+          priority?: string | null
+          sent_at?: string
+          start_date?: string
+          temp_plate_number?: string | null
+          temp_vehicle_id?: number | null
+          type?: string
+          updated_at?: string
+          vehicle_id?: number
+          vehicle_inoperative_period_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_inoperative_notificat_vehicle_inoperative_period_i_fkey"
+            columns: ["vehicle_inoperative_period_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_inoperative_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_inoperative_periods: {
+        Row: {
+          created_at: string
+          created_by: string
+          end_date: string
+          id: number
+          notes: string | null
+          original_driver_id: number | null
+          original_driver_name: string | null
+          plate_number: string
+          reason: string
+          start_date: string
+          status: string | null
+          temp_assignment_driver_id: number | null
+          temp_assignment_vehicle_id: number | null
+          type: string
+          updated_at: string
+          vehicle_id: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          end_date: string
+          id?: number
+          notes?: string | null
+          original_driver_id?: number | null
+          original_driver_name?: string | null
+          plate_number: string
+          reason: string
+          start_date: string
+          status?: string | null
+          temp_assignment_driver_id?: number | null
+          temp_assignment_vehicle_id?: number | null
+          type: string
+          updated_at?: string
+          vehicle_id: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          end_date?: string
+          id?: number
+          notes?: string | null
+          original_driver_id?: number | null
+          original_driver_name?: string | null
+          plate_number?: string
+          reason?: string
+          start_date?: string
+          status?: string | null
+          temp_assignment_driver_id?: number | null
+          temp_assignment_vehicle_id?: number | null
+          type?: string
+          updated_at?: string
+          vehicle_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_inoperative_periods_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vehicles: {
         Row: {

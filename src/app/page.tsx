@@ -23,20 +23,12 @@ import DriverVacationRequest from '@/components/DriverVacationRequest'
 import DriverVehicleInfo from '@/components/DriverVehicleInfo'
 import VehicleOperationManagement from '@/components/VehicleOperationManagement'
 import { Vehicle, Driver, VacationRequest, DriverNotification, VehicleAssignmentChange, DriverVehicleNotification, VehicleInoperativePeriod, VehicleInoperativeNotification } from '@/types'
-import { 
-  samplePerformanceMetrics, 
-  sampleMaintenanceReport,
-  sampleFinancialReport
-} from '@/data/sampleData'
 import VacationManagement from '@/components/VacationManagement'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function Home() {
   const { user, loading, signOut, isAdmin, isDriver } = useAuth()
   const [currentView, setCurrentView] = useState('vehicles')
-  const [performanceMetrics, setPerformanceMetrics] = useState(samplePerformanceMetrics)
-  const [maintenanceReports, setMaintenanceReports] = useState(sampleMaintenanceReport)
-  const [financialReports, setFinancialReports] = useState(sampleFinancialReport)
   const [notifications, setNotifications] = useState<DriverNotification[]>([])
 
   const handleLogout = async () => {

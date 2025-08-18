@@ -7,32 +7,6 @@ type DriverInsert = Database['public']['Tables']['drivers']['Insert']
 type DriverUpdate = Database['public']['Tables']['drivers']['Update']
 
 export class DriverService {
-  // 祝日チーム情報をローカルストレージで管理（データベース移行まで）
-  private static HOLIDAY_TEAMS_KEY = 'driver_holiday_teams'
-  
-  private static saveHolidayTeams(driverId: number, holidayTeams: string[]): void {
-    if (typeof window !== 'undefined') {
-      const existingData = JSON.parse(localStorage.getItem(this.HOLIDAY_TEAMS_KEY) || '{}')
-      existingData[driverId] = holidayTeams
-      localStorage.setItem(this.HOLIDAY_TEAMS_KEY, JSON.stringify(existingData))
-    }
-  }
-  
-  private static getHolidayTeams(driverId: number): string[] {
-    if (typeof window !== 'undefined') {
-      const existingData = JSON.parse(localStorage.getItem(this.HOLIDAY_TEAMS_KEY) || '{}')
-      return existingData[driverId] || []
-    }
-    return []
-  }
-  
-  private static deleteHolidayTeams(driverId: number): void {
-    if (typeof window !== 'undefined') {
-      const existingData = JSON.parse(localStorage.getItem(this.HOLIDAY_TEAMS_KEY) || '{}')
-      delete existingData[driverId]
-      localStorage.setItem(this.HOLIDAY_TEAMS_KEY, JSON.stringify(existingData))
-    }
-  }
 
   static async getAll(): Promise<Driver[]> {
     const { data, error } = await supabase
@@ -89,8 +63,18 @@ export class DriverService {
       status: driver.status,
       assigned_vehicle: driver.assignedVehicle || null,
       is_night_shift: driver.isNightShift || false,
-      // Note: Additional fields (phone, email, address, etc.) require database migration
-      // For now, they are stored in the interface but not persisted to DB
+      holiday_teams: driver.holidayTeams ? JSON.stringify(driver.holidayTeams) : '[]',
+      phone: driver.phone || null,
+      email: driver.email || null,
+      address: driver.address || null,
+      emergency_contact_name: driver.emergencyContactName || null,
+      emergency_contact_phone: driver.emergencyContactPhone || null,
+      license_number: driver.licenseNumber || null,
+      license_class: driver.licenseClass || null,
+      license_expiry_date: driver.licenseExpiryDate ? driver.licenseExpiryDate.toISOString().split('T')[0] : null,
+      hire_date: driver.hireDate ? driver.hireDate.toISOString().split('T')[0] : null,
+      birth_date: driver.birthDate ? driver.birthDate.toISOString().split('T')[0] : null,
+      notes: driver.notes || null
     }
 
     const { data, error } = await supabase
@@ -101,11 +85,6 @@ export class DriverService {
 
     if (error) {
       throw new Error(`Failed to create driver: ${error.message}`)
-    }
-
-    // 祝日チーム情報をローカルストレージに保存
-    if (driver.holidayTeams && driver.holidayTeams.length > 0) {
-      DriverService.saveHolidayTeams(data.id, driver.holidayTeams)
     }
 
     return DriverService.mapToDriver(data)
@@ -122,19 +101,18 @@ export class DriverService {
       driverData.assigned_vehicle = updates.assignedVehicle || null
     }
     if (updates.isNightShift !== undefined) driverData.is_night_shift = updates.isNightShift
-    // Additional fields commented out until database migration:
-    // if (updates.phone !== undefined) driverData.phone = updates.phone || null
-    // if (updates.email !== undefined) driverData.email = updates.email || null
-    // if (updates.address !== undefined) driverData.address = updates.address || null
-    // if (updates.emergencyContactName !== undefined) driverData.emergency_contact_name = updates.emergencyContactName || null
-    // if (updates.emergencyContactPhone !== undefined) driverData.emergency_contact_phone = updates.emergencyContactPhone || null
-    // if (updates.licenseNumber !== undefined) driverData.license_number = updates.licenseNumber || null
-    // if (updates.licenseClass !== undefined) driverData.license_class = updates.licenseClass || null
-    // if (updates.licenseExpiryDate !== undefined) driverData.license_expiry_date = updates.licenseExpiryDate ? updates.licenseExpiryDate.toISOString().split('T')[0] : null
-    // if (updates.hireDate !== undefined) driverData.hire_date = updates.hireDate ? updates.hireDate.toISOString().split('T')[0] : null
-    // if (updates.birthDate !== undefined) driverData.birth_date = updates.birthDate ? updates.birthDate.toISOString().split('T')[0] : null
-    // if (updates.notes !== undefined) driverData.notes = updates.notes || null
-    // if (updates.holidayTeams !== undefined) driverData.holiday_teams = updates.holidayTeams ? JSON.stringify(updates.holidayTeams) : null
+    if (updates.phone !== undefined) driverData.phone = updates.phone || null
+    if (updates.email !== undefined) driverData.email = updates.email || null
+    if (updates.address !== undefined) driverData.address = updates.address || null
+    if (updates.emergencyContactName !== undefined) driverData.emergency_contact_name = updates.emergencyContactName || null
+    if (updates.emergencyContactPhone !== undefined) driverData.emergency_contact_phone = updates.emergencyContactPhone || null
+    if (updates.licenseNumber !== undefined) driverData.license_number = updates.licenseNumber || null
+    if (updates.licenseClass !== undefined) driverData.license_class = updates.licenseClass || null
+    if (updates.licenseExpiryDate !== undefined) driverData.license_expiry_date = updates.licenseExpiryDate ? updates.licenseExpiryDate.toISOString().split('T')[0] : null
+    if (updates.hireDate !== undefined) driverData.hire_date = updates.hireDate ? updates.hireDate.toISOString().split('T')[0] : null
+    if (updates.birthDate !== undefined) driverData.birth_date = updates.birthDate ? updates.birthDate.toISOString().split('T')[0] : null
+    if (updates.notes !== undefined) driverData.notes = updates.notes || null
+    if (updates.holidayTeams !== undefined) driverData.holiday_teams = updates.holidayTeams ? JSON.stringify(updates.holidayTeams) : '[]'
 
     const { data, error } = await supabase
       .from('drivers')
@@ -145,15 +123,6 @@ export class DriverService {
 
     if (error) {
       throw new Error(`Failed to update driver: ${error.message}`)
-    }
-
-    // 祝日チーム情報をローカルストレージに保存・更新
-    if (updates.holidayTeams !== undefined) {
-      if (updates.holidayTeams && updates.holidayTeams.length > 0) {
-        DriverService.saveHolidayTeams(id, updates.holidayTeams)
-      } else {
-        DriverService.deleteHolidayTeams(id)
-      }
     }
 
     return DriverService.mapToDriver(data)
@@ -168,9 +137,6 @@ export class DriverService {
     if (error) {
       throw new Error(`Failed to delete driver: ${error.message}`)
     }
-
-    // 祝日チーム情報もローカルストレージから削除
-    DriverService.deleteHolidayTeams(id)
   }
 
   static async getByTeam(team: string): Promise<Driver[]> {
@@ -232,6 +198,18 @@ export class DriverService {
   }
 
   private static mapToDriver(row: DriverRow): Driver {
+    let holidayTeams: string[] = []
+    try {
+      if (row.holiday_teams) {
+        holidayTeams = typeof row.holiday_teams === 'string' 
+          ? JSON.parse(row.holiday_teams) 
+          : row.holiday_teams as string[]
+      }
+    } catch (error) {
+      console.warn('Failed to parse holiday teams for driver', row.id, error)
+      holidayTeams = []
+    }
+
     return {
       id: row.id,
       name: row.name,
@@ -240,19 +218,18 @@ export class DriverService {
       status: row.status as Driver['status'],
       assignedVehicle: row.assigned_vehicle || undefined,
       isNightShift: row.is_night_shift || false,
-      // Additional fields - default to undefined since DB migration not yet applied
-      phone: (row as any).phone || undefined,
-      email: (row as any).email || undefined,
-      address: (row as any).address || undefined,
-      emergencyContactName: (row as any).emergency_contact_name || undefined,
-      emergencyContactPhone: (row as any).emergency_contact_phone || undefined,
-      licenseNumber: (row as any).license_number || undefined,
-      licenseClass: (row as any).license_class || undefined,
-      licenseExpiryDate: (row as any).license_expiry_date ? new Date((row as any).license_expiry_date) : undefined,
-      hireDate: (row as any).hire_date ? new Date((row as any).hire_date) : undefined,
-      birthDate: (row as any).birth_date ? new Date((row as any).birth_date) : undefined,
-      notes: (row as any).notes || undefined,
-      holidayTeams: DriverService.getHolidayTeams(row.id)
+      phone: row.phone || undefined,
+      email: row.email || undefined,
+      address: row.address || undefined,
+      emergencyContactName: row.emergency_contact_name || undefined,
+      emergencyContactPhone: row.emergency_contact_phone || undefined,
+      licenseNumber: row.license_number || undefined,
+      licenseClass: row.license_class || undefined,
+      licenseExpiryDate: row.license_expiry_date ? new Date(row.license_expiry_date) : undefined,
+      hireDate: row.hire_date ? new Date(row.hire_date) : undefined,
+      birthDate: row.birth_date ? new Date(row.birth_date) : undefined,
+      notes: row.notes || undefined,
+      holidayTeams: holidayTeams
     }
   }
 }
