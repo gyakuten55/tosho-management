@@ -204,6 +204,7 @@ export type Database = {
           license_number: string | null
           name: string
           notes: string | null
+          password: string | null
           phone: string | null
           status: string
           team: string
@@ -227,6 +228,7 @@ export type Database = {
           license_number?: string | null
           name: string
           notes?: string | null
+          password?: string | null
           phone?: string | null
           status?: string
           team: string
@@ -250,6 +252,7 @@ export type Database = {
           license_number?: string | null
           name?: string
           notes?: string | null
+          password?: string | null
           phone?: string | null
           status?: string
           team?: string

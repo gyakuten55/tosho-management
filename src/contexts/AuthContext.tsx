@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { DriverService } from '@/services/driverService'
 
 // ユーザー情報の型定義
 interface UserProfile {
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [])
 
-  // ログイン機能（Supabaseのusers_profileテーブルを使用）
+  // ログイン機能（管理者は固定認証、その他はSupabaseのusers_profileテーブルを使用）
   const signIn = async (employeeId: string, password: string) => {
     try {
       // パスワードが空でない限り認証成功
@@ -63,7 +64,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('パスワードを入力してください')
       }
 
-      // Supabaseのusers_profileテーブルから社員番号で検索
+      // 管理者の固定アカウントチェック
+      if (employeeId.toLowerCase() === 'admin@tosho-management.com') {
+        if (password !== 'admin12345') {
+          throw new Error('パスワードが正しくありません')
+        }
+
+        // 管理者の固定プロファイル
+        const adminUserData: UserProfile = {
+          uid: 'admin-fixed-id',
+          employeeId: 'admin@tosho-management.com',
+          displayName: '管理者',
+          role: 'admin',
+          team: '管理部',
+          createdAt: new Date(),
+          lastLogin: new Date(),
+        }
+
+        setUser(adminUserData)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('currentUser', JSON.stringify(adminUserData))
+        }
+        return
+      }
+
+      // ドライバーの認証を試行
+      try {
+        const driver = await DriverService.authenticateDriver(employeeId, password)
+        if (driver) {
+          const userData: UserProfile = {
+            uid: `driver-${driver.id}`,
+            employeeId: driver.employeeId,
+            displayName: driver.name,
+            role: 'driver',
+            team: driver.team,
+            createdAt: new Date(),
+            lastLogin: new Date(),
+          }
+
+          setUser(userData)
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('currentUser', JSON.stringify(userData))
+          }
+          return
+        }
+      } catch (error) {
+        console.warn('Driver authentication failed:', error)
+      }
+
+      // 通常ユーザー（users_profileテーブル）の認証
       const { data: userProfile, error } = await supabase
         .from('users_profile')
         .select('*')
@@ -71,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error || !userProfile) {
-        throw new Error('社員番号が見つかりません')
+        throw new Error('社員番号またはパスワードが正しくありません')
       }
 
       const userData: UserProfile = {

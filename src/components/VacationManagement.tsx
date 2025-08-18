@@ -89,20 +89,45 @@ export default function VacationManagement({
     loadVacationData()
   }, [])
 
+  // Props経由で設定が変更された場合の反映
+  useEffect(() => {
+    if (propVacationSettings && JSON.stringify(propVacationSettings) !== JSON.stringify(vacationSettings)) {
+      setVacationSettings(propVacationSettings)
+    }
+  }, [propVacationSettings])
+
+  // デバッグ: vacationSettingsが変更された時にログ出力
+  useEffect(() => {
+    if (vacationSettings) {
+      console.log('VacationManagement - vacationSettings updated:', {
+        specificDateLimits: vacationSettings.specificDateLimits,
+        teamMonthlyWeekdayLimits: Object.keys(vacationSettings.teamMonthlyWeekdayLimits || {}),
+        settingsKeys: Object.keys(vacationSettings)
+      })
+    }
+  }, [vacationSettings])
+
   const loadVacationData = async () => {
     try {
       setLoading(true)
       setError(null)
       
       // Load all required data in parallel
+      // 常に最新の設定を取得するため、プロップスよりもデータベースを優先
       const [requests, settings, driversData, vehiclesData, notifications] = await Promise.all([
         VacationService.getAll(),
-        propVacationSettings ? Promise.resolve(propVacationSettings) : VacationSettingsService.get(),
+        VacationSettingsService.get(),
         propDrivers ? Promise.resolve(propDrivers) : DriverService.getAll(),
         propVehicles ? Promise.resolve(propVehicles) : Promise.resolve([]),
         NotificationService.getAll()
       ])
       
+      console.log('VacationManagement - loadVacationData:', {
+        settingsFromDB: settings,
+        specificDateLimits: settings.specificDateLimits,
+        teamMonthlyWeekdayLimits: Object.keys(settings.teamMonthlyWeekdayLimits || {})
+      })
+
       setVacationRequests(requests)
       setVacationSettings(settings)
       setDrivers(driversData)
@@ -161,27 +186,46 @@ export default function VacationManagement({
   const getVacationLimitForDate = (date: Date, team: string): number => {
     if (!vacationSettings) return 3 // デフォルト値
     
-    const dateString = date.toISOString().split('T')[0] // YYYY-MM-DD形式
+    // タイムゾーンの影響を避けるため、ローカル日付文字列を使用
+    const year = date.getFullYear()
     const month = date.getMonth() + 1 // 1-12
+    const day = date.getDate()
     const weekday = date.getDay() // 0-6（日曜日=0）
+    const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+
+    // デバッグ情報を追加
+    console.log('getVacationLimitForDate:', {
+      inputDate: date,
+      dateString,
+      team,
+      specificDateLimits: vacationSettings.specificDateLimits,
+      hasSpecificLimit: !!vacationSettings.specificDateLimits[dateString],
+      utcDate: date.toISOString().split('T')[0],
+      localDate: dateString
+    })
 
     // 1. 特定日付設定（最優先）
-    if (vacationSettings.specificDateLimits[dateString]) {
+    if (vacationSettings.specificDateLimits && vacationSettings.specificDateLimits[dateString]) {
+      console.log('Using specific date limit:', vacationSettings.specificDateLimits[dateString])
       return vacationSettings.specificDateLimits[dateString]
     }
 
     // 2. チーム別月別曜日設定
-    if (vacationSettings.teamMonthlyWeekdayLimits[team]?.[month]?.[weekday] !== undefined) {
+    if (vacationSettings.teamMonthlyWeekdayLimits?.[team]?.[month]?.[weekday] !== undefined) {
+      console.log('Using team monthly weekday limit:', vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday])
       return vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday]
     }
 
     // 3. 旧設定からのフォールバック（後方互換性）
-    if (vacationSettings.maxDriversOffPerDay[team] !== undefined) {
+    if (vacationSettings.maxDriversOffPerDay?.[team] !== undefined) {
+      console.log('Using legacy team limit:', vacationSettings.maxDriversOffPerDay[team])
       return vacationSettings.maxDriversOffPerDay[team]
     }
 
     // 4. デフォルト値
-    return vacationSettings.globalMaxDriversOffPerDay || 3
+    const defaultLimit = vacationSettings.globalMaxDriversOffPerDay || 3
+    console.log('Using default limit:', defaultLimit)
+    return defaultLimit
   }
 
   // 初期化時に月間統計を再計算と古いデータの削除、デフォルト出勤設定

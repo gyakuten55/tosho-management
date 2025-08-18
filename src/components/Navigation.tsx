@@ -1,6 +1,7 @@
 'use client'
 
-import { Car, Users, Settings, CalendarDays, Bell, Truck, FileText } from 'lucide-react'
+import { Car, Users, Settings, CalendarDays, Bell, Truck, FileText, LogOut } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface NavigationProps {
   currentView: string
@@ -16,6 +17,8 @@ interface MenuItem {
 }
 
 export default function Navigation({ currentView, onViewChange }: NavigationProps) {
+  const { user, signOut } = useAuth()
+
   const menuItems: MenuItem[] = [
     { id: 'vehicles', label: '車両管理', icon: Car },
     { id: 'drivers', label: 'ドライバー管理', icon: Users },
@@ -24,6 +27,14 @@ export default function Navigation({ currentView, onViewChange }: NavigationProp
     { id: 'stock-system', label: '資料ストック', icon: FileText, isExternal: true, url: 'https://tosho-stock.vercel.app/' },
     { id: 'settings', label: '設定', icon: Settings },
   ]
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+    } catch (error) {
+      console.error('ログアウトに失敗しました:', error)
+    }
+  }
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
@@ -89,14 +100,22 @@ export default function Navigation({ currentView, onViewChange }: NavigationProp
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
-            <span className="text-gray-600 text-sm font-medium">管</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
+              <span className="text-gray-600 text-sm font-medium">管</span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900">{user?.displayName || '管理者'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-900">管理者</p>
-            <p className="text-xs text-gray-500">admin@tokyo-rikuso.co.jp</p>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 transition-colors"
+            title="ログアウト"
+          >
+            <LogOut className="h-4 w-4 text-gray-500 hover:text-gray-700" />
+          </button>
         </div>
       </div>
     </div>

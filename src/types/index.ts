@@ -19,6 +19,7 @@ export interface Driver {
   status: 'working' | 'vacation' | 'sick' | 'available' | 'night_shift'
   assignedVehicle?: string
   isNightShift?: boolean
+  password?: string  // ログイン用パスワード（ハッシュ化済み）
   phone?: string
   email?: string
   address?: string

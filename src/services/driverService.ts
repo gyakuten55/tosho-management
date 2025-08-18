@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { Driver } from '@/types'
+import bcrypt from 'bcryptjs'
 
 type DriverRow = Database['public']['Tables']['drivers']['Row']
 type DriverInsert = Database['public']['Tables']['drivers']['Insert']
@@ -56,6 +57,13 @@ export class DriverService {
   }
 
   static async create(driver: Omit<Driver, 'id'>): Promise<Driver> {
+    // パスワードをハッシュ化
+    let hashedPassword = null
+    if (driver.password) {
+      const saltRounds = 10
+      hashedPassword = await bcrypt.hash(driver.password, saltRounds)
+    }
+
     const driverData: DriverInsert = {
       name: driver.name,
       employee_id: driver.employeeId,
@@ -63,6 +71,7 @@ export class DriverService {
       status: driver.status,
       assigned_vehicle: driver.assignedVehicle || null,
       is_night_shift: driver.isNightShift || false,
+      password: hashedPassword,
       holiday_teams: driver.holidayTeams ? JSON.stringify(driver.holidayTeams) : '[]',
       phone: driver.phone || null,
       email: driver.email || null,
@@ -101,6 +110,13 @@ export class DriverService {
       driverData.assigned_vehicle = updates.assignedVehicle || null
     }
     if (updates.isNightShift !== undefined) driverData.is_night_shift = updates.isNightShift
+    
+    // パスワードが更新される場合はハッシュ化
+    if (updates.password !== undefined && updates.password) {
+      const saltRounds = 10
+      driverData.password = await bcrypt.hash(updates.password, saltRounds)
+    }
+    
     if (updates.phone !== undefined) driverData.phone = updates.phone || null
     if (updates.email !== undefined) driverData.email = updates.email || null
     if (updates.address !== undefined) driverData.address = updates.address || null
@@ -195,6 +211,32 @@ export class DriverService {
 
   static async unassignVehicle(id: number): Promise<Driver> {
     return this.update(id, { assignedVehicle: undefined })
+  }
+
+  // パスワード認証用メソッド
+  static async authenticateDriver(employeeId: string, password: string): Promise<Driver | null> {
+    const { data, error } = await supabase
+      .from('drivers')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .single()
+
+    if (error || !data) {
+      return null
+    }
+
+    // パスワードが設定されていない場合は認証失敗
+    if (!data.password) {
+      return null
+    }
+
+    // パスワードを比較
+    const isPasswordValid = await bcrypt.compare(password, data.password)
+    if (!isPasswordValid) {
+      return null
+    }
+
+    return DriverService.mapToDriver(data)
   }
 
   private static mapToDriver(row: DriverRow): Driver {

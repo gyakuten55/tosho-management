@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { 
-  Users, 
   Bell, 
   Settings as SettingsIcon,
   Save,
@@ -95,13 +94,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
     }
   })
 
-  // ユーザー管理の状態
-  const [users, setUsers] = useState([
-    { id: 1, name: '管理者', email: 'admin@tokyo-rikuso.co.jp', role: 'admin', status: 'active' },
-    { id: 2, name: '配車担当者A', email: 'dispatcher-a@tokyo-rikuso.co.jp', role: 'dispatcher', status: 'active' },
-    { id: 3, name: '配車担当者B', email: 'dispatcher-b@tokyo-rikuso.co.jp', role: 'dispatcher', status: 'active' },
-    { id: 4, name: 'ドライバー山田', email: 'yamada@tokyo-rikuso.co.jp', role: 'driver', status: 'active' }
-  ])
   
   // 統一休暇設定用のstate
   const [selectedVacationTeam, setSelectedVacationTeam] = useState('配送センターチーム')
@@ -149,12 +141,13 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   useEffect(() => {
     if (!vacationSettings) return
     
-    const tempDate = new Date(2025, selectedSpecificMonth - 1, selectedSpecificDate)
+    const currentYear = new Date().getFullYear()
+    const tempDate = new Date(currentYear, selectedSpecificMonth - 1, selectedSpecificDate)
     const weekday = tempDate.getDay()
     const baseLimit = vacationSettings?.teamMonthlyWeekdayLimits[selectedSpecificTeam]?.[selectedSpecificMonth]?.[weekday] || 0
     
     // 既存の特定日付設定がない場合のみ、基本設定値に自動更新
-    const dateString = `2025-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
+    const dateString = `${currentYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
     if (!vacationSettings?.specificDateLimits[dateString]) {
       setCustomLimit(baseLimit)
     }
@@ -167,13 +160,37 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   ])
 
   const handleSave = async () => {
+    if (!vacationSettings) return
+    
     setSaveStatus('saving')
     
-    // 実際の保存処理をシミュレート
-    setTimeout(() => {
+    try {
+      console.log('Settings - saving vacation settings:', {
+        specificDateLimits: vacationSettings.specificDateLimits,
+        teamMonthlyWeekdayLimitsKeys: Object.keys(vacationSettings.teamMonthlyWeekdayLimits || {})
+      })
+      
+      const updatedSettings = await VacationSettingsService.update(vacationSettings)
+      console.log('Settings - saved vacation settings:', {
+        specificDateLimits: updatedSettings.specificDateLimits,
+        teamMonthlyWeekdayLimitsKeys: Object.keys(updatedSettings.teamMonthlyWeekdayLimits || {})
+      })
+      
       setSaveStatus('saved')
+      
+      // 設定保存後、休暇管理画面のデータ更新を促すメッセージを表示
+      setTimeout(() => {
+        if (confirm('設定が保存されました。休暇管理画面に変更を反映するには、ページを更新することをお勧めします。今すぐ更新しますか？')) {
+          window.location.reload()
+        }
+      }, 1000)
+      
       setTimeout(() => setSaveStatus('idle'), 2000)
-    }, 1000)
+    } catch (error) {
+      console.error('Failed to save vacation settings:', error)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    }
   }
 
 
@@ -206,7 +223,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   const tabs = [
     { id: 'system', label: 'システム設定', icon: SettingsIcon },
     { id: 'notifications', label: '通知設定', icon: Bell },
-    { id: 'users', label: 'ユーザー管理', icon: Users },
     { id: 'vacation', label: '休暇設定', icon: Calendar }
   ]
 
@@ -446,83 +462,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
     </div>
   )
 
-  const renderUserManagement = () => (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium text-gray-900">ユーザー一覧</h3>
-        <button className="btn-primary">
-          <Users className="h-4 w-4 mr-2" />
-          新規ユーザー追加
-        </button>
-      </div>
-
-      <div className="bg-white overflow-hidden shadow rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ユーザー
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                メールアドレス
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                役割
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ステータス
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                操作
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="h-10 w-10 bg-primary-100 rounded-full flex items-center justify-center">
-                      <span className="text-primary-600 font-medium text-sm">
-                        {user.name.charAt(0)}
-                      </span>
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {user.email}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                    user.role === 'dispatcher' ? 'bg-blue-100 text-blue-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {user.role === 'admin' ? '管理者' :
-                     user.role === 'dispatcher' ? '配車担当' : 'ドライバー'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {user.status === 'active' ? 'アクティブ' : '無効'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-primary-600 hover:text-primary-900 mr-3">編集</button>
-                  <button className="text-red-600 hover:text-red-900">削除</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
 
   const renderVacationSettings = () => {
     return (
@@ -726,7 +665,20 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
     
     // 特定日付を追加する関数
     const handleAddSpecificDateLimit = () => {
-      const dateString = `2025-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
+      const currentYear = new Date().getFullYear()
+      const dateString = `${currentYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
+      
+      // より詳細なデバッグ情報
+      const selectedDate = new Date(currentYear, selectedSpecificMonth - 1, selectedSpecificDate)
+      console.log('Adding specific date limit:', {
+        selectedMonth: selectedSpecificMonth,
+        selectedDay: selectedSpecificDate,
+        currentYear,
+        dateString,
+        customLimit,
+        actualDate: selectedDate.toISOString().split('T')[0],
+        formattedDate: selectedDate.toLocaleDateString('ja-JP')
+      })
       
       const newSettings = {
         ...vacationSettings,
@@ -810,12 +762,13 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
           </label>
           <div className="grid grid-cols-7 gap-2 max-h-40 overflow-y-auto">
             {dates.map((date) => {
-              const tempDate = new Date(2025, selectedSpecificMonth - 1, date)
+              const currentYear = new Date().getFullYear()
+              const tempDate = new Date(currentYear, selectedSpecificMonth - 1, date)
               const weekdayName = ['日', '月', '火', '水', '木', '金', '土'][tempDate.getDay()]
               const baseLimit = getBaseLimit(selectedSpecificTeam, selectedSpecificMonth, date)
               
               // 既存の特定日付設定があるかチェック
-              const dateString = `2025-${String(selectedSpecificMonth).padStart(2, '0')}-${String(date).padStart(2, '0')}`
+              const dateString = `${currentYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(date).padStart(2, '0')}`
               const hasSpecificSetting = vacationSettings.specificDateLimits[dateString] !== undefined
               const specificLimit = vacationSettings.specificDateLimits[dateString]
               
@@ -973,6 +926,12 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
               保存完了
             </div>
           )}
+          {saveStatus === 'error' && (
+            <div className="flex items-center text-red-600">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              保存エラー
+            </div>
+          )}
           <button
             onClick={handleSave}
             disabled={saveStatus === 'saving'}
@@ -1010,7 +969,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
         <div className="p-6">
           {activeTab === 'system' && renderSystemSettings()}
           {activeTab === 'notifications' && renderNotificationSettings()}
-          {activeTab === 'users' && renderUserManagement()}
           {activeTab === 'vacation' && renderVacationSettings()}
         </div>
       </div>

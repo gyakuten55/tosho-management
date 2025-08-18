@@ -99,11 +99,45 @@ export class VacationSettingsService {
   }
 
   static async createDefault(): Promise<VacationSettings> {
+    // 全チーム・全月・全曜日のデフォルト上限値を設定
+    const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+    const teamMonthlyWeekdayLimits: any = {}
+    
+    teams.forEach(team => {
+      teamMonthlyWeekdayLimits[team] = {}
+      // 1月から12月まで
+      for (let month = 1; month <= 12; month++) {
+        teamMonthlyWeekdayLimits[team][month] = {}
+        // 日曜日(0)から土曜日(6)まで
+        for (let weekday = 0; weekday <= 6; weekday++) {
+          // チーム別のデフォルト値を設定
+          let defaultLimit = 0
+          switch (team) {
+            case '配送センターチーム':
+              defaultLimit = 2
+              break
+            case '常駐チーム':
+              defaultLimit = 1
+              break
+            case 'Bチーム':
+              defaultLimit = 1
+              break
+            case '外部ドライバー':
+              defaultLimit = 2
+              break
+            default:
+              defaultLimit = 1
+          }
+          teamMonthlyWeekdayLimits[team][month][weekday] = defaultLimit
+        }
+      }
+    })
+
     const defaultSettings: VacationSettings = {
       minimumOffDaysPerMonth: 9,
       maximumOffDaysPerMonth: 12,
       notificationDate: 25,
-      teamMonthlyWeekdayLimits: {},
+      teamMonthlyWeekdayLimits,
       specificDateLimits: {},
       blackoutDates: [],
       holidayDates: [],
@@ -125,12 +159,46 @@ export class VacationSettingsService {
 
   private static mapToVacationSettings(row: VacationSettingsRow): VacationSettings {
     const settingsData = row.settings_data as any || {}
+    let teamMonthlyWeekdayLimits = row.team_monthly_weekday_limits as any || {}
+    
+    // データ整合性の確保: teamMonthlyWeekdayLimitsが空の場合は初期化
+    const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+    const hasValidData = teams.some(team => teamMonthlyWeekdayLimits[team])
+    
+    if (!hasValidData) {
+      // デフォルト値で初期化
+      teamMonthlyWeekdayLimits = {}
+      teams.forEach(team => {
+        teamMonthlyWeekdayLimits[team] = {}
+        for (let month = 1; month <= 12; month++) {
+          teamMonthlyWeekdayLimits[team][month] = {}
+          for (let weekday = 0; weekday <= 6; weekday++) {
+            let defaultLimit = 1
+            switch (team) {
+              case '配送センターチーム':
+                defaultLimit = 2
+                break
+              case '常駐チーム':
+                defaultLimit = 1
+                break
+              case 'Bチーム':
+                defaultLimit = 1
+                break
+              case '外部ドライバー':
+                defaultLimit = 2
+                break
+            }
+            teamMonthlyWeekdayLimits[team][month][weekday] = defaultLimit
+          }
+        }
+      })
+    }
     
     return {
       minimumOffDaysPerMonth: row.minimum_off_days_per_month,
       maximumOffDaysPerMonth: row.maximum_off_days_per_month,
       notificationDate: row.notification_date,
-      teamMonthlyWeekdayLimits: row.team_monthly_weekday_limits as any || {},
+      teamMonthlyWeekdayLimits,
       specificDateLimits: row.specific_date_limits as any || {},
       blackoutDates: (settingsData.blackoutDates || []).map((d: string) => new Date(d)),
       holidayDates: (settingsData.holidayDates || []).map((d: string) => new Date(d)),

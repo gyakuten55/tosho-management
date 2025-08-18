@@ -1,15 +1,17 @@
 import { VacationSettings, VacationLimitResult, VacationLimitPriority, PeriodLimit } from '@/types'
 
 /**
- * 指定された日付の休暇上限人数を階層型優先順位に基づいて計算
+ * 指定された日付とチームの休暇上限人数を階層型優先順位に基づいて計算
  * @param date 対象日付
  * @param settings 休暇設定
+ * @param team チーム名（オプション、指定時はチーム別設定を優先）
  * @returns 計算結果（上限人数、適用ルール、詳細情報）
  */
-export function getVacationLimitForDate(date: Date, settings: VacationSettings): VacationLimitResult {
+export function getVacationLimitForDate(date: Date, settings: VacationSettings, team?: string): VacationLimitResult {
   const dateStr = formatDateToString(date, 'YYYY-MM-DD')
   const month = date.getMonth() + 1  // 0-based to 1-based
   const weekday = date.getDay()      // 0=Sunday, 1=Monday, ...
+  
   // 1. 特定日付設定（最優先）
   if (settings.specificDateLimits && settings.specificDateLimits[dateStr]) {
     return {
@@ -20,7 +22,17 @@ export function getVacationLimitForDate(date: Date, settings: VacationSettings):
     }
   }
 
-  // 2. 月別曜日上限設定
+  // 2. チーム別月別曜日設定（新しい統一設定、最優先）
+  if (team && settings.teamMonthlyWeekdayLimits?.[team]?.[month]?.[weekday] !== undefined) {
+    return {
+      limit: settings.teamMonthlyWeekdayLimits[team][month][weekday],
+      appliedRule: VacationLimitPriority.MONTHLY_WEEKLY,
+      ruleName: 'チーム別月別曜日設定',
+      ruleDetails: `${team}の${month}月${getWeekdayName(weekday)}: ${settings.teamMonthlyWeekdayLimits[team][month][weekday]}人`
+    }
+  }
+
+  // 3. 旧式月別曜日上限設定（後方互換性）
   if (settings.monthlyWeekdayLimits && 
       settings.monthlyWeekdayLimits[month] && 
       settings.monthlyWeekdayLimits[month][weekday] !== undefined) {
@@ -32,7 +44,17 @@ export function getVacationLimitForDate(date: Date, settings: VacationSettings):
     }
   }
 
-  // 3. 期間設定をチェック
+  // 4. チーム別旧設定（後方互換性）
+  if (team && settings.maxDriversOffPerDay?.[team] !== undefined) {
+    return {
+      limit: settings.maxDriversOffPerDay[team],
+      appliedRule: VacationLimitPriority.MONTHLY_WEEKLY,
+      ruleName: 'チーム別設定（旧）',
+      ruleDetails: `${team}の設定: ${settings.maxDriversOffPerDay[team]}人`
+    }
+  }
+
+  // 5. 期間設定をチェック
   if (settings.periodLimits) {
     for (const period of settings.periodLimits) {
       if (period.isActive && isDateInPeriod(date, period)) {
@@ -46,7 +68,7 @@ export function getVacationLimitForDate(date: Date, settings: VacationSettings):
     }
   }
 
-  // 4. 月別設定
+  // 6. 月別設定
   if (settings.monthlyLimits && settings.monthlyLimits[month]) {
     return {
       limit: settings.monthlyLimits[month],
@@ -56,7 +78,7 @@ export function getVacationLimitForDate(date: Date, settings: VacationSettings):
     }
   }
 
-  // 5. 曜日設定
+  // 7. 曜日設定
   if (settings.weeklyLimits && settings.weeklyLimits[weekday]) {
     return {
       limit: settings.weeklyLimits[weekday],
@@ -66,12 +88,12 @@ export function getVacationLimitForDate(date: Date, settings: VacationSettings):
     }
   }
 
-  // 6. 基本設定（最下位）
+  // 8. 基本設定（最下位）
   return {
-    limit: settings.globalMaxDriversOffPerDay,
+    limit: settings.globalMaxDriversOffPerDay || 3,
     appliedRule: VacationLimitPriority.GLOBAL_DEFAULT,
     ruleName: '基本設定',
-    ruleDetails: `全体の基本上限: ${settings.globalMaxDriversOffPerDay}人`
+    ruleDetails: `全体の基本上限: ${settings.globalMaxDriversOffPerDay || 3}人`
   }
 }
 
