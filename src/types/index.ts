@@ -18,7 +18,38 @@ export interface Driver {
   employeeId: string
   status: 'working' | 'vacation' | 'sick' | 'available' | 'night_shift'
   assignedVehicle?: string
-  isNightShift?: boolean  // 夜勤状態かどうか
+  isNightShift?: boolean
+  phone?: string
+  email?: string
+  address?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  licenseNumber?: string
+  licenseClass?: string
+  licenseExpiryDate?: Date
+  hireDate?: Date
+  birthDate?: Date
+  notes?: string
+  holidayTeams?: string[]  // 祝日チーム（複数選択可）
+}
+
+export interface Holiday {
+  id: number
+  name: string
+  date: Date
+  isNationalHoliday: boolean
+  isRecurring: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface HolidayTeam {
+  id: number
+  teamName: string
+  worksOnHolidays: boolean
+  holidayPayRate: number
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface InspectionSchedule {

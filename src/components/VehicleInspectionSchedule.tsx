@@ -6,6 +6,8 @@ import { ja } from 'date-fns/locale'
 import { Vehicle, InspectionSchedule, VehicleInspectionNotification } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import { useState, useEffect, useCallback } from 'react'
+import { InspectionService } from '@/services/inspectionService'
+import { VehicleService } from '@/services/vehicleService'
 
 interface VehicleInspectionScheduleProps {
   vehicles: Vehicle[]
@@ -16,6 +18,26 @@ interface VehicleInspectionScheduleProps {
 export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVehiclesChange }: VehicleInspectionScheduleProps) {
   const [inspectionSchedules, setInspectionSchedules] = useState<InspectionSchedule[]>([])
   const [vehicleInspectionNotifications, setVehicleInspectionNotifications] = useState<VehicleInspectionNotification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadInspectionSchedules()
+  }, [])
+
+  const loadInspectionSchedules = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const schedules = await InspectionService.getAll()
+      setInspectionSchedules(schedules)
+    } catch (err) {
+      console.error('Failed to load inspection schedules:', err)
+      setError('点検スケジュールの読み込みに失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // 点検3ヶ月前通知チェック
   const checkVehicleInspectionNotifications = useCallback(() => {
@@ -52,39 +74,62 @@ export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVe
     }
   }, [vehicles, setVehicleInspectionNotifications])
 
-  // 初期化時に車両データから点検予定を生成（点検日から3ヶ月間隔で自動計算）
+  // 初期化時に車両データから点検予定を生成または更新
   useEffect(() => {
-    const inspections = vehicles.map(vehicle => {
-      const nextInspection = getNextInspectionDate(vehicle.inspectionDate)
-      const daysUntilInspection = differenceInDays(nextInspection, new Date())
-      let status: 'urgent' | 'warning' | 'normal' = 'normal'
-      
-      if (daysUntilInspection < 0) {
-        status = 'urgent'
-      } else if (daysUntilInspection <= 7) {
-        status = 'urgent'
-      } else if (daysUntilInspection <= 30) {
-        status = 'warning'
-      }
+    if (inspectionSchedules.length === 0 && vehicles.length > 0) {
+      // Supabaseからデータが空の場合、車両情報から生成
+      generateInspectionSchedulesFromVehicles()
+    }
+    if (vehicles.length > 0) {
+      checkVehicleInspectionNotifications()
+    }
+  }, [vehicles, inspectionSchedules, checkVehicleInspectionNotifications])
 
-      return {
-        id: vehicle.id,
-        vehicleId: vehicle.id,
-        vehicleNumber: vehicle.plateNumber,
-        type: '点検',
-        date: nextInspection,
-        status,
-        driver: vehicle.driver || '未割当',
-        team: vehicle.team,
-        isReservationCompleted: false,
-        memo: '',
-        hasAnnualCraneInspection: vehicle.model.includes('クレーン')
-      }
-    })
-    
-    setInspectionSchedules(inspections)
-    checkVehicleInspectionNotifications()
-  }, [vehicles, checkVehicleInspectionNotifications])
+  const generateInspectionSchedulesFromVehicles = async () => {
+    try {
+      const inspections: InspectionSchedule[] = vehicles.map(vehicle => {
+        const nextInspection = getNextInspectionDate(vehicle.inspectionDate)
+        const daysUntilInspection = differenceInDays(nextInspection, new Date())
+        let status: 'urgent' | 'warning' | 'normal' = 'normal'
+        
+        if (daysUntilInspection < 0) {
+          status = 'urgent'
+        } else if (daysUntilInspection <= 7) {
+          status = 'urgent'
+        } else if (daysUntilInspection <= 30) {
+          status = 'warning'
+        }
+
+        return {
+          id: vehicle.id,
+          vehicleId: vehicle.id,
+          vehicleNumber: vehicle.plateNumber,
+          type: '点検',
+          date: nextInspection,
+          status,
+          driver: vehicle.driver || '未割当',
+          team: vehicle.team,
+          isReservationCompleted: false,
+          memo: '',
+          hasAnnualCraneInspection: vehicle.model.includes('クレーン')
+        }
+      })
+      
+      // 新しいスケジュールをSupabaseに保存（ローカル状態のみ更新）
+      setInspectionSchedules(inspections)
+      
+      // 将来的にはSupabaseに保存する処理を追加
+      // for (const inspection of inspections) {
+      //   const existingInspection = await InspectionService.getById(inspection.id)
+      //   if (!existingInspection) {
+      //     await InspectionService.create(inspection)
+      //   }
+      // }
+    } catch (err) {
+      console.error('Failed to generate inspection schedules:', err)
+      setError('点検スケジュールの生成に失敗しました')
+    }
+  }
 
   // 最初の4件の点検予定のみ表示
   const displayedInspections = inspectionSchedules
@@ -145,6 +190,32 @@ export default function VehicleInspectionSchedule({ vehicles, onViewChange, onVe
     } else {
       alert('車両管理ページで全ての点検予定を確認できます。')
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="card">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg text-gray-600">読み込み中...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="card">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg text-red-600">{error}</div>
+          <button 
+            onClick={loadInspectionSchedules}
+            className="ml-4 btn-primary"
+          >
+            再試行
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

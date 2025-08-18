@@ -24,16 +24,6 @@ import DriverVehicleInfo from '@/components/DriverVehicleInfo'
 import VehicleOperationManagement from '@/components/VehicleOperationManagement'
 import { Vehicle, Driver, VacationRequest, DriverNotification, VehicleAssignmentChange, DriverVehicleNotification, VehicleInoperativePeriod, VehicleInoperativeNotification } from '@/types'
 import { 
-  initialVehicles, 
-  initialDrivers, 
-  initialVacationRequests,
-  initialMonthlyVacationStats,
-  initialVacationSettings,
-  initialVacationNotifications,
-  initialVehicleAssignmentChanges,
-  initialDriverVehicleNotifications,
-  initialVehicleInoperativePeriods,
-  initialVehicleInoperativeNotifications,
   samplePerformanceMetrics, 
   sampleMaintenanceReport,
   sampleFinancialReport
@@ -44,16 +34,6 @@ import { useAuth } from '@/contexts/AuthContext'
 export default function Home() {
   const { user, loading, signOut, isAdmin, isDriver } = useAuth()
   const [currentView, setCurrentView] = useState('vehicles')
-  const [vehicles, setVehicles] = useState(initialVehicles)
-  const [drivers, setDrivers] = useState(initialDrivers)
-  const [vacationRequests, setVacationRequests] = useState(initialVacationRequests)
-  const [vacationStats, setVacationStats] = useState(initialMonthlyVacationStats)
-  const [vacationSettings, setVacationSettings] = useState(initialVacationSettings)
-  const [vacationNotifications, setVacationNotifications] = useState(initialVacationNotifications)
-  const [vehicleAssignmentChanges, setVehicleAssignmentChanges] = useState(initialVehicleAssignmentChanges)
-  const [driverVehicleNotifications, setDriverVehicleNotifications] = useState(initialDriverVehicleNotifications)
-  const [vehicleInoperativePeriods, setVehicleInoperativePeriods] = useState(initialVehicleInoperativePeriods)
-  const [vehicleInoperativeNotifications, setVehicleInoperativeNotifications] = useState(initialVehicleInoperativeNotifications)
   const [performanceMetrics, setPerformanceMetrics] = useState(samplePerformanceMetrics)
   const [maintenanceReports, setMaintenanceReports] = useState(sampleMaintenanceReport)
   const [financialReports, setFinancialReports] = useState(sampleFinancialReport)
@@ -68,22 +48,6 @@ export default function Home() {
     }
   }
 
-  // メモ化された関数
-  const handleVacationRequestsChange = useCallback((requests: any[]) => {
-    setVacationRequests(requests)
-  }, [])
-
-  const handleVacationStatsChange = useCallback((stats: any[]) => {
-    setVacationStats(stats)
-  }, [])
-
-  const handleVacationSettingsChange = useCallback((settings: any) => {
-    setVacationSettings(settings)
-  }, [])
-
-  const handleVacationNotificationsChange = useCallback((notifications: any[]) => {
-    setVacationNotifications(notifications)
-  }, [])
 
   // ローディング中
   if (loading) {
@@ -106,15 +70,6 @@ export default function Home() {
   if (isDriver) {
     return (
       <DriverDashboard 
-        currentUser={{
-          id: parseInt(user.uid.replace(/[^0-9]/g, '')) || 1,
-          name: user.displayName,
-          role: user.role,
-          employeeId: user.employeeId,
-          team: 'チーム1', // デフォルトチーム名
-          isActive: true,
-          lastLogin: user.lastLogin
-        }} 
         onLogout={handleLogout}
       />
     )
@@ -124,53 +79,15 @@ export default function Home() {
   const renderContent = () => {
     switch (currentView) {
       case 'vehicles':
-        return <VehicleManagement 
-          vehicles={vehicles} 
-          drivers={drivers} 
-          onVehiclesChange={setVehicles}
-          onDriversChange={setDrivers}
-        />
+        return <VehicleManagement />
       case 'drivers':
-        return <DriverManagement 
-          drivers={drivers} 
-          vehicles={vehicles}
-          onDriversChange={setDrivers}
-          onVehiclesChange={setVehicles}
-        />
+        return <DriverManagement />
       case 'vacation':
-        return <VacationManagement
-          vacationRequests={vacationRequests}
-          vacationStats={vacationStats}
-          vacationSettings={vacationSettings}
-          vacationNotifications={vacationNotifications}
-          drivers={drivers}
-          vehicles={vehicles}
-          onVacationRequestsChange={handleVacationRequestsChange}
-          onVacationStatsChange={handleVacationStatsChange}
-          onVacationSettingsChange={handleVacationSettingsChange}
-          onVacationNotificationsChange={handleVacationNotificationsChange}
-          onVehiclesChange={setVehicles}
-        />
+        return <VacationManagement />
       case 'settings':
-        return <SettingsComponent 
-          vacationSettings={vacationSettings}
-          onVacationSettingsChange={handleVacationSettingsChange}
-        />
+        return <SettingsComponent />
       case 'vehicle-operation':
-        return <VehicleOperationManagement 
-          vehicles={vehicles}
-          drivers={drivers}
-          vacationRequests={vacationRequests}
-          vehicleAssignmentChanges={vehicleAssignmentChanges}
-          driverVehicleNotifications={driverVehicleNotifications}
-          vehicleInoperativePeriods={vehicleInoperativePeriods}
-          vehicleInoperativeNotifications={vehicleInoperativeNotifications}
-          onVehicleAssignmentChangesChange={setVehicleAssignmentChanges}
-          onDriverVehicleNotificationsChange={setDriverVehicleNotifications}
-          onVehicleInoperativePeriodsChange={setVehicleInoperativePeriods}
-          onVehicleInoperativeNotificationsChange={setVehicleInoperativeNotifications}
-          onVehiclesChange={setVehicles}
-        />
+        return <VehicleOperationManagement />
       default:
         return null
     }

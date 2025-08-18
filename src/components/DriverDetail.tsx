@@ -163,17 +163,17 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
                 <div className="flex items-center text-sm">
                   <Phone className="h-4 w-4 text-gray-400 mr-2" />
                   <span className="text-gray-600">電話:</span>
-                  <span className="ml-2 text-gray-900">{(driver as any).phoneNumber || '未設定'}</span>
+                  <span className="ml-2 text-gray-900">{driver.phone || '未設定'}</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Mail className="h-4 w-4 text-gray-400 mr-2" />
                   <span className="text-gray-600">メール:</span>
-                  <span className="ml-2 text-gray-900">{(driver as any).email || '未設定'}</span>
+                  <span className="ml-2 text-gray-900">{driver.email || '未設定'}</span>
                 </div>
                 <div className="flex items-start text-sm">
                   <MapPin className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
                   <span className="text-gray-600">住所:</span>
-                  <span className="ml-2 text-gray-900">{(driver as any).address || '未設定'}</span>
+                  <span className="ml-2 text-gray-900">{driver.address || '未設定'}</span>
                 </div>
               </div>
             </div>
@@ -182,7 +182,7 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-medium text-gray-700 mb-2">車両情報</h4>
-              {driver.team === 'B' ? (
+              {driver.team === 'Bチーム' ? (
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   <div className="flex items-center space-x-2">
                     <Car className="h-4 w-4 text-orange-600" />
@@ -221,15 +221,33 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
                 <div className="flex items-center text-sm">
                   <User className="h-4 w-4 text-gray-400 mr-2" />
                   <span className="text-gray-600">氏名:</span>
-                  <span className="ml-2 text-gray-900">{(driver as any).emergencyContact || '未設定'}</span>
+                  <span className="ml-2 text-gray-900">{driver.emergencyContactName || '未設定'}</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Phone className="h-4 w-4 text-gray-400 mr-2" />
                   <span className="text-gray-600">電話:</span>
-                  <span className="ml-2 text-gray-900">{(driver as any).emergencyPhone || '未設定'}</span>
+                  <span className="ml-2 text-gray-900">{driver.emergencyContactPhone || '未設定'}</span>
                 </div>
               </div>
             </div>
+
+            {/* 祝日チーム */}
+            {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') && driver.holidayTeams && driver.holidayTeams.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">祝日チーム</h4>
+                <div className="flex flex-wrap gap-2">
+                  {driver.holidayTeams.map((team) => (
+                    <span
+                      key={team}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
+                    >
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {team}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -246,19 +264,59 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-2">運転免許証番号</h4>
-            <p className="text-gray-900">{(driver as any).licenseNumber || '未設定'}</p>
+            <p className="text-gray-900">{driver.licenseNumber || '未設定'}</p>
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">免許の種類</h4>
+            <p className="text-gray-900">{driver.licenseClass || '未設定'}</p>
           </div>
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-2">有効期限</h4>
             <p className="text-gray-900">
-              {(driver as any).licenseExpiry 
-                ? format(new Date((driver as any).licenseExpiry), 'yyyy年MM月dd日', { locale: ja })
+              {driver.licenseExpiryDate
+                ? format(new Date(driver.licenseExpiryDate), 'yyyy年MM月dd日', { locale: ja })
+                : '未設定'
+              }
+            </p>
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">入社日</h4>
+            <p className="text-gray-900">
+              {driver.hireDate
+                ? format(new Date(driver.hireDate), 'yyyy年MM月dd日', { locale: ja })
                 : '未設定'
               }
             </p>
           </div>
         </div>
       </div>
+
+      {/* 祝日チーム */}
+      {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') && (
+        <div className="card p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="h-8 w-8 bg-red-100 rounded-lg flex items-center justify-center">
+              <Calendar className="h-5 w-5 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">祝日チーム</h3>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">配属祝日チーム</h4>
+            {driver.holidayTeams && driver.holidayTeams.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {driver.holidayTeams.map((team: string) => (
+                  <span key={team} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                    {team}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500">祝日チームが設定されていません</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 最近の運行履歴 */}
       <div className="card p-6">
@@ -313,10 +371,10 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
       </div>
 
       {/* 備考 */}
-      {(driver as any).notes && (
+      {driver.notes && (
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">備考</h3>
-          <p className="text-gray-700 whitespace-pre-wrap">{(driver as any).notes}</p>
+          <p className="text-gray-700 whitespace-pre-wrap">{driver.notes}</p>
         </div>
       )}
     </div>

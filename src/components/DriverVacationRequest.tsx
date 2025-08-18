@@ -15,15 +15,14 @@ import {
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, addDays, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { User, VacationRequest, MonthlyVacationStats } from '@/types'
+import { Driver, VacationRequest, MonthlyVacationStats } from '@/types'
 
 interface DriverVacationRequestProps {
-  currentUser: User
+  currentUser: Driver | null
   existingRequests: VacationRequest[]
   monthlyStats: MonthlyVacationStats | null
   onRequestSubmit: (request: Omit<VacationRequest, 'id' | 'requestDate'>) => void
   onRequestDelete?: (requestId: number) => void
-  allUsers?: User[]
 }
 
 export default function DriverVacationRequest({ 
@@ -32,16 +31,25 @@ export default function DriverVacationRequest({
   monthlyStats,
   onRequestSubmit,
   onRequestDelete,
-  allUsers = []
 }: DriverVacationRequestProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
 
+  if (!currentUser) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="text-center text-gray-500">
+          ユーザー情報を読み込み中...
+        </div>
+      </div>
+    )
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!selectedDate) return
+    if (!selectedDate || !currentUser) return
 
     const newRequest: Omit<VacationRequest, 'id' | 'requestDate'> = {
       driverId: currentUser.id,

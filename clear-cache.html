@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Local Storage</title>
+</head>
+<body>
+    <h1>Local Storage Cleaner</h1>
+    <button onclick="clearLocalStorage()">Clear Local Storage</button>
+    <div id="result"></div>
+
+    <script>
+        function clearLocalStorage() {
+            // Clear all localStorage
+            localStorage.clear();
+            
+            // Clear all sessionStorage
+            sessionStorage.clear();
+            
+            document.getElementById('result').innerHTML = 
+                '<p style="color: green;">Local Storage and Session Storage cleared successfully!</p>';
+        }
+
+        // Display current localStorage contents
+        function displayStorage() {
+            const keys = Object.keys(localStorage);
+            let html = '<h3>Current Local Storage:</h3><ul>';
+            
+            if (keys.length === 0) {
+                html += '<li>No items in localStorage</li>';
+            } else {
+                keys.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    html += `<li><strong>${key}:</strong> ${value.substring(0, 100)}${value.length > 100 ? '...' : ''}</li>`;
+                });
+            }
+            
+            html += '</ul>';
+            document.getElementById('storage-content').innerHTML = html;
+        }
+
+        // Display storage on load
+        window.onload = displayStorage;
+    </script>
+
+    <div id="storage-content"></div>
+</body>
+</html>

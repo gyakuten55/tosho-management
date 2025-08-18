@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Car, 
   Search, 
@@ -23,20 +23,44 @@ import VehicleDetail from './VehicleDetail'
 
 import { Vehicle, Driver } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
+import { VehicleService } from '@/services/vehicleService'
 
-interface VehicleManagementProps {
-  vehicles: Vehicle[]
-  drivers?: Driver[]
-  onVehiclesChange: (vehicles: Vehicle[]) => void
-  onDriversChange?: (drivers: Driver[]) => void
-}
+interface VehicleManagementProps {}
 
-export default function VehicleManagement({ vehicles, drivers = [], onVehiclesChange, onDriversChange }: VehicleManagementProps) {
+export default function VehicleManagement({}: VehicleManagementProps) {
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<'list' | 'form' | 'detail'>('list')
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterTeam, setFilterTeam] = useState<string>('all')
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const [vehiclesData, driversData] = await Promise.all([
+        VehicleService.getAll(),
+        import('@/services/driverService').then(m => m.DriverService.getAll())
+      ])
+      
+      setVehicles(vehiclesData)
+      setDrivers(driversData)
+    } catch (err) {
+      console.error('Failed to load data:', err)
+      setError('データの読み込みに失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -125,28 +149,37 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
     setCurrentView('detail')
   }
 
-  const handleDelete = (vehicleId: number) => {
+  const handleDelete = async (vehicleId: number) => {
     if (confirm('この車両を削除してもよろしいですか？')) {
-      onVehiclesChange(vehicles.filter(v => v.id !== vehicleId))
+      try {
+        await VehicleService.delete(vehicleId)
+        setVehicles(vehicles.filter(v => v.id !== vehicleId))
+      } catch (err) {
+        console.error('Failed to delete vehicle:', err)
+        alert('車両の削除に失敗しました')
+      }
     }
   }
 
-  const handleSave = (vehicleData: Partial<Vehicle>) => {
-    if (selectedVehicle) {
-      // 編集
-      onVehiclesChange(vehicles.map(v => 
-        v.id === selectedVehicle.id ? { ...v, ...vehicleData } : v
-      ))
-    } else {
-      // 新規追加
-      const newVehicle: Vehicle = {
-        id: vehicles.length > 0 ? Math.max(...vehicles.map(v => v.id)) + 1 : 1,
-        ...vehicleData
-      } as Vehicle
-      onVehiclesChange([...vehicles, newVehicle])
+  const handleSave = async (vehicleData: Partial<Vehicle>) => {
+    try {
+      if (selectedVehicle) {
+        // 編集
+        const updatedVehicle = await VehicleService.update(selectedVehicle.id, vehicleData)
+        setVehicles(vehicles.map(v => 
+          v.id === selectedVehicle.id ? updatedVehicle : v
+        ))
+      } else {
+        // 新規追加
+        const newVehicle = await VehicleService.create(vehicleData as Omit<Vehicle, 'id'>)
+        setVehicles([...vehicles, newVehicle])
+      }
+      setCurrentView('list')
+      setSelectedVehicle(null)
+    } catch (err) {
+      console.error('Failed to save vehicle:', err)
+      alert('車両の保存に失敗しました')
     }
-    setCurrentView('list')
-    setSelectedVehicle(null)
   }
 
   if (currentView === 'form') {
@@ -161,7 +194,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
         }}
         onDriverUpdate={(updates) => {
           // ドライバーの車両割り当てを自動更新
-          if (onDriversChange && drivers) {
+          if (drivers) {
             const updatedDrivers = drivers.map(driver => {
               const update = updates.find(u => u.driverName === driver.name)
               if (update) {
@@ -169,7 +202,7 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
               }
               return driver
             })
-            onDriversChange(updatedDrivers)
+            setDrivers(updatedDrivers)
           }
         }}
       />
@@ -186,6 +219,28 @@ export default function VehicleManagement({ vehicles, drivers = [], onVehiclesCh
           setSelectedVehicle(null)
         }}
       />
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">読み込み中...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-red-600">{error}</div>
+        <button 
+          onClick={loadData}
+          className="ml-4 btn-primary"
+        >
+          再試行
+        </button>
+      </div>
     )
   }
 

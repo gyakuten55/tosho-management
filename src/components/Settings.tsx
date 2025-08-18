@@ -19,19 +19,26 @@ import {
   Timer,
   Search
 } from 'lucide-react'
-import { VacationSettings } from '@/types'
+import { VacationSettings, Holiday, HolidayTeam } from '@/types'
+import { VacationSettingsService } from '@/services/vacationSettingsService'
+import { HolidayService, HolidayTeamService } from '@/services/holidayService'
 
 interface SettingsProps {
-  vacationSettings: VacationSettings
-  onVacationSettingsChange: (settings: VacationSettings) => void
+  vacationSettings?: VacationSettings
+  onVacationSettingsChange?: (settings: VacationSettings) => void
 }
 
 export default function Settings({ vacationSettings: propVacationSettings, onVacationSettingsChange }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('system')
   const [showPassword, setShowPassword] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-
-
+  const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [holidayTeams, setHolidayTeams] = useState<HolidayTeam[]>([])
+  const [newHolidayName, setNewHolidayName] = useState('')
+  const [newHolidayDate, setNewHolidayDate] = useState('')
+  
   // システム設定の状態
   const [systemSettings, setSystemSettings] = useState({
     defaultTeam: 'Bチーム',
@@ -95,15 +102,7 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
     { id: 3, name: '配車担当者B', email: 'dispatcher-b@tokyo-rikuso.co.jp', role: 'dispatcher', status: 'active' },
     { id: 4, name: 'ドライバー山田', email: 'yamada@tokyo-rikuso.co.jp', role: 'driver', status: 'active' }
   ])
-
-  // 休暇設定の状態（propsから受け取った値を使用）
-  const [vacationSettings, setVacationSettings] = useState<VacationSettings>(propVacationSettings)
   
-  // propsが更新されたときに内部stateも更新
-  useEffect(() => {
-    setVacationSettings(propVacationSettings)
-  }, [propVacationSettings])
-
   // 統一休暇設定用のstate
   const [selectedVacationTeam, setSelectedVacationTeam] = useState('配送センターチーム')
   const [selectedVacationMonth, setSelectedVacationMonth] = useState(1)
@@ -114,23 +113,57 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   const [selectedSpecificDate, setSelectedSpecificDate] = useState(1)
   const [customLimit, setCustomLimit] = useState(1)
 
+  const loadSettings = async () => {
+    try {
+      setLoading(true)
+      const settings = propVacationSettings || await VacationSettingsService.get()
+      setVacationSettings(settings)
+    } catch (err) {
+      console.error('Failed to load settings:', err)
+      setSaveStatus('error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadSettings()
+    loadHolidayData()
+  }, [])
+
+  const loadHolidayData = async () => {
+    try {
+      const [holidaysData, teamsData] = await Promise.all([
+        HolidayService.getByYear(2025),
+        HolidayTeamService.getAll()
+      ])
+      
+      setHolidays(holidaysData)
+      setHolidayTeams(teamsData)
+    } catch (error) {
+      console.error('Failed to load holiday data:', error)
+    }
+  }
+
   // 基本設定変更時に特定日付のcustomLimitをリアルタイム更新
   useEffect(() => {
+    if (!vacationSettings) return
+    
     const tempDate = new Date(2025, selectedSpecificMonth - 1, selectedSpecificDate)
     const weekday = tempDate.getDay()
-    const baseLimit = vacationSettings.teamMonthlyWeekdayLimits[selectedSpecificTeam]?.[selectedSpecificMonth]?.[weekday] || 0
+    const baseLimit = vacationSettings?.teamMonthlyWeekdayLimits[selectedSpecificTeam]?.[selectedSpecificMonth]?.[weekday] || 0
     
     // 既存の特定日付設定がない場合のみ、基本設定値に自動更新
     const dateString = `2025-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
-    if (!vacationSettings.specificDateLimits[dateString]) {
+    if (!vacationSettings?.specificDateLimits[dateString]) {
       setCustomLimit(baseLimit)
     }
   }, [
-    vacationSettings.teamMonthlyWeekdayLimits, 
+    vacationSettings?.teamMonthlyWeekdayLimits, 
     selectedSpecificTeam, 
     selectedSpecificMonth, 
     selectedSpecificDate,
-    vacationSettings.specificDateLimits
+    vacationSettings?.specificDateLimits
   ])
 
   const handleSave = async () => {
@@ -146,6 +179,8 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
 
   // 日付指定の削除
   const handleRemoveDateLimit = (date: string) => {
+    if (!vacationSettings) return
+    
     const newLimits = { ...vacationSettings.specificDateLimits }
     delete newLimits[date]
     const newSettings = {
@@ -153,7 +188,7 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
       specificDateLimits: newLimits as { [dateString: string]: number }
     }
     setVacationSettings(newSettings)
-    onVacationSettingsChange(newSettings) // 親コンポーネントに通知
+    onVacationSettingsChange?.(newSettings) // 親コンポーネントに通知
   }
 
   // 月名の取得
@@ -525,6 +560,8 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
 
   // 統一された休暇上限設定のレンダリング
   const renderUnifiedVacationLimitSettings = () => {
+    if (!vacationSettings) return null
+    
     const teams = Object.keys(vacationSettings.teamMonthlyWeekdayLimits)
     const months = Array.from({length: 12}, (_, i) => i + 1)
     const weekdays = ['日', '月', '火', '水', '木', '金', '土']
@@ -544,7 +581,7 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
         }
       }
       setVacationSettings(newSettings)
-      onVacationSettingsChange(newSettings) // 親コンポーネントに通知
+      onVacationSettingsChange?.(newSettings) // 親コンポーネントに通知
     }
 
     return (
@@ -673,6 +710,8 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
 
   // 特定日付設定のレンダリング
   const renderSpecificDateSettings = () => {
+    if (!vacationSettings) return null
+    
     const teams = Object.keys(vacationSettings.teamMonthlyWeekdayLimits)
     const months = Array.from({length: 12}, (_, i) => i + 1)
     const daysInMonth = new Date(2025, selectedSpecificMonth, 0).getDate()
@@ -697,7 +736,7 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
         }
       }
       setVacationSettings(newSettings)
-      onVacationSettingsChange(newSettings) // 親コンポーネントに通知
+      onVacationSettingsChange?.(newSettings) // 親コンポーネントに通知
     }
 
     const baseLimitForSelectedDate = getBaseLimit(selectedSpecificTeam, selectedSpecificMonth, selectedSpecificDate)
@@ -907,6 +946,15 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
     )
   }
 
+
+  // ローディング中またはnullの場合は早期リターン
+  if (loading || !vacationSettings) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">設定を読み込み中...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

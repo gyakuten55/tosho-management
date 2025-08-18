@@ -21,6 +21,10 @@ import {
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { VacationRequest, MonthlyVacationStats, VacationSettings, VacationNotification, Driver, Vehicle } from '@/types'
+import { VacationService } from '@/services/vacationService'
+import { DriverService } from '@/services/driverService'
+import { VacationSettingsService } from '@/services/vacationSettingsService'
+import { NotificationService } from '@/services/notificationService'
 
 interface DailyVacationInfo {
   date: Date
@@ -50,32 +54,29 @@ interface DailyVacationInfo {
 }
 
 interface VacationManagementProps {
-  vacationRequests: VacationRequest[]
-  vacationStats: MonthlyVacationStats[]
-  vacationSettings: VacationSettings
-  vacationNotifications: VacationNotification[]
-  drivers: Driver[]
-  vehicles: Vehicle[]
-  onVacationRequestsChange: (requests: VacationRequest[]) => void
-  onVacationStatsChange: (stats: MonthlyVacationStats[]) => void
-  onVacationSettingsChange: (settings: VacationSettings) => void
-  onVacationNotificationsChange: (notifications: VacationNotification[]) => void
-  onVehiclesChange: (vehicles: Vehicle[]) => void
+  // Props are optional now as we load data from Supabase
+  vacationSettings?: VacationSettings
+  drivers?: Driver[]
+  vehicles?: Vehicle[]
+  onVacationSettingsChange?: (settings: VacationSettings) => void
+  onVehiclesChange?: (vehicles: Vehicle[]) => void
 }
 
 export default function VacationManagement({
-  vacationRequests,
-  vacationStats,
-  vacationSettings,
-  vacationNotifications,
-  drivers,
-  vehicles,
-  onVacationRequestsChange,
-  onVacationStatsChange,
+  vacationSettings: propVacationSettings,
+  drivers: propDrivers,
+  vehicles: propVehicles,
   onVacationSettingsChange,
-  onVacationNotificationsChange,
   onVehiclesChange
 }: VacationManagementProps) {
+  const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([])
+  const [vacationStats, setVacationStats] = useState<MonthlyVacationStats[]>([])
+  const [vacationNotifications, setVacationNotifications] = useState<VacationNotification[]>([])
+  const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState('calendar')
   const [calendarDate, setCalendarDate] = useState(new Date())
   const [showVacationForm, setShowVacationForm] = useState(false)
@@ -83,6 +84,73 @@ export default function VacationManagement({
   const [selectedDriverId, setSelectedDriverId] = useState('')
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
   const [statsMonth, setStatsMonth] = useState(new Date()) // 統計タブ用の月選択state
+
+  useEffect(() => {
+    loadVacationData()
+  }, [])
+
+  const loadVacationData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Load all required data in parallel
+      const [requests, settings, driversData, vehiclesData, notifications] = await Promise.all([
+        VacationService.getAll(),
+        propVacationSettings ? Promise.resolve(propVacationSettings) : VacationSettingsService.get(),
+        propDrivers ? Promise.resolve(propDrivers) : DriverService.getAll(),
+        propVehicles ? Promise.resolve(propVehicles) : Promise.resolve([]),
+        NotificationService.getAll()
+      ])
+      
+      setVacationRequests(requests)
+      setVacationSettings(settings)
+      setDrivers(driversData)
+      setVehicles(vehiclesData)
+      setVacationNotifications(notifications)
+      calculateVacationStats(requests, driversData, settings)
+    } catch (err) {
+      console.error('Failed to load vacation data:', err)
+      setError('休暇データの読み込みに失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateVacationStats = (requests: VacationRequest[], driversData: Driver[] = drivers, settings: VacationSettings | null = vacationSettings) => {
+    // 月別統計の計算ロジック
+    const statsMap = new Map<string, MonthlyVacationStats>()
+    
+    requests.forEach(request => {
+      const key = `${request.driverId}_${request.date.getFullYear()}_${request.date.getMonth() + 1}`
+      
+      if (!statsMap.has(key)) {
+        const driver = driversData.find(d => d.id === request.driverId)
+        if (driver && settings) {
+          statsMap.set(key, {
+            driverId: request.driverId,
+            driverName: request.driverName,
+            team: request.team,
+            employeeId: request.employeeId,
+            year: request.date.getFullYear(),
+            month: request.date.getMonth() + 1,
+            totalOffDays: 0,
+            requiredMinimumDays: settings.minimumOffDaysPerMonth,
+            remainingRequiredDays: settings.minimumOffDaysPerMonth,
+            maxAllowedDays: settings.maximumOffDaysPerMonth
+          })
+        }
+      }
+      
+      const stat = statsMap.get(key)
+      if (stat && request.isOff) {
+        stat.totalOffDays += 1
+        stat.remainingRequiredDays = Math.max(0, stat.requiredMinimumDays - stat.totalOffDays)
+      }
+    })
+    
+    setVacationStats(Array.from(statsMap.values()))
+  }
   
 
   // ソート用のstate
@@ -91,6 +159,8 @@ export default function VacationManagement({
 
   // 指定日付とチームに対する休暇上限を取得する関数
   const getVacationLimitForDate = (date: Date, team: string): number => {
+    if (!vacationSettings) return 3 // デフォルト値
+    
     const dateString = date.toISOString().split('T')[0] // YYYY-MM-DD形式
     const month = date.getMonth() + 1 // 1-12
     const weekday = date.getDay() // 0-6（日曜日=0）
@@ -155,7 +225,7 @@ export default function VacationManagement({
           )
           
           const totalOffDays = monthVacations.length
-          const remainingRequiredDays = Math.max(0, vacationSettings.minimumOffDaysPerMonth - totalOffDays)
+          const remainingRequiredDays = Math.max(0, (vacationSettings?.minimumOffDaysPerMonth || 0) - totalOffDays)
           
           newStats.push({
             driverId: driver.id,
@@ -165,14 +235,14 @@ export default function VacationManagement({
             year,
             month,
             totalOffDays,
-            requiredMinimumDays: vacationSettings.minimumOffDaysPerMonth,
+            requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
             remainingRequiredDays,
-            maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
+            maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
           })
         })
       })
       
-      onVacationStatsChange(newStats)
+      setVacationStats(newStats)
     }
 
     // 特定の月の統計データを生成する関数
@@ -201,7 +271,7 @@ export default function VacationManagement({
         )
         
         const totalOffDays = monthVacations.length
-        const remainingRequiredDays = Math.max(0, vacationSettings.minimumOffDaysPerMonth - totalOffDays)
+        const remainingRequiredDays = Math.max(0, (vacationSettings?.minimumOffDaysPerMonth || 0) - totalOffDays)
         
         monthStats.push({
           driverId: driver.id,
@@ -211,14 +281,14 @@ export default function VacationManagement({
           year,
           month,
           totalOffDays,
-          requiredMinimumDays: vacationSettings.minimumOffDaysPerMonth,
+          requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
           remainingRequiredDays,
-          maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
+          maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
         })
       })
       
       // 既存の統計データと新しい月の統計データを結合
-      onVacationStatsChange([...existingStats, ...monthStats])
+      setVacationStats([...existingStats, ...monthStats])
     }
 
     // 1年以上前の休暇データを自動削除
@@ -232,7 +302,7 @@ export default function VacationManagement({
       
       if (filteredRequests.length !== vacationRequests.length) {
         const deletedCount = vacationRequests.length - filteredRequests.length
-        onVacationRequestsChange(filteredRequests)
+        setVacationRequests(filteredRequests)
         console.log(`古い休暇データを自動削除しました: ${deletedCount}件`)
       }
     }
@@ -276,7 +346,7 @@ export default function VacationManagement({
       if (defaultRequests.length > 0) {
         // useEffectの外でsetTimeoutを使用してstate更新を遅延実行
         setTimeout(() => {
-          onVacationRequestsChange([...vacationRequests, ...defaultRequests])
+          setVacationRequests([...vacationRequests, ...defaultRequests])
         }, 0)
       }
     }
@@ -286,7 +356,7 @@ export default function VacationManagement({
       cleanupOldVacationData()
       initializeDefaultWorkStatus()
     }
-  }, [drivers, vacationRequests, vacationSettings, onVacationStatsChange, onVacationRequestsChange])
+  }, [drivers, vacationRequests, vacationSettings, setVacationStats, setVacationRequests])
 
   // 月25日に未達成ドライバーに通知
   useEffect(() => {
@@ -314,13 +384,13 @@ export default function VacationManagement({
             priority: 'high'
           }
           
-          onVacationNotificationsChange([...vacationNotifications, notification])
+          setVacationNotifications([...vacationNotifications, notification])
         })
       }
     }
     
     checkAndSendNotifications()
-  }, [vacationStats, vacationNotifications, onVacationNotificationsChange])
+  }, [vacationStats, vacationNotifications, setVacationNotifications])
 
   // 統計タブの月選択時に該当月の統計データを生成
   useEffect(() => {
@@ -355,7 +425,7 @@ export default function VacationManagement({
           )
           
           const totalOffDays = monthVacations.length
-          const remainingRequiredDays = Math.max(0, vacationSettings.minimumOffDaysPerMonth - totalOffDays)
+          const remainingRequiredDays = Math.max(0, (vacationSettings?.minimumOffDaysPerMonth || 0) - totalOffDays)
           
           monthStats.push({
             driverId: driver.id,
@@ -365,17 +435,17 @@ export default function VacationManagement({
             year,
             month,
             totalOffDays,
-            requiredMinimumDays: vacationSettings.minimumOffDaysPerMonth,
+            requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
             remainingRequiredDays,
-            maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
+            maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
           })
         })
         
         // 既存の統計データと新しい月の統計データを結合
-        onVacationStatsChange([...existingStats, ...monthStats])
+        setVacationStats([...existingStats, ...monthStats])
       }
     }
-  }, [statsMonth, currentView, drivers, vacationRequests, vacationSettings, vacationStats, onVacationStatsChange])
+  }, [statsMonth, currentView, drivers, vacationRequests, vacationSettings, vacationStats, setVacationStats])
 
   // 統計情報を計算（統計タブ用の月を使用）
   const currentMonth = format(currentView === 'stats' ? statsMonth : calendarDate, 'yyyy-MM')
@@ -418,10 +488,10 @@ export default function VacationManagement({
       
       // レンダリング外でstate更新を実行
       setTimeout(() => {
-        onVacationRequestsChange([...vacationRequests, ...newRequests])
+        setVacationRequests([...vacationRequests, ...newRequests])
       }, 0)
     }
-  }, [drivers, vacationRequests, onVacationRequestsChange])
+  }, [drivers, vacationRequests, setVacationRequests])
 
   // カレンダーの日付情報を生成（6週間分の完全なカレンダーグリッド）
   const generateCalendarDays = () => {
@@ -517,7 +587,38 @@ export default function VacationManagement({
 
 
   // 勤務状態登録処理（出勤・休暇・夜勤）
-  const handleVacationSubmit = (e: React.FormEvent) => {
+  // 条件分岐で表示内容を決定
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">読み込み中...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-red-600">{error}</div>
+        <button 
+          onClick={loadVacationData}
+          className="ml-4 btn-primary"
+        >
+          再試行
+        </button>
+      </div>
+    )
+  }
+
+  if (!vacationSettings) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">設定を読み込み中...</div>
+      </div>
+    )
+  }
+
+  const handleVacationSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!selectedDate || !selectedDriverId) {
@@ -525,79 +626,86 @@ export default function VacationManagement({
       return
     }
 
-    // selectedDriverIdが文字列の場合と数値の場合の両方に対応
-    let driverIdNumber: number
-    if (typeof selectedDriverId === 'string') {
-      driverIdNumber = parseInt(selectedDriverId)
-      if (isNaN(driverIdNumber)) {
-        alert(`無効なドライバーIDです: "${selectedDriverId}"`)
+    try {
+      // selectedDriverIdが文字列の場合と数値の場合の両方に対応
+      let driverIdNumber: number
+      if (typeof selectedDriverId === 'string') {
+        driverIdNumber = parseInt(selectedDriverId)
+        if (isNaN(driverIdNumber)) {
+          alert(`無効なドライバーIDです: "${selectedDriverId}"`)
+          return
+        }
+      } else {
+        driverIdNumber = selectedDriverId
+      }
+
+      const driver = drivers.find(d => d.id === driverIdNumber)
+      if (!driver) {
+        alert(`ドライバーが見つかりません。\n選択されたID: ${driverIdNumber}\n利用可能なドライバー: ${drivers.map(d => `${d.name}(ID:${d.id})`).join(', ')}`)
         return
       }
-    } else {
-      driverIdNumber = selectedDriverId
-    }
 
-    const driver = drivers.find(d => d.id === driverIdNumber)
-    if (!driver) {
-      alert(`ドライバーが見つかりません。\n選択されたID: ${driverIdNumber}\n利用可能なドライバー: ${drivers.map(d => `${d.name}(ID:${d.id})`).join(', ')}`)
-      return
-    }
-
-    // 既存の勤務状態設定があるかチェック
-    const existingRequest = vacationRequests.find(req =>
-      req.driverId === driver.id && isSameDay(req.date, selectedDate)
-    )
-
-    // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
-    if (selectedWorkStatus === 'day_off') {
-      const existingVacations = getExistingVacations()
-      const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
-      
-      // 新しい統一設定から上限を取得
-      const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
-      
-      if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
-        alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
-        return
-      }
-    }
-
-    const newRequest: VacationRequest = {
-      id: existingRequest ? existingRequest.id : Date.now(),
-      driverId: driver.id,
-      driverName: driver.name,
-      team: driver.team,
-      employeeId: driver.employeeId,
-      date: selectedDate,
-      workStatus: selectedWorkStatus,
-      isOff: selectedWorkStatus === 'day_off',
-      type: selectedWorkStatus,
-      reason: '', // 理由は不要
-      status: 'approved', // 承認機能なしなので即承認
-      requestDate: new Date(),
-      isExternalDriver: driver.employeeId.startsWith('E')
-    }
-
-    let updatedRequests: VacationRequest[]
-    if (existingRequest) {
-      // 既存の設定を更新
-      updatedRequests = vacationRequests.map(req => 
-        req.id === existingRequest.id ? newRequest : req
+      // 既存の勤務状態設定があるかチェック
+      const existingRequest = vacationRequests.find(req =>
+        req.driverId === driver.id && isSameDay(req.date, selectedDate)
       )
-    } else {
-      // 新規追加
-      updatedRequests = [...vacationRequests, newRequest]
-    }
 
-    onVacationRequestsChange(updatedRequests)
-    
-    // 統計を更新
-    updateMonthlyStats(driver.id, selectedDate, updatedRequests)
-    
-    setShowVacationForm(false)
-    setSelectedDate(null)
-    setSelectedDriverId('')
-    setSelectedWorkStatus('day_off')
+      // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
+      if (selectedWorkStatus === 'day_off') {
+        const existingVacations = getExistingVacations()
+        const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
+        
+        // 新しい統一設定から上限を取得
+        const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
+        
+        if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
+          alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
+          return
+        }
+      }
+
+      const requestData = {
+        driverId: driver.id,
+        driverName: driver.name,
+        team: driver.team,
+        employeeId: driver.employeeId,
+        date: selectedDate,
+        workStatus: selectedWorkStatus,
+        isOff: selectedWorkStatus === 'day_off',
+        type: selectedWorkStatus,
+        reason: '', // 理由は不要
+        status: 'approved' as const, // 承認機能なしなので即承認
+        requestDate: new Date(),
+        isExternalDriver: driver.employeeId.startsWith('E')
+      }
+
+      let savedRequest: VacationRequest
+      if (existingRequest) {
+        // 既存の設定を更新
+        savedRequest = await VacationService.update(existingRequest.id, requestData)
+        setVacationRequests(vacationRequests.map(req => 
+          req.id === existingRequest.id ? savedRequest : req
+        ))
+      } else {
+        // 新規追加
+        savedRequest = await VacationService.create(requestData)
+        setVacationRequests([...vacationRequests, savedRequest])
+      }
+      
+      // 統計を更新
+      const updatedRequests = existingRequest 
+        ? vacationRequests.map(req => req.id === existingRequest.id ? savedRequest : req)
+        : [...vacationRequests, savedRequest]
+      calculateVacationStats(updatedRequests)
+      
+      setShowVacationForm(false)
+      setSelectedDate(null)
+      setSelectedDriverId('')
+      setSelectedWorkStatus('day_off')
+    } catch (err) {
+      console.error('Failed to save vacation request:', err)
+      alert('休暇申請の保存に失敗しました')
+    }
   }
 
   // 祝日チーム一括設定処理
@@ -645,7 +753,7 @@ export default function VacationManagement({
       updatedRequests.push(newRequest)
     })
 
-    onVacationRequestsChange(updatedRequests)
+    setVacationRequests(updatedRequests)
 
     // チームドライバーの統計を更新
     teamDrivers.forEach(driver => {
@@ -688,7 +796,7 @@ export default function VacationManagement({
       updatedRequests.push(newRequest)
     })
 
-    onVacationRequestsChange(updatedRequests)
+    setVacationRequests(updatedRequests)
 
     // 全ドライバーの統計を更新
     drivers.forEach(driver => {
@@ -706,7 +814,7 @@ export default function VacationManagement({
     if (!vacationToDelete) return
 
     const updatedRequests = vacationRequests.filter(req => req.id !== vacationId)
-    onVacationRequestsChange(updatedRequests)
+    setVacationRequests(updatedRequests)
     
     // 統計を更新
     updateMonthlyStats(vacationToDelete.driverId, vacationToDelete.date, updatedRequests)
@@ -730,7 +838,7 @@ export default function VacationManagement({
     )
 
     const totalOffDays = monthVacations.length
-    const remainingRequiredDays = Math.max(0, vacationSettings.minimumOffDaysPerMonth - totalOffDays)
+    const remainingRequiredDays = Math.max(0, (vacationSettings?.minimumOffDaysPerMonth || 0) - totalOffDays)
 
     const driver = drivers.find(d => d.id === driverId)
     if (!driver) return
@@ -743,17 +851,17 @@ export default function VacationManagement({
       year,
       month,
       totalOffDays,
-      requiredMinimumDays: vacationSettings.minimumOffDaysPerMonth,
+      requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
       remainingRequiredDays,
-      maxAllowedDays: vacationSettings.maximumOffDaysPerMonth
+      maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
     }
 
     if (existingStatIndex >= 0) {
       const updatedStats = [...vacationStats]
       updatedStats[existingStatIndex] = newStat
-      onVacationStatsChange(updatedStats)
+      setVacationStats(updatedStats)
     } else {
-      onVacationStatsChange([...vacationStats, newStat])
+      setVacationStats([...vacationStats, newStat])
     }
   }
 

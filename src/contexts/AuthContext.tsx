@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 // ユーザー情報の型定義
 interface UserProfile {
@@ -8,8 +9,9 @@ interface UserProfile {
   employeeId: string
   displayName: string
   role: 'admin' | 'driver'
+  team: string
   createdAt: Date
-  lastLogin: Date
+  lastLogin: Date | null
 }
 
 // 認証コンテキストの型定義
@@ -23,50 +25,6 @@ interface AuthContextType {
   isAdmin: boolean
   isDriver: boolean
 }
-
-// デモ用のユーザーデータ
-const DEMO_USERS = [
-  {
-    uid: 'admin-1',
-    employeeId: 'ADMIN001',
-    displayName: '管理者',
-    role: 'admin' as const,
-    createdAt: new Date(),
-    lastLogin: new Date(),
-  },
-  {
-    uid: 'driver-1',
-    employeeId: 'B001',
-    displayName: '運転手1',
-    role: 'driver' as const,
-    createdAt: new Date(),
-    lastLogin: new Date(),
-  },
-  {
-    uid: 'driver-2',
-    employeeId: 'C001',
-    displayName: '運転手2',
-    role: 'driver' as const,
-    createdAt: new Date(),
-    lastLogin: new Date(),
-  },
-  {
-    uid: 'driver-3',
-    employeeId: 'B002',
-    displayName: '運転手3',
-    role: 'driver' as const,
-    createdAt: new Date(),
-    lastLogin: new Date(),
-  },
-  {
-    uid: 'driver-4',
-    employeeId: 'C002',
-    displayName: '運転手4',
-    role: 'driver' as const,
-    createdAt: new Date(),
-    lastLogin: new Date(),
-  }
-]
 
 // 認証コンテキストの作成
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -97,33 +55,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [])
 
-  // ログイン機能
+  // ログイン機能（Supabaseのusers_profileテーブルを使用）
   const signIn = async (employeeId: string, password: string) => {
     try {
-      // 社員番号の存在チェック（パスワードは任意の文字列で認証）
-      const user = DEMO_USERS.find(u => u.employeeId === employeeId)
-      
-      if (!user) {
-        throw new Error('社員番号が見つかりません')
-      }
-
       // パスワードが空でない限り認証成功
       if (!password || password.trim() === '') {
         throw new Error('パスワードを入力してください')
       }
 
-      const userProfile: UserProfile = {
-        uid: user.uid,
-        employeeId: user.employeeId,
-        displayName: user.displayName,
-        role: user.role,
-        createdAt: user.createdAt,
-        lastLogin: new Date(),
+      // Supabaseのusers_profileテーブルから社員番号で検索
+      const { data: userProfile, error } = await supabase
+        .from('users_profile')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .single()
+
+      if (error || !userProfile) {
+        throw new Error('社員番号が見つかりません')
       }
 
-      setUser(userProfile)
+      const userData: UserProfile = {
+        uid: userProfile.id,
+        employeeId: userProfile.employee_id,
+        displayName: userProfile.display_name,
+        role: userProfile.role as 'admin' | 'driver',
+        team: userProfile.team,
+        createdAt: new Date(userProfile.created_at),
+        lastLogin: userProfile.last_login ? new Date(userProfile.last_login) : null,
+      }
+
+      // 最終ログイン時刻を更新
+      await supabase
+        .from('users_profile')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userProfile.id)
+
+      setUser(userData)
       if (typeof window !== 'undefined') {
-        localStorage.setItem('currentUser', JSON.stringify(userProfile))
+        localStorage.setItem('currentUser', JSON.stringify(userData))
       }
       
     } catch (error: any) {
@@ -131,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // ユーザー登録機能（デモ用）
+  // ユーザー登録機能（Supabase使用）
   const signUp = async (
     employeeId: string, 
     password: string, 
@@ -140,19 +109,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ) => {
     try {
       // 社員番号の重複チェック
-      const existingUser = DEMO_USERS.find(u => u.employeeId === employeeId)
+      const { data: existingUser } = await supabase
+        .from('users_profile')
+        .select('employee_id')
+        .eq('employee_id', employeeId)
+        .single()
+
       if (existingUser) {
         throw new Error('この社員番号は既に登録されています')
       }
 
       // 新しいユーザーを作成
+      const { data: newUserProfile, error } = await supabase
+        .from('users_profile')
+        .insert({
+          id: crypto.randomUUID(),
+          employee_id: employeeId,
+          display_name: displayName,
+          role: role,
+          team: role === 'admin' ? '管理部' : '未分類',
+        })
+        .select()
+        .single()
+
+      if (error) {
+        throw new Error(`ユーザー登録に失敗しました: ${error.message}`)
+      }
+
       const newUser: UserProfile = {
-        uid: `user-${Date.now()}`,
-        employeeId,
-        displayName,
-        role,
-        createdAt: new Date(),
-        lastLogin: new Date(),
+        uid: newUserProfile.id,
+        employeeId: newUserProfile.employee_id,
+        displayName: newUserProfile.display_name,
+        role: newUserProfile.role as 'admin' | 'driver',
+        team: newUserProfile.team,
+        createdAt: new Date(newUserProfile.created_at),
+        lastLogin: newUserProfile.last_login ? new Date(newUserProfile.last_login) : null,
       }
 
       setUser(newUser)

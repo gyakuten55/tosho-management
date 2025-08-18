@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Users, 
   Plus, 
@@ -24,162 +24,196 @@ import { ja } from 'date-fns/locale'
 import { Driver, Vehicle } from '@/types'
 import DriverForm from './DriverForm'
 import DriverDetail from './DriverDetail'
+import { DriverService } from '@/services/driverService'
+import { VehicleService } from '@/services/vehicleService'
 
-interface DriverManagementProps {
-  drivers: Driver[]
-  vehicles: Vehicle[]
-  onDriversChange: (drivers: Driver[]) => void
-  onVehiclesChange: (vehicles: Vehicle[]) => void
-}
+interface DriverManagementProps {}
 
-export default function DriverManagement({ 
-  drivers, 
-  vehicles, 
-  onDriversChange, 
-  onVehiclesChange 
-}: DriverManagementProps) {
+export default function DriverManagement({}: DriverManagementProps) {
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<'list' | 'form' | 'detail'>('list')
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterTeam, setFilterTeam] = useState<string>('all')
 
-  const getStatusColor = (status: string, isNightShift?: boolean) => {
-    if (isNightShift) {
-      return 'bg-green-200 text-green-900 border-2 border-green-400'
-    }
-    switch (status) {
-      case 'working':
-        return 'bg-green-100 text-green-800'
-      case 'vacation':
-        return 'bg-blue-100 text-blue-800'
-      case 'sick':
-        return 'bg-red-100 text-red-800'
-      case 'available':
-        return 'bg-gray-100 text-gray-800'
-      case 'night_shift':
-        return 'bg-green-200 text-green-900 border-2 border-green-400'
-      default:
-        return 'bg-gray-100 text-gray-800'
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const [driversData, vehiclesData] = await Promise.all([
+        DriverService.getAll(),
+        VehicleService.getAll()
+      ])
+      
+      setDrivers(driversData)
+      setVehicles(vehiclesData)
+    } catch (err) {
+      console.error('Failed to load data:', err)
+      setError('データの読み込みに失敗しました')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const getStatusText = (status: string, isNightShift?: boolean) => {
-    if (isNightShift) {
-      return '夜勤中'
-    }
-    switch (status) {
-      case 'working':
-        return '出勤中'
-      case 'vacation':
-        return '休暇中'
-      case 'sick':
-        return '病気休暇'
-      case 'available':
-        return '待機中'
-      case 'night_shift':
-        return '夜勤中'
-      default:
-        return '不明'
+
+
+  const toggleNightShift = async (driverId: number) => {
+    try {
+      const driver = drivers.find(d => d.id === driverId)
+      if (!driver) return
+      
+      const isCurrentlyNightShift = driver.isNightShift
+      const updatedDriver = await DriverService.update(driverId, {
+        isNightShift: !isCurrentlyNightShift,
+        status: (!isCurrentlyNightShift ? 'night_shift' : 'working') as Driver['status']
+      })
+      
+      setDrivers(drivers.map(d => d.id === driverId ? updatedDriver : d))
+    } catch (err) {
+      console.error('Failed to toggle night shift:', err)
+      alert('夕勤状態の切替えに失敗しました')
     }
   }
 
-  const toggleNightShift = (driverId: number) => {
-    const updatedDrivers = drivers.map(driver => {
-      if (driver.id === driverId) {
-        const isCurrentlyNightShift = driver.isNightShift
-        return {
-          ...driver,
-          isNightShift: !isCurrentlyNightShift,
-          status: (!isCurrentlyNightShift ? 'night_shift' : 'working') as Driver['status']
-        }
-      }
-      return driver
-    })
-    onDriversChange(updatedDrivers)
-  }
-
-  const handleDelete = (driverId: number) => {
+  const handleDelete = async (driverId: number) => {
     if (confirm('このドライバーを削除してもよろしいですか？')) {
-      const driverToDelete = drivers.find(d => d.id === driverId)
-      
-      // 割り当てられた車両があれば解除
-      if (driverToDelete?.assignedVehicle) {
-        const updatedVehicles = vehicles.map(v => 
-          v.plateNumber === driverToDelete.assignedVehicle 
-            ? { ...v, driver: undefined }
-            : v
-        )
-        onVehiclesChange(updatedVehicles)
+      try {
+        const driverToDelete = drivers.find(d => d.id === driverId)
+        
+        // 割り当てられた車両があれば解除
+        if (driverToDelete?.assignedVehicle) {
+          const vehicleToUpdate = vehicles.find(v => v.plateNumber === driverToDelete.assignedVehicle)
+          if (vehicleToUpdate) {
+            await VehicleService.update(vehicleToUpdate.id, { driver: undefined })
+            const updatedVehicles = vehicles.map(v => 
+              v.plateNumber === driverToDelete.assignedVehicle 
+                ? { ...v, driver: undefined }
+                : v
+            )
+            setVehicles(updatedVehicles)
+          }
+        }
+        
+        await DriverService.delete(driverId)
+        setDrivers(drivers.filter(d => d.id !== driverId))
+      } catch (err) {
+        console.error('Failed to delete driver:', err)
+        alert('ドライバーの削除に失敗しました')
       }
-      
-      onDriversChange(drivers.filter(d => d.id !== driverId))
     }
   }
 
-  const handleSave = (driverData: Partial<Driver>) => {
-    if (selectedDriver) {
-      // 編集
-      const updatedDrivers = drivers.map(d => 
-        d.id === selectedDriver.id ? { ...d, ...driverData } : d
-      )
-      onDriversChange(updatedDrivers)
-      
-      // 車両の割り当て更新
-      if (driverData.assignedVehicle !== selectedDriver.assignedVehicle) {
-        let updatedVehicles = [...vehicles]
+  const handleSave = async (driverData: Partial<Driver>) => {
+    try {
+      if (selectedDriver) {
+        // 編集
+        const updatedDriver = await DriverService.update(selectedDriver.id, driverData)
+        setDrivers(drivers.map(d => d.id === selectedDriver.id ? updatedDriver : d))
         
-        // 前の車両から割り当て解除
-        if (selectedDriver.assignedVehicle) {
-          updatedVehicles = updatedVehicles.map(v => 
-            v.plateNumber === selectedDriver.assignedVehicle 
-              ? { ...v, driver: undefined }
-              : v
-          )
+        // 車両の割り当て更新
+        if (driverData.assignedVehicle !== selectedDriver.assignedVehicle) {
+          let updatedVehicles = [...vehicles]
+          
+          // 前の車両から割り当て解除
+          if (selectedDriver.assignedVehicle) {
+            const oldVehicle = vehicles.find(v => v.plateNumber === selectedDriver.assignedVehicle)
+            if (oldVehicle) {
+              await VehicleService.update(oldVehicle.id, { driver: undefined })
+            }
+            updatedVehicles = updatedVehicles.map(v => 
+              v.plateNumber === selectedDriver.assignedVehicle 
+                ? { ...v, driver: undefined }
+                : v
+            )
+          }
+          
+          // 新しい車両に割り当て
+          if (driverData.assignedVehicle) {
+            const newVehicle = vehicles.find(v => v.plateNumber === driverData.assignedVehicle)
+            if (newVehicle) {
+              await VehicleService.update(newVehicle.id, { driver: `${driverData.name || selectedDriver.name}` })
+            }
+            updatedVehicles = updatedVehicles.map(v => 
+              v.plateNumber === driverData.assignedVehicle 
+                ? { ...v, driver: `${driverData.name || selectedDriver.name}` }
+                : v
+            )
+          }
+          
+          setVehicles(updatedVehicles)
         }
+      } else {
+        // 新規追加
+        const newDriver = await DriverService.create(driverData as Omit<Driver, 'id'>)
+        setDrivers([...drivers, newDriver])
         
-        // 新しい車両に割り当て
+        // 車両割り当て
         if (driverData.assignedVehicle) {
-          updatedVehicles = updatedVehicles.map(v => 
+          const vehicle = vehicles.find(v => v.plateNumber === driverData.assignedVehicle)
+          if (vehicle) {
+            await VehicleService.update(vehicle.id, { driver: driverData.name })
+          }
+          const updatedVehicles = vehicles.map(v => 
             v.plateNumber === driverData.assignedVehicle 
-              ? { ...v, driver: `${driverData.name || selectedDriver.name}` }
+              ? { ...v, driver: driverData.name }
               : v
           )
+          setVehicles(updatedVehicles)
         }
-        
-        onVehiclesChange(updatedVehicles)
       }
-    } else {
-      // 新規追加
-      const newDriver: Driver = {
-        id: drivers.length > 0 ? Math.max(...drivers.map(d => d.id)) + 1 : 1,
-        ...driverData
-      } as Driver
-      onDriversChange([...drivers, newDriver])
-      
-      // 車両割り当て
-      if (driverData.assignedVehicle) {
-        const updatedVehicles = vehicles.map(v => 
-          v.plateNumber === driverData.assignedVehicle 
-            ? { ...v, driver: driverData.name }
-            : v
-        )
-        onVehiclesChange(updatedVehicles)
-      }
+      setCurrentView('list')
+      setSelectedDriver(null)
+    } catch (err) {
+      console.error('Failed to save driver:', err)
+      alert('ドライバーの保存に失敗しました')
     }
-    setCurrentView('list')
-    setSelectedDriver(null)
   }
 
   const filteredDrivers = drivers.filter(driver => {
     const matchesSearch = driver.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          driver.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === 'all' || driver.status === filterStatus
+    
+    // 祝日チームでのフィルタリング
+    const matchesHolidayTeam = filterStatus === 'all' || 
+      (filterStatus === 'none' ? (!driver.holidayTeams || driver.holidayTeams.length === 0) :
+       (driver.holidayTeams && driver.holidayTeams.includes(filterStatus)))
+    
     const matchesTeam = filterTeam === 'all' || driver.team === filterTeam
     
-    return matchesSearch && matchesStatus && matchesTeam
+    return matchesSearch && matchesHolidayTeam && matchesTeam
   })
 
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">読み込み中...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-red-600">{error}</div>
+        <button 
+          onClick={loadData}
+          className="ml-4 btn-primary"
+        >
+          再試行
+        </button>
+      </div>
+    )
+  }
 
   if (currentView === 'form') {
     return (
@@ -201,7 +235,7 @@ export default function DriverManagement({
             }
             return vehicle
           })
-          onVehiclesChange(updatedVehicles)
+          setVehicles(updatedVehicles)
         }}
       />
     )
@@ -264,11 +298,15 @@ export default function DriverManagement({
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              <option value="all">すべてのステータス</option>
-              <option value="working">出勤中</option>
-              <option value="vacation">休暇中</option>
-              <option value="sick">病気休暇</option>
-              <option value="available">待機中</option>
+              <option value="all">すべての祝日チーム</option>
+              <option value="Aチーム">Aチーム</option>
+              <option value="Bチーム">Bチーム</option>
+              <option value="Cチーム">Cチーム</option>
+              <option value="Dチーム">Dチーム</option>
+              <option value="Eチーム">Eチーム</option>
+              <option value="Fチーム">Fチーム</option>
+              <option value="Gチーム">Gチーム</option>
+              <option value="none">祝日チーム未設定</option>
             </select>
             
             <select
@@ -305,7 +343,7 @@ export default function DriverManagement({
                   チーム
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ステータス
+                  祝日チーム
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   割り当て車両
@@ -339,13 +377,25 @@ export default function DriverManagement({
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(driver.status, driver.isNightShift)}`}>
-                      {getStatusText(driver.status, driver.isNightShift)}
-                    </span>
+                    {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') ? (
+                      driver.holidayTeams && driver.holidayTeams.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {driver.holidayTeams.map((team: string) => (
+                            <span key={team} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              {team}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">未設定</span>
+                      )
+                    ) : (
+                      <span className="text-xs text-gray-500">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <div className="space-y-1">
-                      {driver.team === 'B' ? (
+                      {driver.team === 'Bチーム' ? (
                         <div className="flex items-center">
                           <Car className="h-4 w-4 text-orange-400 mr-1" />
                           <span className="text-orange-600 font-medium">都度割り当て</span>
@@ -365,18 +415,6 @@ export default function DriverManagement({
                         </div>
                       ) : (
                         <span className="text-gray-500">未割当</span>
-                      )}
-                      
-                      {/* 祝日チーム表示 */}
-                      {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') && (driver as any).holidayTeams && (driver as any).holidayTeams.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          <span className="text-xs text-gray-500">祝日:</span>
-                          {(driver as any).holidayTeams.map((team: string) => (
-                            <span key={team} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                              {team}
-                            </span>
-                          ))}
-                        </div>
                       )}
                     </div>
                   </td>

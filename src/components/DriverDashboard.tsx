@@ -17,106 +17,134 @@ import {
   RefreshCw,
   Home
 } from 'lucide-react'
-import { User as UserType, Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats } from '@/types'
+import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import DriverVacationRequest from './DriverVacationRequest'
 import DriverVehicleInfo from './DriverVehicleInfo'
-import { initialVacationRequests } from '@/data/sampleData'
+import { VacationService } from '@/services/vacationService'
+import { VehicleService } from '@/services/vehicleService'
+import { DriverService } from '@/services/driverService'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface DriverDashboardProps {
-  currentUser: UserType
   onLogout: () => void
 }
 
-export default function DriverDashboard({ currentUser, onLogout }: DriverDashboardProps) {
+export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
+  const { user } = useAuth()
   const [currentView, setCurrentView] = useState('dashboard')
   const [assignedVehicle, setAssignedVehicle] = useState<Vehicle | null>(null)
   const [notifications, setNotifications] = useState<DriverNotification[]>([])
-  const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>(initialVacationRequests)
+  const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([])
   const [upcomingInspections, setUpcomingInspections] = useState<InspectionSchedule[]>([])
   const [monthlyVacationStats, setMonthlyVacationStats] = useState<MonthlyVacationStats | null>(null)
+  const [driverInfo, setDriverInfo] = useState<any>(null)
 
-  // サンプルデータの初期化
+  // データの初期化
   useEffect(() => {
-    // 割り当て車両（サンプル）
-    setAssignedVehicle({
-      id: 1,
-      plateNumber: '品川 501 あ 1234',
-      model: 'いすゞエルフ',
-      year: 2022,
-      driver: currentUser.name,
-      team: currentUser.team,
-      status: 'normal',
-      inspectionDate: new Date('2025-02-15'),
-      garage: '本社車庫',
-      notes: '定期点検予定あり'
-    })
+    const initializeData = async () => {
+      if (!user) return
 
-    // 通知（サンプル）
-    setNotifications([
-      {
-        id: 1,
-        driverId: currentUser.id,
-        type: 'vehicle_inspection',
-        title: '車両点検のお知らせ',
-        message: '2月15日に車両点検が予定されています。',
-        priority: 'medium',
-        isRead: false,
-        createdAt: new Date(),
-        scheduledFor: new Date('2025-02-15'),
-        actionRequired: true
+      try {
+        // driversテーブルから運転手情報を取得
+        const drivers = await DriverService.getAll()
+        const currentDriver = drivers.find(d => d.employeeId === user.employeeId)
+        setDriverInfo(currentDriver)
+
+        if (currentDriver) {
+          // 休暇申請データを取得
+          const requests = await VacationService.getByDriverId(currentDriver.id)
+          setVacationRequests(requests)
+
+          // 割り当て車両を検索（運転手名で検索）
+          const vehicles = await VehicleService.getAll()
+          const userVehicle = vehicles.find(v => v.driver === currentDriver.name)
+          if (userVehicle) {
+            setAssignedVehicle(userVehicle)
+          }
+
+          // 通知（サンプル）
+          setNotifications([
+            {
+              id: 1,
+              driverId: currentDriver.id,
+              type: 'vehicle_inspection',
+              title: '車両点検のお知らせ',
+              message: '2月15日に車両点検が予定されています。',
+              priority: 'medium',
+              isRead: false,
+              createdAt: new Date(),
+              scheduledFor: new Date('2025-02-15'),
+              actionRequired: true
+            }
+          ])
+
+          // 点検予定（サンプル）
+          if (userVehicle) {
+            setUpcomingInspections([
+              {
+                id: userVehicle.id,
+                vehicleId: userVehicle.id,
+                vehicleNumber: userVehicle.plateNumber,
+                type: '定期点検',
+                date: getNextInspectionDate(userVehicle.inspectionDate),
+                status: 'warning',
+                driver: user?.displayName || '',
+                team: user?.team || ''
+              }
+            ])
+          }
+
+          // 月間休暇統計の生成
+          const currentMonth = new Date().getMonth() + 1
+          const currentYear = new Date().getFullYear()
+          const userVacations = requests.filter(req => 
+            req.driverId === currentDriver.id &&
+            req.date.getFullYear() === currentYear &&
+            req.date.getMonth() + 1 === currentMonth &&
+            req.isOff
+          )
+
+          setMonthlyVacationStats({
+            driverId: currentDriver.id,
+            driverName: currentDriver.name,
+            team: currentDriver.team,
+            employeeId: currentDriver.employeeId,
+            year: currentYear,
+            month: currentMonth,
+            totalOffDays: userVacations.length,
+            requiredMinimumDays: 9,
+            remainingRequiredDays: Math.max(0, 9 - userVacations.length),
+            maxAllowedDays: 12
+          })
+        }
+      } catch (error) {
+        console.error('Failed to load driver data:', error)
       }
-    ])
-
-    // 点検予定（サンプル）
-    setUpcomingInspections([
-      {
-        id: 1,
-        vehicleId: 1,
-        vehicleNumber: '品川 501 あ 1234',
-        type: '定期点検',
-        date: new Date('2025-02-15'),
-        status: 'warning',
-        driver: currentUser.name,
-        team: currentUser.team
-      }
-    ])
-
-    // 月間休暇統計の生成
-    const currentMonth = new Date().getMonth() + 1
-    const currentYear = new Date().getFullYear()
-    const userVacations = vacationRequests.filter(req => 
-      req.driverId === currentUser.id &&
-      req.date.getFullYear() === currentYear &&
-      req.date.getMonth() + 1 === currentMonth &&
-      req.isOff
-    )
-
-    setMonthlyVacationStats({
-      driverId: currentUser.id,
-      driverName: currentUser.name,
-      team: currentUser.team,
-      employeeId: currentUser.employeeId,
-      month: currentMonth,
-      year: currentYear,
-      totalOffDays: userVacations.length,
-      requiredMinimumDays: 9,
-      remainingRequiredDays: Math.max(0, 9 - userVacations.length),
-      maxAllowedDays: 12
-    })
-  }, [currentUser, vacationRequests])
-
-  const handleVacationRequest = (request: Omit<VacationRequest, 'id' | 'requestDate'>) => {
-    const newRequest: VacationRequest = {
-      ...request,
-      id: Math.max(...vacationRequests.map(r => r.id), 0) + 1,
-      requestDate: new Date()
     }
-    setVacationRequests(prev => [...prev, newRequest])
+
+    initializeData()
+  }, [user])
+
+  const handleVacationRequest = async (request: Omit<VacationRequest, 'id' | 'requestDate'>) => {
+    try {
+      const newRequest = await VacationService.create({
+        ...request,
+        requestDate: new Date()
+      })
+      setVacationRequests(prev => [...prev, newRequest])
+    } catch (error) {
+      console.error('Failed to create vacation request:', error)
+    }
   }
 
-  const handleVacationDelete = (requestId: number) => {
-    setVacationRequests(prev => prev.filter(req => req.id !== requestId))
+  const handleVacationDelete = async (requestId: number) => {
+    try {
+      await VacationService.delete(requestId)
+      setVacationRequests(prev => prev.filter(req => req.id !== requestId))
+    } catch (error) {
+      console.error('Failed to delete vacation request:', error)
+    }
   }
 
   const formatTime = (date: Date | undefined) => {
@@ -130,8 +158,8 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">おはようございます</h1>
-          <p className="text-gray-600">{currentUser.name}さん（{currentUser.team}）</p>
-          <p className="text-sm text-gray-500">社員番号: {currentUser.employeeId}</p>
+          <p className="text-gray-600">{user?.displayName}さん（{user?.team}）</p>
+          <p className="text-sm text-gray-500">社員番号: {user?.employeeId}</p>
         </div>
         <div className="flex items-center space-x-4">
           <div className="relative">
@@ -160,7 +188,7 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
             <Car className="h-5 w-5 mr-2 text-blue-600" />
             担当車両
           </h2>
-          {currentUser.team === 'B' ? (
+          {user?.team === 'Bチーム' ? (
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
               <div className="flex items-center space-x-2 mb-3">
                 <Car className="h-5 w-5 text-orange-600" />
@@ -306,7 +334,7 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
 
   const renderVacationRequest = () => (
     <DriverVacationRequest
-      currentUser={currentUser}
+      currentUser={driverInfo}
       existingRequests={vacationRequests}
       monthlyStats={monthlyVacationStats}
       onRequestSubmit={handleVacationRequest}
@@ -372,7 +400,7 @@ export default function DriverDashboard({ currentUser, onLogout }: DriverDashboa
           </div>
 
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600">{currentUser.name}さん</span>
+            <span className="text-sm text-gray-600">{user?.displayName}さん</span>
           </div>
         </div>
       </nav>

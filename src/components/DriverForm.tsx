@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Save, X, Users, Phone, Mail, Calendar, Car, MapPin } from 'lucide-react'
 import { Driver, Vehicle } from '@/types'
+import { HolidayTeamService } from '@/services/holidayService'
 
 interface DriverFormProps {
   driver?: Driver | null
@@ -19,20 +20,38 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     team: driver?.team || 'Bチーム',
     status: driver?.status || 'available',
     assignedVehicle: driver?.assignedVehicle || '',
-    employeeId: driver?.employeeId || '', // 手動入力用に追加
-    phoneNumber: (driver as any)?.phoneNumber || '',
-    email: (driver as any)?.email || '',
-    licenseNumber: (driver as any)?.licenseNumber || '',
-    licenseExpiry: (driver as any)?.licenseExpiry || '',
-    address: (driver as any)?.address || '',
-    emergencyContact: (driver as any)?.emergencyContact || '',
-    emergencyPhone: (driver as any)?.emergencyPhone || '',
-    notes: (driver as any)?.notes || '',
-    driverType: driver ? (driver.employeeId.startsWith('E') ? 'external' : 'internal') : 'internal', // 正社員 or 外部ドライバー
-    holidayTeams: (driver as any)?.holidayTeams || [] // 祝日チーム（配送センター・外部ドライバー用）
+    employeeId: driver?.employeeId || '',
+    phone: driver?.phone || '',
+    email: driver?.email || '',
+    address: driver?.address || '',
+    emergencyContactName: driver?.emergencyContactName || '',
+    emergencyContactPhone: driver?.emergencyContactPhone || '',
+    licenseNumber: driver?.licenseNumber || '',
+    licenseClass: driver?.licenseClass || '',
+    licenseExpiryDate: driver?.licenseExpiryDate ? driver.licenseExpiryDate.toISOString().split('T')[0] : '',
+    hireDate: driver?.hireDate ? driver.hireDate.toISOString().split('T')[0] : '',
+    birthDate: driver?.birthDate ? driver.birthDate.toISOString().split('T')[0] : '',
+    notes: driver?.notes || '',
+    driverType: driver ? (driver.employeeId.startsWith('E') ? 'external' : 'internal') : 'internal',
+    isNightShift: driver?.isNightShift || false,
+    holidayTeams: driver?.holidayTeams || []
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [availableHolidayTeams, setAvailableHolidayTeams] = useState<string[]>([])
+
+  // 祝日チームデータを読み込み
+  useEffect(() => {
+    const loadHolidayTeams = async () => {
+      try {
+        const teams = await HolidayTeamService.getAll()
+        setAvailableHolidayTeams(teams.map(team => team.teamName))
+      } catch (error) {
+        console.error('Failed to load holiday teams:', error)
+      }
+    }
+    loadHolidayTeams()
+  }, [])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -59,8 +78,8 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
       }
     }
 
-    if (formData.phoneNumber && !/^[\d-+()]+$/.test(formData.phoneNumber)) {
-      newErrors.phoneNumber = '正しい電話番号を入力してください'
+    if (formData.phone && !/^[\d-+()]+$/.test(formData.phone)) {
+      newErrors.phone = '正しい電話番号を入力してください'
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -100,11 +119,26 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
       return
     }
 
-    // 手動入力された社員IDをそのまま使用
-    const saveData = {
-      ...formData,
-      // Bチームの場合は車両割り当てをクリア
-      assignedVehicle: formData.team === 'Bチーム' ? '' : formData.assignedVehicle
+    // 新しいDriver型に合わせたデータ構造で保存
+    const saveData: Partial<Driver> = {
+      name: formData.name,
+      team: formData.team,
+      status: formData.status as Driver['status'],
+      employeeId: formData.employeeId,
+      assignedVehicle: formData.team === 'Bチーム' ? '' : formData.assignedVehicle,
+      isNightShift: formData.isNightShift,
+      phone: formData.phone || undefined,
+      email: formData.email || undefined,
+      address: formData.address || undefined,
+      emergencyContactName: formData.emergencyContactName || undefined,
+      emergencyContactPhone: formData.emergencyContactPhone || undefined,
+      licenseNumber: formData.licenseNumber || undefined,
+      licenseClass: formData.licenseClass || undefined,
+      licenseExpiryDate: formData.licenseExpiryDate ? new Date(formData.licenseExpiryDate) : undefined,
+      hireDate: formData.hireDate ? new Date(formData.hireDate) : undefined,
+      birthDate: formData.birthDate ? new Date(formData.birthDate) : undefined,
+      notes: formData.notes || undefined,
+      holidayTeams: formData.holidayTeams.length > 0 ? formData.holidayTeams : undefined
     }
 
     onSave(saveData)
@@ -119,10 +153,6 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
         newData.assignedVehicle = ''
       }
 
-      // チーム変更時に祝日チームをクリア（配送センター・外部ドライバー以外）
-      if (field === 'team' && value !== '配送センターチーム' && value !== '外部ドライバー') {
-        newData.holidayTeams = []
-      }
       
       return newData
     })
@@ -157,6 +187,22 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
     }
+  }
+
+  // 祝日チーム選択のハンドラー
+  const handleHolidayTeamChange = (teamName: string, checked: boolean) => {
+    setFormData(prev => {
+      const currentTeams = prev.holidayTeams || []
+      let newTeams: string[]
+      
+      if (checked) {
+        newTeams = [...currentTeams, teamName]
+      } else {
+        newTeams = currentTeams.filter(t => t !== teamName)
+      }
+      
+      return { ...prev, holidayTeams: newTeams }
+    })
   }
 
   return (
@@ -295,35 +341,6 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               </select>
             </div>
 
-            {/* 祝日チーム選択（配送センターチーム・外部ドライバーのみ） */}
-            {(formData.team === '配送センターチーム' || formData.team === '外部ドライバー') && (
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  祝日チーム（複数選択可）
-                </label>
-                <div className="grid grid-cols-7 gap-2">
-                  {['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((team) => (
-                    <label key={team} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg cursor-pointer hover:bg-gray-100">
-                      <input
-                        type="checkbox"
-                        checked={formData.holidayTeams.includes(team)}
-                        onChange={(e) => {
-                          const updatedTeams = e.target.checked
-                            ? [...formData.holidayTeams, team]
-                            : formData.holidayTeams.filter((t: string) => t !== team)
-                          handleChange('holidayTeams', updatedTeams)
-                        }}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="text-sm font-medium">{team}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="text-sm text-gray-500 mt-2">
-                  祝日の際に所属するチームを選択してください。複数選択可能です。
-                </p>
-              </div>
-            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -385,14 +402,14 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               </label>
               <input
                 type="tel"
-                value={formData.phoneNumber}
-                onChange={(e) => handleChange('phoneNumber', e.target.value)}
+                value={formData.phone}
+                onChange={(e) => handleChange('phone', e.target.value)}
                 className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                  errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                  errors.phone ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="090-1234-5678"
               />
-              {errors.phoneNumber && <p className="text-red-500 text-sm mt-1">{errors.phoneNumber}</p>}
+              {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
             </div>
 
             <div>
@@ -430,8 +447,8 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               </label>
               <input
                 type="text"
-                value={formData.emergencyContact}
-                onChange={(e) => handleChange('emergencyContact', e.target.value)}
+                value={formData.emergencyContactName}
+                onChange={(e) => handleChange('emergencyContactName', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 placeholder="山田花子"
               />
@@ -443,8 +460,8 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               </label>
               <input
                 type="tel"
-                value={formData.emergencyPhone}
-                onChange={(e) => handleChange('emergencyPhone', e.target.value)}
+                value={formData.emergencyContactPhone}
+                onChange={(e) => handleChange('emergencyContactPhone', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 placeholder="090-1234-5678"
               />
@@ -477,17 +494,117 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
+                免許の種類
+              </label>
+              <select
+                value={formData.licenseClass}
+                onChange={(e) => handleChange('licenseClass', e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">選択してください</option>
+                <option value="普通自動車">普通自動車</option>
+                <option value="中型自動車">中型自動車</option>
+                <option value="大型自動車">大型自動車</option>
+                <option value="大型自動車・大型特殊">大型自動車・大型特殊</option>
+                <option value="けん引">けん引</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 免許証有効期限
               </label>
               <input
                 type="date"
-                value={formData.licenseExpiry}
-                onChange={(e) => handleChange('licenseExpiry', e.target.value)}
+                value={formData.licenseExpiryDate}
+                onChange={(e) => handleChange('licenseExpiryDate', e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                入社日
+              </label>
+              <input
+                type="date"
+                value={formData.hireDate}
+                onChange={(e) => handleChange('hireDate', e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                生年月日
+              </label>
+              <input
+                type="date"
+                value={formData.birthDate}
+                onChange={(e) => handleChange('birthDate', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
           </div>
         </div>
+
+        {/* 祝日チーム */}
+        {(formData.team === '配送センターチーム' || formData.team === '外部ドライバー') && (
+          <div className="card p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="h-8 w-8 bg-red-100 rounded-lg flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">祝日チーム</h3>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                祝日チーム（A〜G）
+              </label>
+              <p className="text-sm text-gray-500 mb-4">
+                配送センターチーム・外部ドライバーが祝日に所属するチームを選択してください（複数選択可）
+              </p>
+              
+              <div className="grid grid-cols-3 gap-2">
+                {availableHolidayTeams.map((teamName) => (
+                  <label key={teamName} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={formData.holidayTeams.includes(teamName)}
+                      onChange={(e) => handleHolidayTeamChange(teamName, e.target.checked)}
+                      className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{teamName}</span>
+                  </label>
+                ))}
+                
+                {availableHolidayTeams.length === 0 && (
+                  <p className="text-sm text-gray-500">祝日勤務チームがありません</p>
+                )}
+              </div>
+              
+              {formData.holidayTeams.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">選択中のチーム:</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {formData.holidayTeams.map((team) => (
+                      <span
+                        key={team}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {team}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 備考 */}
         <div className="card p-6">

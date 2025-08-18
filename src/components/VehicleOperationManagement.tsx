@@ -42,35 +42,31 @@ import {
 } from '@/types'
 import { getAllInspectionDates, getNextInspectionDate } from '@/utils/inspectionUtils'
 
-interface VehicleOperationManagementProps {
-  vehicles: Vehicle[]
-  drivers: Driver[]
-  vacationRequests: VacationRequest[]
-  vehicleAssignmentChanges: VehicleAssignmentChange[]
-  driverVehicleNotifications: DriverVehicleNotification[]
-  vehicleInoperativePeriods: VehicleInoperativePeriod[]
-  vehicleInoperativeNotifications: VehicleInoperativeNotification[]
-  onVehicleAssignmentChangesChange: (changes: VehicleAssignmentChange[]) => void
-  onDriverVehicleNotificationsChange: (notifications: DriverVehicleNotification[]) => void
-  onVehicleInoperativePeriodsChange: (periods: VehicleInoperativePeriod[]) => void
-  onVehicleInoperativeNotificationsChange: (notifications: VehicleInoperativeNotification[]) => void
-  onVehiclesChange: (vehicles: Vehicle[]) => void
-}
+import { VehicleService } from '@/services/vehicleService'
+import { DriverService } from '@/services/driverService'
+import { VacationService } from '@/services/vacationService'
+import { 
+  VehicleAssignmentChangeService,
+  VehicleInoperativePeriodService 
+} from '@/services/vehicleOperationService'
 
-export default function VehicleOperationManagement({
-  vehicles,
-  drivers,
-  vacationRequests,
-  vehicleAssignmentChanges,
-  driverVehicleNotifications,
-  vehicleInoperativePeriods,
-  vehicleInoperativeNotifications,
-  onVehicleAssignmentChangesChange,
-  onDriverVehicleNotificationsChange,
-  onVehicleInoperativePeriodsChange,
-  onVehicleInoperativeNotificationsChange,
-  onVehiclesChange
-}: VehicleOperationManagementProps) {
+interface VehicleOperationManagementProps {}
+
+export default function VehicleOperationManagement({}: VehicleOperationManagementProps) {
+  // Data states
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([])
+  const [vehicleAssignmentChanges, setVehicleAssignmentChanges] = useState<VehicleAssignmentChange[]>([])
+  const [driverVehicleNotifications, setDriverVehicleNotifications] = useState<DriverVehicleNotification[]>([])
+  const [vehicleInoperativePeriods, setVehicleInoperativePeriods] = useState<VehicleInoperativePeriod[]>([])
+  const [vehicleInoperativeNotifications, setVehicleInoperativeNotifications] = useState<VehicleInoperativeNotification[]>([])
+  
+  // Loading states
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // UI states
   const [currentView, setCurrentView] = useState('calendar')
   const [calendarDate, setCalendarDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -98,6 +94,43 @@ export default function VehicleOperationManagement({
   // 一時的車両割り当て用状態
   const [showTempAssignModal, setShowTempAssignModal] = useState(false)
   const [tempAssignDriverId, setTempAssignDriverId] = useState<number | null>(null)
+
+  // Load data on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        const [vehiclesData, driversData, vacationData] = await Promise.all([
+          VehicleService.getAll(),
+          DriverService.getAll(),
+          VacationService.getAll()
+        ])
+        
+        setVehicles(vehiclesData)
+        setDrivers(driversData)
+        setVacationRequests(vacationData)
+        
+        // Load operation-related data
+        const [assignmentChanges, inoperativePeriods] = await Promise.all([
+          VehicleAssignmentChangeService.getAll(),
+          VehicleInoperativePeriodService.getAll()
+        ])
+        
+        setVehicleAssignmentChanges(assignmentChanges)
+        setVehicleInoperativePeriods(inoperativePeriods)
+        
+      } catch (err) {
+        console.error('Failed to load operation data:', err)
+        setError('データの読み込みに失敗しました')
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [])
   const [tempAssignVehicleId, setTempAssignVehicleId] = useState<number | null>(null)
 
   // 点検予約モーダル用状態
@@ -305,7 +338,7 @@ export default function VehicleOperationManagement({
       return vehicle
     })
     
-    onVehiclesChange(updatedVehicles)
+    setVehicles(updatedVehicles)
     
     // モーダルを閉じてリセット
     setShowVehicleSwapModal(false)
@@ -351,7 +384,7 @@ export default function VehicleOperationManagement({
           ? { ...vehicle, status: 'inspection' as const }
           : vehicle
       )
-      onVehiclesChange(updatedVehicles)
+      setVehicles(updatedVehicles)
     }
 
     // モーダルを閉じてリセット
@@ -697,7 +730,7 @@ export default function VehicleOperationManagement({
       endDate: selectedDate // その日限りの一時的変更
     }
 
-    onVehicleAssignmentChangesChange([...vehicleAssignmentChanges, newAssignment])
+    setVehicleAssignmentChanges([...vehicleAssignmentChanges, newAssignment])
 
     // ドライバーに通知を送信
     const notification: DriverVehicleNotification = {
@@ -715,7 +748,7 @@ export default function VehicleOperationManagement({
       priority: 'medium'
     }
 
-    onDriverVehicleNotificationsChange([...driverVehicleNotifications, notification])
+    setDriverVehicleNotifications([...driverVehicleNotifications, notification])
   }
 
   // 車両稼働不可期間設定関数
@@ -756,7 +789,7 @@ export default function VehicleOperationManagement({
     }
 
     // 稼働不可期間を追加
-    onVehicleInoperativePeriodsChange([...vehicleInoperativePeriods, newInoperativePeriod])
+    setVehicleInoperativePeriods([...vehicleInoperativePeriods, newInoperativePeriod])
 
     // 担当ドライバーへの通知を作成
     if (originalDriver) {
@@ -781,7 +814,7 @@ export default function VehicleOperationManagement({
         priority: 'medium'
       }
       
-      onVehicleInoperativeNotificationsChange([...vehicleInoperativeNotifications, notification])
+      setVehicleInoperativeNotifications([...vehicleInoperativeNotifications, notification])
     }
 
     // 一時的にドライバーを別の車両に割り当てる場合の処理
@@ -811,7 +844,7 @@ export default function VehicleOperationManagement({
           priority: 'medium'
         }
         
-        onVehicleInoperativeNotificationsChange([...vehicleInoperativeNotifications, tempNotification])
+        setVehicleInoperativeNotifications([...vehicleInoperativeNotifications, tempNotification])
       }
     }
 
