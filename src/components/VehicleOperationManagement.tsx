@@ -1207,7 +1207,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                     }`}
                     onClick={() => isCurrentMonth ? handleDateClick(dayInfo.date) : undefined}
                   >
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="mb-2">
                       <span className={`text-sm font-medium ${
                         isCurrentDate ? 'text-blue-600' : 
                         !isCurrentMonth ? 'text-gray-400' :
@@ -1215,11 +1215,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                       }`}>
                         {format(dayInfo.date, 'd')}
                       </span>
-                      {isCurrentMonth && dayInfo.inactiveVehicles > 0 && (
-                        <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                          未稼働: {dayInfo.inactiveVehicles}台
-                        </span>
-                      )}
                     </div>
 
                     {/* 車両台数表示のみ - 現在の月のみ表示 */}

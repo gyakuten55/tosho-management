@@ -283,16 +283,6 @@ export default function VehicleManagement({}: VehicleManagementProps) {
           <div className="flex space-x-4">
             <select
               className="input-field"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="all">すべてのステータス</option>
-              <option value="active">稼働中</option>
-              <option value="inspection">点検中</option>
-              <option value="repair">修理中</option>
-            </select>
-            <select
-              className="input-field"
               value={filterTeam}
               onChange={(e) => setFilterTeam(e.target.value)}
             >
@@ -316,9 +306,6 @@ export default function VehicleManagement({}: VehicleManagementProps) {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   ドライバー・チーム
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ステータス
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   次回点検
@@ -360,12 +347,6 @@ export default function VehicleManagement({}: VehicleManagementProps) {
                         </div>
                         <div className="text-sm text-gray-500">{vehicle.team}</div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(vehicle.status)}`}>
-                        {getStatusIcon(vehicle.status)}
-                        <span className="ml-1">{getStatusText(vehicle.status)}</span>
-                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>

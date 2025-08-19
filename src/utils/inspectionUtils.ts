@@ -7,34 +7,27 @@ import { addMonths, format } from 'date-fns'
  */
 export function calculateInspectionDates(inspectionDate: Date): Date[] {
   const inspectionDates: Date[] = []
-  let currentDate = new Date(inspectionDate)
-  
-  // 基準点検日から過去方向に3ヶ月ずつ遡って点検日を計算
-  // 現在日から2年先まで
+  const baseDate = new Date(inspectionDate)
   const today = new Date()
   const twoYearsFromNow = addMonths(today, 24)
   
-  // 基準点検日から過去に遡って基準点を見つける
-  while (currentDate > today) {
-    currentDate = addMonths(currentDate, -3)
+  // 基準点検日から3ヶ月ごとの点検日を計算
+  // まず基準日以降の次回点検日を見つける
+  let nextInspectionDate = new Date(baseDate)
+  
+  // 基準日が過去の場合、次回の3ヶ月周期点検日を見つける
+  while (nextInspectionDate < today) {
+    nextInspectionDate = addMonths(nextInspectionDate, 3)
   }
   
-  // 設定した基準点検日が今日以降の場合は含める
-  const baseInspectionDate = new Date(inspectionDate)
-  if (baseInspectionDate >= today && !inspectionDates.some(date => date.getTime() === baseInspectionDate.getTime())) {
-    inspectionDates.push(baseInspectionDate)
-  }
-  
-  // 現在日以降の点検日を計算
+  // 次回点検日から2年先まで3ヶ月ごとの点検日を生成
+  let currentDate = new Date(nextInspectionDate)
   while (currentDate <= twoYearsFromNow) {
-    if (currentDate >= today && !inspectionDates.some(date => date.getTime() === currentDate.getTime())) {
-      inspectionDates.push(new Date(currentDate))
-    }
+    inspectionDates.push(new Date(currentDate))
     currentDate = addMonths(currentDate, 3)
   }
   
-  // 日付順にソート
-  return inspectionDates.sort((a, b) => a.getTime() - b.getTime())
+  return inspectionDates
 }
 
 /**

@@ -288,22 +288,6 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ステータス
-                </label>
-                <select
-                  className="input-field"
-                  value={formData.status}
-                  onChange={(e) => handleChange('status', e.target.value)}
-                >
-                  <option value="normal">正常</option>
-                  <option value="inspection">点検中</option>
-                  <option value="repair">修理中</option>
-                  <option value="maintenance_due">点検期限</option>
-                  <option value="breakdown">故障</option>
-                </select>
-              </div>
 
               {/* クレーン車判定 */}
               <div>
