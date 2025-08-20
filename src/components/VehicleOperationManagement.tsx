@@ -183,6 +183,14 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
   const [tempAssignVehicleId, setTempAssignVehicleId] = useState<number | null>(null)
 
+  // 稼働不可期間編集用状態
+  const [showEditInoperativeModal, setShowEditInoperativeModal] = useState(false)
+  const [editingInoperativePeriod, setEditingInoperativePeriod] = useState<VehicleInoperativePeriod | null>(null)
+  const [editInoperativeStartDate, setEditInoperativeStartDate] = useState('')
+  const [editInoperativeEndDate, setEditInoperativeEndDate] = useState('')
+  const [editInoperativeReason, setEditInoperativeReason] = useState('')
+  const [editInoperativeType, setEditInoperativeType] = useState<'repair' | 'maintenance' | 'breakdown' | 'other'>('repair')
+
   // 点検予約モーダル用状態
   const [showInspectionReservationModal, setShowInspectionReservationModal] = useState(false)
   const [selectedInspectionVehicle, setSelectedInspectionVehicle] = useState<Vehicle | null>(null)
@@ -323,7 +331,8 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
   const tabs = [
     { id: 'calendar', label: '稼働カレンダー', icon: Calendar },
-    { id: 'reservations', label: '点検予約リスト', icon: ClipboardList }
+    { id: 'reservations', label: '点検予約リスト', icon: ClipboardList },
+    { id: 'inoperative-periods', label: '稼働不可期間', icon: AlertTriangle }
   ]
 
   // 未稼働車両の統計を計算
@@ -937,6 +946,97 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     } catch (error) {
       console.error('稼働不可期間の設定に失敗しました:', error)
       alert('稼働不可期間の設定に失敗しました。もう一度お試しください。')
+    }
+  }
+
+  // 稼働不可期間編集処理
+  const handleEditInoperativePeriod = (period: VehicleInoperativePeriod) => {
+    setEditingInoperativePeriod(period)
+    setEditInoperativeStartDate(period.startDate.toISOString().split('T')[0])
+    setEditInoperativeEndDate(period.endDate.toISOString().split('T')[0])
+    setEditInoperativeReason(period.reason)
+    setEditInoperativeType(period.type)
+    setShowEditInoperativeModal(true)
+  }
+
+  // 稼働不可期間更新処理
+  const handleUpdateInoperativePeriod = async () => {
+    if (!editingInoperativePeriod || !editInoperativeStartDate || !editInoperativeEndDate || !editInoperativeReason) {
+      alert('すべての項目を入力してください。')
+      return
+    }
+
+    const startDate = new Date(editInoperativeStartDate)
+    const endDate = new Date(editInoperativeEndDate)
+
+    if (startDate > endDate) {
+      alert('開始日は終了日より前に設定してください。')
+      return
+    }
+
+    try {
+      const updates: Partial<VehicleInoperativePeriod> = {
+        startDate,
+        endDate,
+        reason: editInoperativeReason,
+        type: editInoperativeType
+      }
+
+      const updatedPeriod = await VehicleInoperativePeriodService.update(editingInoperativePeriod.id, updates)
+
+      // ローカル状態を更新
+      setVehicleInoperativePeriods(prev => 
+        prev.map(period => 
+          period.id === editingInoperativePeriod.id ? updatedPeriod : period
+        )
+      )
+
+      // モーダルを閉じてフォームをリセット
+      setShowEditInoperativeModal(false)
+      setEditingInoperativePeriod(null)
+      setEditInoperativeStartDate('')
+      setEditInoperativeEndDate('')
+      setEditInoperativeReason('')
+      setEditInoperativeType('repair')
+
+      alert('稼働不可期間を更新しました。')
+
+    } catch (error) {
+      console.error('稼働不可期間の更新に失敗しました:', error)
+      alert('稼働不可期間の更新に失敗しました。もう一度お試しください。')
+    }
+  }
+
+  // 稼働不可期間削除処理
+  const handleDeleteInoperativePeriod = async (period: VehicleInoperativePeriod) => {
+    if (!confirm(`車両 ${period.plateNumber} の稼働不可期間を削除しますか？\n期間: ${format(period.startDate, 'yyyy年MM月dd日', { locale: ja })} 〜 ${format(period.endDate, 'yyyy年MM月dd日', { locale: ja })}`)) {
+      return
+    }
+
+    try {
+      await VehicleInoperativePeriodService.delete(period.id)
+
+      // ローカル状態から削除
+      setVehicleInoperativePeriods(prev => 
+        prev.filter(p => p.id !== period.id)
+      )
+
+      // 期間がアクティブだった場合、車両ステータスを正常に戻す
+      if (period.status === 'active') {
+        await VehicleService.update(period.vehicleId, { status: 'normal' })
+        
+        setVehicles(prev => prev.map(vehicle => 
+          vehicle.id === period.vehicleId 
+            ? { ...vehicle, status: 'normal' }
+            : vehicle
+        ))
+      }
+
+      alert('稼働不可期間を削除しました。')
+
+    } catch (error) {
+      console.error('稼働不可期間の削除に失敗しました:', error)
+      alert('稼働不可期間の削除に失敗しました。もう一度お試しください。')
     }
   }
 
@@ -1563,6 +1663,157 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     </div>
   )
 
+  // 稼働不可期間リストビューのレンダリング
+  const renderInoperativePeriodsList = () => {
+    const activePeriods = vehicleInoperativePeriods.filter(period => period.status === 'active')
+    const completedPeriods = vehicleInoperativePeriods.filter(period => period.status === 'completed')
+
+    const getTypeLabel = (type: string) => {
+      switch (type) {
+        case 'repair': return '修理'
+        case 'maintenance': return '整備'
+        case 'breakdown': return '故障'
+        case 'other': return 'その他'
+        default: return type
+      }
+    }
+
+    const getTypeBadgeClass = (type: string) => {
+      switch (type) {
+        case 'repair': return 'bg-red-100 text-red-800'
+        case 'maintenance': return 'bg-yellow-100 text-yellow-800'
+        case 'breakdown': return 'bg-orange-100 text-orange-800'
+        case 'other': return 'bg-gray-100 text-gray-800'
+        default: return 'bg-gray-100 text-gray-800'
+      }
+    }
+
+    const renderPeriodTable = (periods: VehicleInoperativePeriod[], title: string, isActive: boolean) => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <AlertTriangle className="h-5 w-5 mr-2" />
+              {title} ({periods.length}件)
+            </h3>
+          </div>
+        </div>
+
+        {periods.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-30" />
+            <p>該当する稼働不可期間はありません</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    車両
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    期間
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    タイプ
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    理由
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    担当ドライバー
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    作成日
+                  </th>
+                  {isActive && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      操作
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {periods.map((period) => (
+                  <tr key={period.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-gray-100">
+                            <Truck className="h-4 w-4 text-gray-600" />
+                          </span>
+                        </div>
+                        <div className="ml-3">
+                          <div className="text-sm font-medium text-gray-900">
+                            {period.plateNumber}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {format(period.startDate, 'yyyy/MM/dd', { locale: ja })} 〜
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        {format(period.endDate, 'yyyy/MM/dd', { locale: ja })}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeBadgeClass(period.type)}`}>
+                        {getTypeLabel(period.type)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900 max-w-xs truncate" title={period.reason}>
+                        {period.reason}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {period.originalDriverName || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {format(period.createdAt, 'yyyy/MM/dd HH:mm', { locale: ja })}
+                    </td>
+                    {isActive && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleEditInoperativePeriod(period)}
+                            className="text-indigo-600 hover:text-indigo-900 flex items-center"
+                          >
+                            <Edit3 className="h-4 w-4 mr-1" />
+                            編集
+                          </button>
+                          <button
+                            onClick={() => handleDeleteInoperativePeriod(period)}
+                            className="text-red-600 hover:text-red-900 flex items-center"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            削除
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )
+
+    return (
+      <div className="space-y-6">
+        {/* アクティブな稼働不可期間 */}
+        {renderPeriodTable(activePeriods, 'アクティブな稼働不可期間', true)}
+        
+        {/* 完了した稼働不可期間 */}
+        {renderPeriodTable(completedPeriods, '完了した稼働不可期間', false)}
+      </div>
+    )
+  }
 
   const renderContent = () => {
     switch (currentView) {
@@ -1570,6 +1821,8 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         return renderCalendarView()
       case 'reservations':
         return renderReservationList()
+      case 'inoperative-periods':
+        return renderInoperativePeriodsList()
       default:
         return renderCalendarView()
     }
@@ -2492,6 +2745,132 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               >
                 <Save className="h-4 w-4" />
                 <span>予約設定</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 稼働不可期間編集モーダル */}
+      {showEditInoperativeModal && editingInoperativePeriod && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  稼働不可期間の編集
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowEditInoperativeModal(false)
+                    setEditingInoperativePeriod(null)
+                    setEditInoperativeStartDate('')
+                    setEditInoperativeEndDate('')
+                    setEditInoperativeReason('')
+                    setEditInoperativeType('repair')
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* 車両情報表示 */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Truck className="h-5 w-5 text-gray-600" />
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {editingInoperativePeriod.plateNumber}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      担当ドライバー: {editingInoperativePeriod.originalDriverName || '未割当'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 開始日 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  開始日 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={editInoperativeStartDate}
+                  onChange={(e) => setEditInoperativeStartDate(e.target.value)}
+                />
+              </div>
+
+              {/* 終了日 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  終了日 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={editInoperativeEndDate}
+                  onChange={(e) => setEditInoperativeEndDate(e.target.value)}
+                />
+              </div>
+
+              {/* タイプ */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  タイプ <span className="text-red-500">*</span>
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={editInoperativeType}
+                  onChange={(e) => setEditInoperativeType(e.target.value as 'repair' | 'maintenance' | 'breakdown' | 'other')}
+                >
+                  <option value="repair">修理</option>
+                  <option value="maintenance">整備</option>
+                  <option value="breakdown">故障</option>
+                  <option value="other">その他</option>
+                </select>
+              </div>
+
+              {/* 理由 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  理由 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  rows={3}
+                  placeholder="稼働不可の理由を入力してください"
+                  value={editInoperativeReason}
+                  onChange={(e) => setEditInoperativeReason(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowEditInoperativeModal(false)
+                  setEditingInoperativePeriod(null)
+                  setEditInoperativeStartDate('')
+                  setEditInoperativeEndDate('')
+                  setEditInoperativeReason('')
+                  setEditInoperativeType('repair')
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleUpdateInoperativePeriod}
+                disabled={!editInoperativeStartDate || !editInoperativeEndDate || !editInoperativeReason}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="h-4 w-4" />
+                <span>更新</span>
               </button>
             </div>
           </div>

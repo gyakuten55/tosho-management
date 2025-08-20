@@ -272,6 +272,17 @@ export class VehicleInoperativePeriodService {
     return this.mapToVehicleInoperativePeriod(data)
   }
 
+  static async delete(id: number): Promise<void> {
+    const { error } = await supabase
+      .from('vehicle_inoperative_periods')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      throw new Error(`Failed to delete vehicle inoperative period: ${error.message}`)
+    }
+  }
+
   private static mapToVehicleInoperativePeriod(row: VehicleInoperativePeriodRow): VehicleInoperativePeriod {
     return {
       id: row.id,
