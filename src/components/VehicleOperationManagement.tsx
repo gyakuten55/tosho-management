@@ -47,6 +47,7 @@ import { getAllInspectionDates, getNextInspectionDate } from '@/utils/inspection
 
 import { VehicleService } from '@/services/vehicleService'
 import { DriverService } from '@/services/driverService'
+import { DriverNotificationService } from '@/services/driverNotificationService'
 import { VacationService } from '@/services/vacationService'
 import { 
   VehicleAssignmentChangeService,
@@ -135,6 +136,50 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     
     loadData()
   }, [])
+
+  // 稼働不可期間の期限チェック（定期実行）
+  useEffect(() => {
+    const checkInoperativePeriods = async () => {
+      const today = new Date()
+      const expiredPeriods = vehicleInoperativePeriods.filter(period => 
+        period.status === 'active' && period.endDate < today
+      )
+
+      for (const period of expiredPeriods) {
+        try {
+          // 1. 期間を完了に更新
+          await VehicleInoperativePeriodService.update(period.id, { status: 'completed' })
+          
+          // 2. 車両ステータスを正常に戻す
+          await VehicleService.update(period.vehicleId, { status: 'normal' })
+          
+          // 3. ローカル状態を更新
+          setVehicleInoperativePeriods(prev => 
+            prev.map(p => p.id === period.id ? { ...p, status: 'completed' } : p)
+          )
+          
+          setVehicles(prev => prev.map(vehicle => 
+            vehicle.id === period.vehicleId 
+              ? { ...vehicle, status: 'normal' }
+              : vehicle
+          ))
+
+          console.log(`車両 ${period.plateNumber} の稼働不可期間が終了し、ステータスを正常に戻しました`)
+          
+        } catch (error) {
+          console.error(`車両 ${period.plateNumber} のステータス復元に失敗:`, error)
+        }
+      }
+    }
+
+    // 初回実行
+    checkInoperativePeriods()
+    
+    // 1時間ごとにチェック
+    const interval = setInterval(checkInoperativePeriods, 60 * 60 * 1000)
+    
+    return () => clearInterval(interval)
+  }, [vehicleInoperativePeriods])
 
   const [tempAssignVehicleId, setTempAssignVehicleId] = useState<number | null>(null)
 
@@ -800,7 +845,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   }
 
   // 車両稼働不可期間設定関数
-  const handleVehicleInoperative = () => {
+  const handleVehicleInoperative = async () => {
     if (!selectedVehicle || !inoperativeStartDate || !inoperativeEndDate || !inoperativeReason) {
       alert('すべての項目を入力してください。')
       return
@@ -814,73 +859,85 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       return
     }
 
-    // 元のドライバー情報を取得
-    const originalDriver = drivers.find(d => d.name === selectedVehicle.driver)
+    try {
+      // 元のドライバー情報を取得
+      const originalDriver = drivers.find(d => d.name === selectedVehicle.driver)
+      const tempVehicle = tempAssignVehicleId ? vehicles.find(v => v.id === tempAssignVehicleId) : null
 
-    const newInoperativePeriod: VehicleInoperativePeriod = {
-      id: Date.now(),
-      vehicleId: selectedVehicle.id,
-      plateNumber: selectedVehicle.plateNumber,
-      startDate,
-      endDate,
-      reason: inoperativeReason,
-      type: inoperativeType,
-      originalDriverId: originalDriver?.id,
-      originalDriverName: originalDriver?.name,
-      tempAssignmentDriverId: tempAssignDriverId || undefined,
-      tempAssignmentVehicleId: tempAssignVehicleId || undefined,
-      status: 'active',
-      createdAt: new Date(),
-      createdBy: '管理者', // 実際の実装では現在のユーザー名を使用
-      notes: undefined
-    }
-
-    // 稼働不可期間を追加
-    setVehicleInoperativePeriods([...vehicleInoperativePeriods, newInoperativePeriod])
-
-    // 担当ドライバーへの通知を作成
-    if (originalDriver) {
-      const notification: VehicleInoperativeNotification = {
-        id: Date.now() + 1,
-        vehicleInoperativePeriodId: newInoperativePeriod.id,
-        driverId: originalDriver.id,
-        driverName: originalDriver.name,
+      // 1. 稼働不可期間をデータベースに保存
+      const newInoperativePeriod: Omit<VehicleInoperativePeriod, 'id'> = {
         vehicleId: selectedVehicle.id,
         plateNumber: selectedVehicle.plateNumber,
-        type: 'period_start',
-        message: `担当車両 ${selectedVehicle.plateNumber} が ${startDate.getFullYear()}年${startDate.getMonth() + 1}月${startDate.getDate()}日から${endDate.getFullYear()}年${endDate.getMonth() + 1}月${endDate.getDate()}日まで${
-          inoperativeType === 'repair' ? '修理' :
-          inoperativeType === 'maintenance' ? '整備' :
-          inoperativeType === 'breakdown' ? '故障' : 'その他'
-        }のため稼働停止となります。理由: ${inoperativeReason}`,
         startDate,
         endDate,
-        tempVehicleInfo: undefined,
-        isRead: false,
-        sentAt: new Date(),
-        priority: 'medium'
+        reason: inoperativeReason,
+        type: inoperativeType,
+        originalDriverId: originalDriver?.id,
+        originalDriverName: originalDriver?.name,
+        tempAssignmentDriverId: tempAssignDriverId || undefined,
+        tempAssignmentVehicleId: tempAssignVehicleId || undefined,
+        status: 'active',
+        createdAt: new Date(),
+        createdBy: '管理者',
+        notes: undefined
       }
 
-      setVehicleInoperativeNotifications([...vehicleInoperativeNotifications, notification])
+      const savedPeriod = await VehicleInoperativePeriodService.create(newInoperativePeriod)
+
+      // 2. 車両ステータスを更新
+      const newStatus = 
+        inoperativeType === 'repair' ? 'repair' :
+        inoperativeType === 'maintenance' ? 'maintenance_due' :
+        inoperativeType === 'breakdown' ? 'breakdown' : 'repair'
+
+      await VehicleService.update(selectedVehicle.id, { status: newStatus })
+
+      // 3. 担当ドライバーに通知を送信
+      if (originalDriver) {
+        await DriverNotificationService.createVehicleInoperativeNotification(
+          originalDriver.id,
+          selectedVehicle.plateNumber,
+          startDate,
+          endDate,
+          inoperativeReason,
+          inoperativeType,
+          tempVehicle?.plateNumber,
+          originalDriver.name,
+          originalDriver.employeeId
+        )
+      }
+
+      // 4. ローカル状態を更新
+      setVehicleInoperativePeriods(prev => [...prev, savedPeriod])
+
+      // 車両リストのステータスも更新
+      setVehicles(prev => prev.map(vehicle => 
+        vehicle.id === selectedVehicle.id 
+          ? { ...vehicle, status: newStatus }
+          : vehicle
+      ))
+
+      // モーダルを閉じてフォームをリセット
+      setShowInoperativeModal(false)
+      setSelectedVehicle(null)
+      setInoperativeStartDate('')
+      setInoperativeEndDate('')
+      setInoperativeReason('')
+      setInoperativeType('repair')
+      setTempAssignDriverId(null)
+      setTempAssignVehicleId(null)
+
+      const typeText = 
+        inoperativeType === 'repair' ? '修理' :
+        inoperativeType === 'maintenance' ? '整備' :
+        inoperativeType === 'breakdown' ? '故障' : 'その他'
+
+      alert(`車両 ${selectedVehicle.plateNumber} の稼働不可期間を設定しました。\n期間: ${format(startDate, 'yyyy年MM月dd日', { locale: ja })} 〜 ${format(endDate, 'yyyy年MM月dd日', { locale: ja })}\n理由: ${typeText} - ${inoperativeReason}\n\n担当ドライバーに通知を送信しました。`)
+
+    } catch (error) {
+      console.error('稼働不可期間の設定に失敗しました:', error)
+      alert('稼働不可期間の設定に失敗しました。もう一度お試しください。')
     }
-
-    const typeText = 
-      inoperativeType === 'repair' ? '修理' :
-      inoperativeType === 'maintenance' ? '整備' :
-      inoperativeType === 'breakdown' ? '故障' : 'その他'
-
-    // 完了メッセージ
-    alert(`車両 ${selectedVehicle.plateNumber} の稼働不可期間を設定しました。\n期間: ${format(startDate, 'yyyy年MM月dd日', { locale: ja })} 〜 ${format(endDate, 'yyyy年MM月dd日', { locale: ja })}\n理由: ${typeText} - ${inoperativeReason}\n\n担当ドライバーに通知を送信しました。`)
-
-    // モーダルを閉じてフォームをリセット
-    setShowInoperativeModal(false)
-    setSelectedVehicle(null)
-    setInoperativeStartDate('')
-    setInoperativeEndDate('')
-    setInoperativeReason('')
-    setInoperativeType('repair')
-    setTempAssignDriverId(null)
-    setTempAssignVehicleId(null)
   }
 
   // 車両選択処理
