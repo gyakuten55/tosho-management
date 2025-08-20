@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { VacationRequest } from '@/types'
+import { formatDateForDB } from '@/utils/dateUtils'
 
 type VacationRequestRow = Database['public']['Tables']['vacation_requests']['Row']
 type VacationRequestInsert = Database['public']['Tables']['vacation_requests']['Insert']
@@ -43,7 +44,7 @@ export class VacationService {
       driver_name: vacationRequest.driverName,
       team: vacationRequest.team,
       employee_id: vacationRequest.employeeId,
-      date: vacationRequest.date.toISOString().split('T')[0],
+      date: formatDateForDB(vacationRequest.date),
       work_status: vacationRequest.workStatus,
       is_off: vacationRequest.isOff,
       type: vacationRequest.type,
@@ -74,7 +75,7 @@ export class VacationService {
     if (updates.team !== undefined) requestData.team = updates.team
     if (updates.employeeId !== undefined) requestData.employee_id = updates.employeeId
     if (updates.date !== undefined) {
-      requestData.date = updates.date.toISOString().split('T')[0]
+      requestData.date = formatDateForDB(updates.date)
     }
     if (updates.workStatus !== undefined) requestData.work_status = updates.workStatus
     if (updates.isOff !== undefined) requestData.is_off = updates.isOff
@@ -131,8 +132,8 @@ export class VacationService {
     const { data, error } = await supabase
       .from('vacation_requests')
       .select('*')
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', endDate.toISOString().split('T')[0])
+      .gte('date', formatDateForDB(startDate))
+      .lte('date', formatDateForDB(endDate))
       .order('date')
 
     if (error) {
@@ -146,7 +147,7 @@ export class VacationService {
     const { data, error } = await supabase
       .from('vacation_requests')
       .select('*')
-      .eq('date', date.toISOString().split('T')[0])
+      .eq('date', formatDateForDB(date))
       .order('driver_name')
 
     if (error) {
@@ -180,7 +181,7 @@ export class VacationService {
     const { data, error } = await supabase
       .from('vacation_requests')
       .select('*')
-      .eq('date', date.toISOString().split('T')[0])
+      .eq('date', formatDateForDB(date))
       .eq('is_off', true)
       .order('driver_name')
 
@@ -199,8 +200,8 @@ export class VacationService {
       .from('vacation_requests')
       .select('*')
       .eq('driver_id', driverId)
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', endDate.toISOString().split('T')[0])
+      .gte('date', formatDateForDB(startDate))
+      .lte('date', formatDateForDB(endDate))
       .order('date')
 
     if (error) {

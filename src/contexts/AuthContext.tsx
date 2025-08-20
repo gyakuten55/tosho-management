@@ -1,7 +1,6 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { DriverService } from '@/services/driverService'
 
 // ユーザー情報の型定義
@@ -56,10 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [])
 
-  // ログイン機能（管理者は固定認証、その他はSupabaseのusers_profileテーブルを使用）
+  // ログイン機能（管理者は固定認証、ドライバーはdriiversテーブルでパスワード検証）
   const signIn = async (employeeId: string, password: string) => {
     try {
-      // パスワードが空でない限り認証成功
+      // パスワードが空の場合はエラー
       if (!password || password.trim() === '') {
         throw new Error('パスワードを入力してください')
       }
@@ -67,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 管理者の固定アカウントチェック
       if (employeeId.toLowerCase() === 'admin@tosho-management.com') {
         if (password !== 'admin12345') {
-          throw new Error('パスワードが正しくありません')
+          throw new Error('社員番号またはパスワードが正しくありません')
         }
 
         // 管理者の固定プロファイル
@@ -88,121 +87,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      // ドライバーの認証を試行
-      try {
-        const driver = await DriverService.authenticateDriver(employeeId, password)
-        if (driver) {
-          const userData: UserProfile = {
-            uid: `driver-${driver.id}`,
-            employeeId: driver.employeeId,
-            displayName: driver.name,
-            role: 'driver',
-            team: driver.team,
-            createdAt: new Date(),
-            lastLogin: new Date(),
-          }
-
-          setUser(userData)
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('currentUser', JSON.stringify(userData))
-          }
-          return
+      // ドライバーの認証（パスワード必須）
+      const driver = await DriverService.authenticateDriver(employeeId, password)
+      if (driver) {
+        const userData: UserProfile = {
+          uid: `driver-${driver.id}`,
+          employeeId: driver.employeeId,
+          displayName: driver.name,
+          role: 'driver',
+          team: driver.team,
+          createdAt: new Date(),
+          lastLogin: new Date(),
         }
-      } catch (error) {
-        console.warn('Driver authentication failed:', error)
+
+        setUser(userData)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('currentUser', JSON.stringify(userData))
+        }
+        return
       }
 
-      // 通常ユーザー（users_profileテーブル）の認証
-      const { data: userProfile, error } = await supabase
-        .from('users_profile')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .single()
-
-      if (error || !userProfile) {
-        throw new Error('社員番号またはパスワードが正しくありません')
-      }
-
-      const userData: UserProfile = {
-        uid: userProfile.id,
-        employeeId: userProfile.employee_id,
-        displayName: userProfile.display_name,
-        role: userProfile.role as 'admin' | 'driver',
-        team: userProfile.team,
-        createdAt: new Date(userProfile.created_at),
-        lastLogin: userProfile.last_login ? new Date(userProfile.last_login) : null,
-      }
-
-      // 最終ログイン時刻を更新
-      await supabase
-        .from('users_profile')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', userProfile.id)
-
-      setUser(userData)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('currentUser', JSON.stringify(userData))
-      }
+      // ここまで到達した場合は認証失敗
+      throw new Error('社員番号またはパスワードが正しくありません')
       
     } catch (error: any) {
       throw new Error(error.message || 'ログインに失敗しました')
     }
   }
 
-  // ユーザー登録機能（Supabase使用）
+  // ユーザー登録機能は無効化（ドライバー管理画面から直接作成）
   const signUp = async (
     employeeId: string, 
     password: string, 
     displayName: string, 
     role: 'admin' | 'driver' = 'driver'
   ) => {
-    try {
-      // 社員番号の重複チェック
-      const { data: existingUser } = await supabase
-        .from('users_profile')
-        .select('employee_id')
-        .eq('employee_id', employeeId)
-        .single()
-
-      if (existingUser) {
-        throw new Error('この社員番号は既に登録されています')
-      }
-
-      // 新しいユーザーを作成
-      const { data: newUserProfile, error } = await supabase
-        .from('users_profile')
-        .insert({
-          id: crypto.randomUUID(),
-          employee_id: employeeId,
-          display_name: displayName,
-          role: role,
-          team: role === 'admin' ? '管理部' : '未分類',
-        })
-        .select()
-        .single()
-
-      if (error) {
-        throw new Error(`ユーザー登録に失敗しました: ${error.message}`)
-      }
-
-      const newUser: UserProfile = {
-        uid: newUserProfile.id,
-        employeeId: newUserProfile.employee_id,
-        displayName: newUserProfile.display_name,
-        role: newUserProfile.role as 'admin' | 'driver',
-        team: newUserProfile.team,
-        createdAt: new Date(newUserProfile.created_at),
-        lastLogin: newUserProfile.last_login ? new Date(newUserProfile.last_login) : null,
-      }
-
-      setUser(newUser)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('currentUser', JSON.stringify(newUser))
-      }
-      
-    } catch (error: any) {
-      throw new Error(error.message || 'ユーザー登録に失敗しました')
-    }
+    throw new Error('新規ユーザー登録は管理者により行われます')
   }
 
   // ログアウト機能

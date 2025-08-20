@@ -60,39 +60,265 @@ export class VehicleService {
       throw new Error(`Failed to create vehicle: ${error.message}`)
     }
 
+    // 新規作成した車両にドライバーが割り当てられている場合、ドライバーテーブルを同期
+    if (data.driver_name) {
+      try {
+        const { DriverService } = await import('./driverService')
+        const driver = await DriverService.getByName(data.driver_name)
+        if (driver) {
+          console.log('VehicleService: Syncing driver for new vehicle:', data.driver_name, data.plate_number)
+          await DriverService.update(driver.id, { assignedVehicle: data.plate_number }, true)
+        }
+      } catch (syncError) {
+        console.error('VehicleService: Driver sync failed for new vehicle:', syncError)
+        // 新規作成時は同期エラーでも車両作成を失敗させない
+        console.warn('車両は作成されましたが、ドライバーテーブルの同期に失敗しました')
+      }
+    }
+
     return this.mapToVehicle(data)
   }
 
-  static async update(id: number, updates: Partial<Vehicle>): Promise<Vehicle> {
-    const vehicleData: VehicleUpdate = {}
-
-    if (updates.plateNumber !== undefined) vehicleData.plate_number = updates.plateNumber
-    if (updates.model !== undefined) vehicleData.model = updates.model
-    if (updates.year !== undefined) vehicleData.year = updates.year
-    if (updates.driver !== undefined) vehicleData.driver_name = updates.driver || null
-    if (updates.team !== undefined) vehicleData.team = updates.team
-    if (updates.status !== undefined) vehicleData.status = updates.status
-    if (updates.inspectionDate !== undefined) {
-      vehicleData.inspection_date = updates.inspectionDate.toISOString().split('T')[0]
+  static async update(id: number, updates: Partial<Vehicle>, skipSync = false): Promise<Vehicle> {
+    console.log('VehicleService.update called:', { id, updates, skipSync })
+    
+    // 現在の車両データを取得
+    const currentVehicle = await this.getById(id)
+    if (!currentVehicle) {
+      throw new Error('Vehicle not found')
     }
-    if (updates.garage !== undefined) vehicleData.garage = updates.garage
-    if (updates.notes !== undefined) vehicleData.notes = updates.notes || null
+    
+    console.log('VehicleService.update current vehicle:', currentVehicle)
+    
+    // ドライバーの正規化関数（空文字をundefinedに変換）
+    const normalizeDriver = (driver: string | undefined) => {
+      return driver && driver.trim() ? driver.trim() : undefined
+    }
 
+    const vehicleData: VehicleUpdate = {}
+    let hasChanges = false
+
+    if (updates.plateNumber !== undefined && updates.plateNumber !== currentVehicle.plateNumber) {
+      vehicleData.plate_number = updates.plateNumber
+      hasChanges = true
+    }
+    if (updates.model !== undefined && updates.model !== currentVehicle.model) {
+      vehicleData.model = updates.model
+      hasChanges = true
+    }
+    if (updates.year !== undefined && updates.year !== currentVehicle.year) {
+      vehicleData.year = updates.year
+      hasChanges = true
+    }
+    if ('driver' in updates) {
+      const normalizedNewDriver = normalizeDriver(updates.driver)
+      const normalizedCurrentDriver = normalizeDriver(currentVehicle.driver)
+      if (normalizedNewDriver !== normalizedCurrentDriver) {
+        vehicleData.driver_name = normalizedNewDriver || null
+        hasChanges = true
+        console.log('VehicleService: Driver change detected in vehicleData creation:', {
+          original: updates.driver,
+          normalized: normalizedNewDriver,
+          current: normalizedCurrentDriver
+        })
+      }
+    }
+    if (updates.team !== undefined && updates.team !== currentVehicle.team) {
+      vehicleData.team = updates.team
+      hasChanges = true
+    }
+    if (updates.status !== undefined && updates.status !== currentVehicle.status) {
+      vehicleData.status = updates.status
+      hasChanges = true
+    }
+    if (updates.inspectionDate !== undefined) {
+      const newDate = updates.inspectionDate.toISOString().split('T')[0]
+      const oldDate = currentVehicle.inspectionDate.toISOString().split('T')[0]
+      if (newDate !== oldDate) {
+        vehicleData.inspection_date = newDate
+        hasChanges = true
+      }
+    }
+    if (updates.garage !== undefined && updates.garage !== currentVehicle.garage) {
+      vehicleData.garage = updates.garage
+      hasChanges = true
+    }
+    if (updates.notes !== undefined && updates.notes !== currentVehicle.notes) {
+      vehicleData.notes = updates.notes || null
+      hasChanges = true
+    }
+
+    // 変更がない場合は早期リターン
+    if (!hasChanges) {
+      console.log('VehicleService.update: No changes detected, returning current vehicle')
+      return currentVehicle
+    }
+    
+    console.log('VehicleService.update executing query:', { id, vehicleData, hasChanges })
+    
     const { data, error } = await supabase
       .from('vehicles')
       .update(vehicleData)
       .eq('id', id)
       .select()
       .single()
+      
+    console.log('VehicleService.update query result:', { data, error })
 
     if (error) {
       throw new Error(`Failed to update vehicle: ${error.message}`)
+    }
+
+    // ドライバーの割り当てが変更された場合、ドライバーテーブルを同期
+    console.log('VehicleService: Checking sync conditions:', {
+      skipSync,
+      'updates.driver': updates.driver,
+      'currentVehicle.driver': currentVehicle.driver,
+      'updates.plateNumber': updates.plateNumber,
+      'currentVehicle.plateNumber': currentVehicle.plateNumber,
+      'driver changed': updates.driver !== undefined && updates.driver !== currentVehicle.driver,
+      'plate changed': updates.plateNumber !== undefined && updates.plateNumber !== currentVehicle.plateNumber && currentVehicle.driver
+    })
+    
+    const currentDriverNormalized = normalizeDriver(currentVehicle.driver)
+    const updatesDriverNormalized = 'driver' in updates ? normalizeDriver(updates.driver) : undefined
+    
+    const needsDriverSync = !skipSync && (
+      ('driver' in updates && updatesDriverNormalized !== currentDriverNormalized) ||
+      (updates.plateNumber !== undefined && updates.plateNumber !== currentVehicle.plateNumber && currentVehicle.driver)
+    )
+    
+    console.log('VehicleService: Detailed sync condition breakdown:', {
+      'skipSync': skipSync,
+      '!skipSync': !skipSync,
+      "'driver' in updates": 'driver' in updates,
+      'updatesDriverNormalized !== currentDriverNormalized': updatesDriverNormalized !== currentDriverNormalized,
+      'driver condition result': 'driver' in updates && updatesDriverNormalized !== currentDriverNormalized,
+      'plate condition check': updates.plateNumber !== undefined,
+      'plate changed': updates.plateNumber !== currentVehicle.plateNumber,
+      'has current driver': !!currentVehicle.driver,
+      'plate condition result': updates.plateNumber !== undefined && updates.plateNumber !== currentVehicle.plateNumber && currentVehicle.driver,
+      'final needsDriverSync': !skipSync && (('driver' in updates && updatesDriverNormalized !== currentDriverNormalized) || (updates.plateNumber !== undefined && updates.plateNumber !== currentVehicle.plateNumber && currentVehicle.driver))
+    })
+    
+    console.log('VehicleService: Normalized values:', {
+      currentDriverNormalized,
+      updatesDriverNormalized,
+      'driver actually changed': updatesDriverNormalized !== currentDriverNormalized
+    })
+    
+    console.log('VehicleService: needsDriverSync:', needsDriverSync)
+    
+    if (needsDriverSync) {
+      const oldDriver = currentVehicle.driver
+      const oldPlateNumber = currentVehicle.plateNumber
+      const newDriver = data.driver_name || null // 更新後のドライバー（nullの場合の対応）
+      const newPlateNumber = data.plate_number // 更新後のプレート番号
+      
+      console.log('VehicleService: Database returned data:', {
+        'data.driver_name': data.driver_name,
+        'typeof data.driver_name': typeof data.driver_name,
+        'data.driver_name === null': data.driver_name === null,
+        'data.driver_name === undefined': data.driver_name === undefined,
+        newDriver,
+        newPlateNumber
+      })
+      
+      console.log('VehicleService: Syncing driver assignment', {
+        oldDriver,
+        newDriver,
+        oldPlateNumber,
+        newPlateNumber,
+        needsDriverSync,
+        skipSync
+      })
+      
+      try {
+        const { DriverService } = await import('./driverService')
+
+        // 1. 古いドライバーから車両割り当てを解除
+        if (oldDriver && oldDriver !== newDriver) {
+          const previousDriver = await DriverService.getByName(oldDriver)
+          console.log('VehicleService: Found previous driver:', previousDriver)
+          
+          if (previousDriver) {
+            // プレート番号が変更前か後か、どちらかにマッチするかチェック
+            const isAssignedToThisVehicle = previousDriver.assignedVehicle === oldPlateNumber || 
+                                           previousDriver.assignedVehicle === newPlateNumber
+            
+            console.log('VehicleService: Checking old driver assignment:', {
+              driverName: oldDriver,
+              driverAssignedVehicle: previousDriver.assignedVehicle,
+              oldPlateNumber,
+              newPlateNumber,
+              isAssignedToThisVehicle
+            })
+            
+            if (isAssignedToThisVehicle) {
+              console.log('VehicleService: Removing vehicle from old driver:', oldDriver)
+              await DriverService.update(previousDriver.id, { assignedVehicle: undefined }, true)
+            } else {
+              console.log('VehicleService: Old driver is not assigned to this vehicle, skipping removal')
+            }
+          } else {
+            console.warn('VehicleService: Previous driver not found:', oldDriver)
+          }
+        }
+
+        // 2. 新しいドライバーに車両を割り当て
+        if (newDriver && newDriver !== oldDriver) {
+          const newDriverRecord = await DriverService.getByName(newDriver)
+          if (newDriverRecord) {
+            console.log('VehicleService: Assigning vehicle to new driver:', newDriver, newPlateNumber)
+            await DriverService.update(newDriverRecord.id, { assignedVehicle: newPlateNumber }, true)
+          }
+        }
+
+        // 3. プレート番号が変更された場合、同じドライバーの割り当てを更新
+        if (newDriver && newDriver === oldDriver && newPlateNumber !== oldPlateNumber) {
+          const driverRecord = await DriverService.getByName(newDriver)
+          if (driverRecord) {
+            console.log('VehicleService: Updating plate number for same driver:', newDriver, newPlateNumber)
+            await DriverService.update(driverRecord.id, { assignedVehicle: newPlateNumber }, true)
+          }
+        }
+      } catch (syncError) {
+        console.error('VehicleService: Driver sync failed:', syncError)
+        throw new Error(`車両の更新は完了しましたが、ドライバーテーブルの同期に失敗しました: ${syncError}`)
+      }
     }
 
     return this.mapToVehicle(data)
   }
 
   static async delete(id: number): Promise<void> {
+    console.log('VehicleService.delete called:', { id })
+    
+    // 削除前に車両情報を取得し、ドライバーとの同期を実行
+    const vehicleToDelete = await this.getById(id)
+    if (!vehicleToDelete) {
+      throw new Error('Vehicle not found')
+    }
+    
+    console.log('VehicleService.delete vehicle info:', vehicleToDelete)
+    
+    // 削除対象の車両にドライバーが割り当てられている場合、ドライバーの車両割り当てを解除
+    if (vehicleToDelete.driver) {
+      try {
+        const { DriverService } = await import('./driverService')
+        const driver = await DriverService.getByName(vehicleToDelete.driver)
+        if (driver && driver.assignedVehicle === vehicleToDelete.plateNumber) {
+          console.log('VehicleService.delete: Removing vehicle assignment from driver:', driver.name)
+          await DriverService.update(driver.id, { assignedVehicle: undefined }, true)
+        }
+      } catch (syncError) {
+        console.error('VehicleService.delete: Driver sync failed:', syncError)
+        // 削除処理は継続するが、エラーを警告
+        console.warn('車両を削除しますが、ドライバーの車両割り当て解除に失敗しました')
+      }
+    }
+    
+    // 車両を削除
     const { error } = await supabase
       .from('vehicles')
       .delete()
@@ -101,6 +327,8 @@ export class VehicleService {
     if (error) {
       throw new Error(`Failed to delete vehicle: ${error.message}`)
     }
+    
+    console.log('VehicleService.delete: Vehicle deleted successfully')
   }
 
   static async getByTeam(team: string): Promise<Vehicle[]> {
@@ -143,6 +371,24 @@ export class VehicleService {
     }
 
     return data.map(this.mapToVehicle)
+  }
+
+  // ナンバープレートで車両を検索
+  static async getByPlateNumber(plateNumber: string): Promise<Vehicle | null> {
+    const { data, error } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('plate_number', plateNumber)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null
+      }
+      throw new Error(`Failed to fetch vehicle by plate number: ${error.message}`)
+    }
+
+    return this.mapToVehicle(data)
   }
 
   private static mapToVehicle(row: VehicleRow): Vehicle {

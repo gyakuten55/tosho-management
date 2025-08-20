@@ -753,7 +753,7 @@ export default function VacationManagement({
   }
 
   // 祝日チーム一括設定処理
-  const handleHolidayTeamBulkStatus = (holidayTeam: string, workStatus: 'working' | 'day_off') => {
+  const handleHolidayTeamBulkStatus = async (holidayTeam: string, workStatus: 'working' | 'day_off') => {
     if (!selectedDate) return
     
     const teamDrivers = drivers.filter(driver => 
@@ -772,96 +772,132 @@ export default function VacationManagement({
     
     if (!confirm(confirmMessage)) return
 
-    // その日のチームドライバーの既存設定を削除
-    let updatedRequests = vacationRequests.filter(req => 
-      !(isSameDay(req.date, selectedDate) && teamDrivers.some(driver => driver.id === req.driverId))
-    )
-
-    // 指定された勤務状態でチームドライバーを設定
-    teamDrivers.forEach(driver => {
-      const newRequest: VacationRequest = {
-        id: Date.now() + driver.id + Math.random(), // ユニークなID生成
-        driverId: driver.id,
-        driverName: driver.name,
-        team: driver.team,
-        employeeId: driver.employeeId,
-        date: selectedDate,
-        workStatus: workStatus,
-        isOff: workStatus === 'day_off',
-        type: workStatus,
-        reason: `祝日チーム${holidayTeam}一括設定`,
-        status: 'approved',
-        requestDate: new Date(),
-        isExternalDriver: driver.employeeId.startsWith('E')
+    try {
+      // その日のチームドライバーの既存設定をデータベースから削除
+      const existingRequests = vacationRequests.filter(req => 
+        isSameDay(req.date, selectedDate) && teamDrivers.some(driver => driver.id === req.driverId)
+      )
+      
+      for (const req of existingRequests) {
+        await VacationService.delete(req.id)
       }
-      updatedRequests.push(newRequest)
-    })
 
-    setVacationRequests(updatedRequests)
+      let updatedRequests = vacationRequests.filter(req => 
+        !(isSameDay(req.date, selectedDate) && teamDrivers.some(driver => driver.id === req.driverId))
+      )
 
-    // チームドライバーの統計を更新
-    teamDrivers.forEach(driver => {
-      updateMonthlyStats(driver.id, selectedDate, updatedRequests)
-    })
+      // 指定された勤務状態でチームドライバーをデータベースに保存
+      for (const driver of teamDrivers) {
+        const requestData = {
+          driverId: driver.id,
+          driverName: driver.name,
+          team: driver.team,
+          employeeId: driver.employeeId,
+          date: selectedDate,
+          workStatus: workStatus,
+          isOff: workStatus === 'day_off',
+          type: workStatus,
+          reason: `祝日チーム${holidayTeam}一括設定`,
+          status: 'approved' as const,
+          requestDate: new Date(),
+          isExternalDriver: driver.employeeId.startsWith('E')
+        }
+        
+        const savedRequest = await VacationService.create(requestData)
+        updatedRequests.push(savedRequest)
+      }
 
-    // フォームをリセット
-    setSelectedDriverId('')
-    setSelectedWorkStatus('day_off')
+      setVacationRequests(updatedRequests)
+
+      // チームドライバーの統計を更新
+      teamDrivers.forEach(driver => {
+        updateMonthlyStats(driver.id, selectedDate, updatedRequests)
+      })
+
+      // フォームをリセット
+      setSelectedDriverId('')
+      setSelectedWorkStatus('day_off')
+    } catch (error) {
+      console.error('Failed to update holiday team bulk status:', error)
+      alert('祝日チーム一括設定の保存に失敗しました')
+    }
   }
 
   // 全員一括設定処理
-  const handleBulkWorkStatus = (workStatus: 'working' | 'day_off', confirmMessage: string) => {
+  const handleBulkWorkStatus = async (workStatus: 'working' | 'day_off', confirmMessage: string) => {
     if (!selectedDate) return
     
     if (!confirm(confirmMessage)) return
 
-    // その日のすべての既存設定を削除
-    let updatedRequests = vacationRequests.filter(req => 
-      !isSameDay(req.date, selectedDate)
-    )
-
-    // 指定された勤務状態で全ドライバーを設定
-    drivers.forEach(driver => {
-      const newRequest: VacationRequest = {
-        id: Date.now() + driver.id + Math.random(), // ユニークなID生成
-        driverId: driver.id,
-        driverName: driver.name,
-        team: driver.team,
-        employeeId: driver.employeeId,
-        date: selectedDate,
-        workStatus: workStatus,
-        isOff: workStatus === 'day_off',
-        type: workStatus,
-        reason: '全員一括設定',
-        status: 'approved',
-        requestDate: new Date(),
-        isExternalDriver: driver.employeeId.startsWith('E')
+    try {
+      // その日のすべての既存設定をデータベースから削除
+      const existingRequests = vacationRequests.filter(req => 
+        isSameDay(req.date, selectedDate)
+      )
+      
+      for (const req of existingRequests) {
+        await VacationService.delete(req.id)
       }
-      updatedRequests.push(newRequest)
-    })
 
-    setVacationRequests(updatedRequests)
+      let updatedRequests = vacationRequests.filter(req => 
+        !isSameDay(req.date, selectedDate)
+      )
 
-    // 全ドライバーの統計を更新
-    drivers.forEach(driver => {
-      updateMonthlyStats(driver.id, selectedDate, updatedRequests)
-    })
+      // 指定された勤務状態で全ドライバーをデータベースに保存
+      for (const driver of drivers) {
+        const requestData = {
+          driverId: driver.id,
+          driverName: driver.name,
+          team: driver.team,
+          employeeId: driver.employeeId,
+          date: selectedDate,
+          workStatus: workStatus,
+          isOff: workStatus === 'day_off',
+          type: workStatus,
+          reason: '全員一括設定',
+          status: 'approved' as const,
+          requestDate: new Date(),
+          isExternalDriver: driver.employeeId.startsWith('E')
+        }
+        
+        const savedRequest = await VacationService.create(requestData)
+        updatedRequests.push(savedRequest)
+      }
 
-    // フォームをリセット
-    setSelectedDriverId('')
-    setSelectedWorkStatus('day_off')
+      setVacationRequests(updatedRequests)
+
+      // 全ドライバーの統計を更新
+      drivers.forEach(driver => {
+        updateMonthlyStats(driver.id, selectedDate, updatedRequests)
+      })
+
+      // フォームをリセット
+      setSelectedDriverId('')
+      setSelectedWorkStatus('day_off')
+    } catch (error) {
+      console.error('Failed to update bulk work status:', error)
+      alert('一括設定の保存に失敗しました')
+    }
   }
 
   // 休暇削除処理
-  const handleVacationDelete = (vacationId: number) => {
+  const handleVacationDelete = async (vacationId: number) => {
     const vacationToDelete = vacationRequests.find(req => req.id === vacationId)
     if (!vacationToDelete) return
 
-    const updatedRequests = vacationRequests.filter(req => req.id !== vacationId)
-    setVacationRequests(updatedRequests)
-    
-    // 統計を更新
-    updateMonthlyStats(vacationToDelete.driverId, vacationToDelete.date, updatedRequests)
+    try {
+      // データベースから削除
+      await VacationService.delete(vacationId)
+      
+      const updatedRequests = vacationRequests.filter(req => req.id !== vacationId)
+      setVacationRequests(updatedRequests)
+      
+      // 統計を更新
+      updateMonthlyStats(vacationToDelete.driverId, vacationToDelete.date, updatedRequests)
+    } catch (error) {
+      console.error('Failed to delete vacation request:', error)
+      alert('休暇の削除に失敗しました')
+    }
   }
 
   const updateMonthlyStats = (driverId: number, date: Date, currentRequests: VacationRequest[]) => {

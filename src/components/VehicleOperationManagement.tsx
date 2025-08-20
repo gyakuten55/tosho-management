@@ -24,7 +24,9 @@ import {
   User,
   Info,
   FileText,
-  Edit3
+  Edit3,
+  ClipboardList,
+  Trash2
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { ja } from 'date-fns/locale'
@@ -38,7 +40,8 @@ import {
   VehicleOperationCalendarDay,
   VehicleInoperativePeriod,
   VehicleInoperativeNotification,
-  DailyVehicleSwap
+  DailyVehicleSwap,
+  InspectionReservation
 } from '@/types'
 import { getAllInspectionDates, getNextInspectionDate } from '@/utils/inspectionUtils'
 
@@ -49,6 +52,7 @@ import {
   VehicleAssignmentChangeService,
   VehicleInoperativePeriodService 
 } from '@/services/vehicleOperationService'
+
 
 interface VehicleOperationManagementProps {}
 
@@ -131,6 +135,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     
     loadData()
   }, [])
+
   const [tempAssignVehicleId, setTempAssignVehicleId] = useState<number | null>(null)
 
   // 点検予約モーダル用状態
@@ -272,7 +277,8 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   }[]>([])
 
   const tabs = [
-    { id: 'calendar', label: '稼働カレンダー', icon: Calendar }
+    { id: 'calendar', label: '稼働カレンダー', icon: Calendar },
+    { id: 'reservations', label: '点検予約リスト', icon: ClipboardList }
   ]
 
   // 未稼働車両の統計を計算
@@ -351,7 +357,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   }
 
   // 点検予約処理関数
-  const handleInspectionReservation = () => {
+  const handleInspectionReservation = async () => {
     if (!selectedInspectionVehicle || !inspectionReservationDate) {
       alert('車両と予約日を選択してください')
       return
@@ -376,6 +382,35 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       }
     }))
 
+    // 点検予約をデータベースに保存
+    try {
+      const driverInfo = drivers.find(d => d.name === selectedInspectionVehicle.driver)
+      
+      await InspectionReservationService.createFromVehicleInspection(
+        selectedInspectionVehicle.id,
+        selectedInspectionVehicle.plateNumber,
+        driverInfo?.id,
+        driverInfo?.name,
+        reservationDate,
+        inspectionDeadline,
+        inspectionMemo
+      )
+
+      // 担当ドライバーに通知を送信（備考・メモ付き）
+      if (driverInfo) {
+        await DriverNotificationService.createInspectionReservedNotificationWithMemo(
+          driverInfo.id,
+          selectedInspectionVehicle.plateNumber,
+          reservationDate,
+          inspectionMemo,
+          driverInfo.name,
+          driverInfo.employeeId
+        )
+      }
+    } catch (error) {
+      console.error('Failed to save inspection reservation:', error)
+    }
+
     // 予約日が今日の場合、車両のステータスを「点検中」に変更
     const today = new Date()
     if (isSameDay(reservationDate, today)) {
@@ -393,7 +428,19 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     setInspectionReservationDate('')
     setInspectionMemo('')
 
-    alert(`${selectedInspectionVehicle.plateNumber} の点検予約を ${format(reservationDate, 'yyyy年MM月dd日', { locale: ja })} に設定しました${isSameDay(reservationDate, today) ? '（車両ステータスを「点検中」に変更しました）' : ''}`)
+    const memoText = inspectionMemo.trim() ? `\n備考: ${inspectionMemo}` : ''
+    alert(`${selectedInspectionVehicle.plateNumber} の点検予約を ${format(reservationDate, 'yyyy年MM月dd日', { locale: ja })} に設定しました${isSameDay(reservationDate, today) ? '（車両ステータスを「点検中」に変更しました）' : ''}${memoText}`)
+  }
+
+  // 点検予約取り消し処理
+  const handleCancelReservation = (bookingKey: string, vehiclePlateNumber: string) => {
+    if (!confirm(`${vehiclePlateNumber} の点検予約を取り消しますか？`)) return
+
+    const updatedBookings = { ...inspectionBookings }
+    delete updatedBookings[bookingKey]
+    setInspectionBookings(updatedBookings)
+
+    alert(`${vehiclePlateNumber} の点検予約を取り消しました。`)
   }
 
   // 一時的車両割り当て処理
@@ -643,6 +690,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
           inspection.inspectionType = '点検（予約完了）'
           ;(inspection as any).isReserved = true
           ;(inspection as any).reservationDate = booking.reservationDate
+          ;(inspection as any).memo = booking.memo
         }
       })
       
@@ -769,7 +817,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     // 元のドライバー情報を取得
     const originalDriver = drivers.find(d => d.name === selectedVehicle.driver)
 
-    // 新しい稼働不可期間を作成
     const newInoperativePeriod: VehicleInoperativePeriod = {
       id: Date.now(),
       vehicleId: selectedVehicle.id,
@@ -780,12 +827,12 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       type: inoperativeType,
       originalDriverId: originalDriver?.id,
       originalDriverName: originalDriver?.name,
-      tempAssignmentDriverId: undefined,
-      tempAssignmentVehicleId: undefined,
+      tempAssignmentDriverId: tempAssignDriverId || undefined,
+      tempAssignmentVehicleId: tempAssignVehicleId || undefined,
       status: 'active',
       createdAt: new Date(),
       createdBy: '管理者', // 実際の実装では現在のユーザー名を使用
-              notes: undefined
+      notes: undefined
     }
 
     // 稼働不可期間を追加
@@ -808,45 +855,22 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         }のため稼働停止となります。理由: ${inoperativeReason}`,
         startDate,
         endDate,
-              tempVehicleInfo: undefined,
+        tempVehicleInfo: undefined,
         isRead: false,
         sentAt: new Date(),
         priority: 'medium'
       }
-      
+
       setVehicleInoperativeNotifications([...vehicleInoperativeNotifications, notification])
     }
 
-    // 一時的にドライバーを別の車両に割り当てる場合の処理
-    if (tempAssignDriverId && tempAssignVehicleId && originalDriver) {
-      const tempVehicle = vehicles.find(v => v.id === tempAssignVehicleId)
-      const tempDriver = drivers.find(d => d.id === tempAssignDriverId)
-      
-      if (tempVehicle && tempDriver) {
-        // 一時割り当て通知
-        const tempNotification: VehicleInoperativeNotification = {
-          id: Date.now() + 2,
-          vehicleInoperativePeriodId: newInoperativePeriod.id,
-          driverId: originalDriver.id,
-          driverName: originalDriver.name,
-          vehicleId: tempVehicle.id,
-          plateNumber: tempVehicle.plateNumber,
-          type: 'temp_assignment',
-          message: `一時的に車両 ${tempVehicle.plateNumber} に割り当てられました。期間: ${startDate.getFullYear()}年${startDate.getMonth() + 1}月${startDate.getDate()}日〜${endDate.getFullYear()}年${endDate.getMonth() + 1}月${endDate.getDate()}日`,
-          startDate,
-          endDate,
-          tempVehicleInfo: {
-            vehicleId: tempVehicle.id,
-            plateNumber: tempVehicle.plateNumber
-          },
-          isRead: false,
-          sentAt: new Date(),
-          priority: 'medium'
-        }
-        
-        setVehicleInoperativeNotifications([...vehicleInoperativeNotifications, tempNotification])
-      }
-    }
+    const typeText = 
+      inoperativeType === 'repair' ? '修理' :
+      inoperativeType === 'maintenance' ? '整備' :
+      inoperativeType === 'breakdown' ? '故障' : 'その他'
+
+    // 完了メッセージ
+    alert(`車両 ${selectedVehicle.plateNumber} の稼働不可期間を設定しました。\n期間: ${format(startDate, 'yyyy年MM月dd日', { locale: ja })} 〜 ${format(endDate, 'yyyy年MM月dd日', { locale: ja })}\n理由: ${typeText} - ${inoperativeReason}\n\n担当ドライバーに通知を送信しました。`)
 
     // モーダルを閉じてフォームをリセット
     setShowInoperativeModal(false)
@@ -857,8 +881,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     setInoperativeType('repair')
     setTempAssignDriverId(null)
     setTempAssignVehicleId(null)
-
-    alert('稼働不可期間を設定しました。')
   }
 
   // 車両選択処理
@@ -1489,11 +1511,158 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     switch (currentView) {
       case 'calendar':
         return renderCalendarView()
+      case 'reservations':
+        return renderReservationList()
       default:
         return renderCalendarView()
     }
   }
 
+  // 点検予約リスト表示
+  const renderReservationList = () => {
+    const reservationList = Object.entries(inspectionBookings)
+      .filter(([_, booking]) => booking.isReservationCompleted)
+      .map(([key, booking]) => {
+        const vehicle = vehicles.find(v => v.id === booking.vehicleId)
+        return {
+          key,
+          booking,
+          vehicle,
+          reservationDate: booking.reservationDate ? new Date(booking.reservationDate) : null,
+          inspectionDeadline: new Date(booking.inspectionDeadline)
+        }
+      })
+      .sort((a, b) => {
+        if (a.reservationDate && b.reservationDate) {
+          return a.reservationDate.getTime() - b.reservationDate.getTime()
+        }
+        return 0
+      })
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <ClipboardList className="h-5 w-5 mr-2 text-blue-600" />
+              点検予約リスト
+            </h3>
+            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+              {reservationList.length}件の予約
+            </span>
+          </div>
+
+          {reservationList.length === 0 ? (
+            <div className="text-center py-12">
+              <ClipboardList className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">点検予約がありません</h3>
+              <p className="text-gray-500">車両の点検予約を作成すると、ここに表示されます。</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {reservationList.map(({ key, booking, vehicle, reservationDate, inspectionDeadline }) => {
+                if (!vehicle) return null
+                
+                const today = new Date()
+                const daysUntilReservation = reservationDate ? Math.ceil((reservationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0
+                const daysUntilDeadline = Math.ceil((inspectionDeadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                
+                const isUrgent = daysUntilDeadline <= 7
+                const isWarning = daysUntilDeadline <= 14 && daysUntilDeadline > 7
+
+                return (
+                  <div key={key} className={`p-4 rounded-lg border ${
+                    isUrgent ? 'border-red-200 bg-red-50' :
+                    isWarning ? 'border-orange-200 bg-orange-50' :
+                    'border-gray-200 bg-white'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-3">
+                          <div className="flex items-center space-x-2">
+                            <Car className="h-5 w-5 text-blue-600" />
+                            <h4 className="text-lg font-medium text-gray-900">{vehicle.plateNumber}</h4>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            isUrgent ? 'bg-red-100 text-red-800' :
+                            isWarning ? 'bg-orange-100 text-orange-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {isUrgent ? '緊急' : isWarning ? '注意' : '正常'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                          <div className="space-y-2">
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Calendar className="h-4 w-4 mr-2" />
+                              <span>予約日: {reservationDate ? format(reservationDate, 'yyyy年MM月dd日(E)', { locale: ja }) : '未設定'}</span>
+                            </div>
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Clock className="h-4 w-4 mr-2" />
+                              <span>点検期限: {format(inspectionDeadline, 'yyyy年MM月dd日(E)', { locale: ja })}</span>
+                              {daysUntilDeadline > 0 && (
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                                  isUrgent ? 'bg-red-100 text-red-800' :
+                                  isWarning ? 'bg-orange-100 text-orange-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  あと{daysUntilDeadline}日
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Truck className="h-4 w-4 mr-2" />
+                              <span>{vehicle.model}</span>
+                            </div>
+                            <div className="flex items-center text-sm text-gray-600">
+                              <User className="h-4 w-4 mr-2" />
+                              <span>担当: {vehicle.driver || '未割当'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {booking.memo && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                            <div className="flex items-start">
+                              <FileText className="h-4 w-4 text-blue-600 mr-2 mt-0.5" />
+                              <div>
+                                <div className="text-sm font-medium text-blue-900">備考・メモ</div>
+                                <div className="text-sm text-blue-800 mt-1">{booking.memo}</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {booking.hasCraneInspection && (
+                          <div className="text-sm text-orange-600 flex items-center">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            クレーン年次点検も含む
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleCancelReservation(key, vehicle.plateNumber)}
+                        className="ml-4 flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>取り消し</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // メインコンポーネントのreturn文
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
@@ -2274,4 +2443,4 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
     </div>
   )
-} 
+}

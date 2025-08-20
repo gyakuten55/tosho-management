@@ -136,15 +136,7 @@ export default function Login({}: LoginProps) {
                   id="employeeId"
                   type="text"
                   value={employeeId}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    // 管理者メールアドレスの場合は大文字変換しない
-                    if (value.includes('@') || employeeId.includes('@')) {
-                      setEmployeeId(value)
-                    } else {
-                      setEmployeeId(value.toUpperCase())
-                    }
-                  }}
+                  onChange={(e) => setEmployeeId(e.target.value)}
                   className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   style={{
                     width: '100%',

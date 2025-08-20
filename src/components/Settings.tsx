@@ -28,7 +28,7 @@ interface SettingsProps {
 }
 
 export default function Settings({ vacationSettings: propVacationSettings, onVacationSettingsChange }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState('system')
+  const [activeTab, setActiveTab] = useState('vacation')
   const [showPassword, setShowPassword] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
@@ -221,8 +221,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   }
 
   const tabs = [
-    { id: 'system', label: 'システム設定', icon: SettingsIcon },
-    { id: 'notifications', label: '通知設定', icon: Bell },
     { id: 'vacation', label: '休暇設定', icon: Calendar }
   ]
 
@@ -967,8 +965,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
         </div>
 
         <div className="p-6">
-          {activeTab === 'system' && renderSystemSettings()}
-          {activeTab === 'notifications' && renderNotificationSettings()}
           {activeTab === 'vacation' && renderVacationSettings()}
         </div>
       </div>

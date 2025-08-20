@@ -134,6 +134,54 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_notifications: {
+        Row: {
+          action_required: boolean
+          created_at: string | null
+          driver_id: number
+          driver_name: string
+          employee_id: string
+          id: number
+          is_read: boolean
+          message: string
+          priority: string
+          scheduled_for: string | null
+          title: string
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          action_required?: boolean
+          created_at?: string | null
+          driver_id: number
+          driver_name?: string
+          employee_id?: string
+          id?: number
+          is_read?: boolean
+          message: string
+          priority?: string
+          scheduled_for?: string | null
+          title: string
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          action_required?: boolean
+          created_at?: string | null
+          driver_id?: number
+          driver_name?: string
+          employee_id?: string
+          id?: number
+          is_read?: boolean
+          message?: string
+          priority?: string
+          scheduled_for?: string | null
+          title?: string
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       driver_vehicle_notifications: {
         Row: {
           assignment_date: string
@@ -314,6 +362,54 @@ export type Database = {
           is_recurring?: boolean | null
           name?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      inspection_reservations: {
+        Row: {
+          created_at: string | null
+          deadline_date: string
+          driver_id: number | null
+          driver_name: string | null
+          id: number
+          inspection_type: string
+          memo: string | null
+          reserved_by: string
+          scheduled_date: string
+          status: string
+          updated_at: string | null
+          vehicle_id: number
+          vehicle_plate_number: string
+        }
+        Insert: {
+          created_at?: string | null
+          deadline_date: string
+          driver_id?: number | null
+          driver_name?: string | null
+          id?: number
+          inspection_type?: string
+          memo?: string | null
+          reserved_by?: string
+          scheduled_date: string
+          status?: string
+          updated_at?: string | null
+          vehicle_id: number
+          vehicle_plate_number: string
+        }
+        Update: {
+          created_at?: string | null
+          deadline_date?: string
+          driver_id?: number | null
+          driver_name?: string | null
+          id?: number
+          inspection_type?: string
+          memo?: string | null
+          reserved_by?: string
+          scheduled_date?: string
+          status?: string
+          updated_at?: string | null
+          vehicle_id?: number
+          vehicle_plate_number?: string
         }
         Relationships: []
       }

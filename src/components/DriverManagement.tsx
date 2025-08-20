@@ -87,24 +87,9 @@ export default function DriverManagement({}: DriverManagementProps) {
   const handleDelete = async (driverId: number) => {
     if (confirm('このドライバーを削除してもよろしいですか？')) {
       try {
-        const driverToDelete = drivers.find(d => d.id === driverId)
-        
-        // 割り当てられた車両があれば解除
-        if (driverToDelete?.assignedVehicle) {
-          const vehicleToUpdate = vehicles.find(v => v.plateNumber === driverToDelete.assignedVehicle)
-          if (vehicleToUpdate) {
-            await VehicleService.update(vehicleToUpdate.id, { driver: undefined })
-            const updatedVehicles = vehicles.map(v => 
-              v.plateNumber === driverToDelete.assignedVehicle 
-                ? { ...v, driver: undefined }
-                : v
-            )
-            setVehicles(updatedVehicles)
-          }
-        }
-        
         await DriverService.delete(driverId)
-        setDrivers(drivers.filter(d => d.id !== driverId))
+        // データベース同期後、最新データを再取得
+        await loadData()
       } catch (err) {
         console.error('Failed to delete driver:', err)
         alert('ドライバーの削除に失敗しました')
@@ -116,59 +101,14 @@ export default function DriverManagement({}: DriverManagementProps) {
     try {
       if (selectedDriver) {
         // 編集
-        const updatedDriver = await DriverService.update(selectedDriver.id, driverData)
-        setDrivers(drivers.map(d => d.id === selectedDriver.id ? updatedDriver : d))
-        
-        // 車両の割り当て更新
-        if (driverData.assignedVehicle !== selectedDriver.assignedVehicle) {
-          let updatedVehicles = [...vehicles]
-          
-          // 前の車両から割り当て解除
-          if (selectedDriver.assignedVehicle) {
-            const oldVehicle = vehicles.find(v => v.plateNumber === selectedDriver.assignedVehicle)
-            if (oldVehicle) {
-              await VehicleService.update(oldVehicle.id, { driver: undefined })
-            }
-            updatedVehicles = updatedVehicles.map(v => 
-              v.plateNumber === selectedDriver.assignedVehicle 
-                ? { ...v, driver: undefined }
-                : v
-            )
-          }
-          
-          // 新しい車両に割り当て
-          if (driverData.assignedVehicle) {
-            const newVehicle = vehicles.find(v => v.plateNumber === driverData.assignedVehicle)
-            if (newVehicle) {
-              await VehicleService.update(newVehicle.id, { driver: `${driverData.name || selectedDriver.name}` })
-            }
-            updatedVehicles = updatedVehicles.map(v => 
-              v.plateNumber === driverData.assignedVehicle 
-                ? { ...v, driver: `${driverData.name || selectedDriver.name}` }
-                : v
-            )
-          }
-          
-          setVehicles(updatedVehicles)
-        }
+        await DriverService.update(selectedDriver.id, driverData)
+        // データベース同期後、最新データを再取得
+        await loadData()
       } else {
         // 新規追加
-        const newDriver = await DriverService.create(driverData as Omit<Driver, 'id'>)
-        setDrivers([...drivers, newDriver])
-        
-        // 車両割り当て
-        if (driverData.assignedVehicle) {
-          const vehicle = vehicles.find(v => v.plateNumber === driverData.assignedVehicle)
-          if (vehicle) {
-            await VehicleService.update(vehicle.id, { driver: driverData.name })
-          }
-          const updatedVehicles = vehicles.map(v => 
-            v.plateNumber === driverData.assignedVehicle 
-              ? { ...v, driver: driverData.name }
-              : v
-          )
-          setVehicles(updatedVehicles)
-        }
+        await DriverService.create(driverData as Omit<Driver, 'id'>)
+        // データベース同期後、最新データを再取得
+        await loadData()
       }
       setCurrentView('list')
       setSelectedDriver(null)

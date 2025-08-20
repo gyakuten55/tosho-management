@@ -96,20 +96,77 @@ export class DriverService {
       throw new Error(`Failed to create driver: ${error.message}`)
     }
 
+    // 新規作成したドライバーに車両が割り当てられている場合、車両テーブルを同期
+    if (data.assigned_vehicle) {
+      try {
+        const { VehicleService } = await import('./vehicleService')
+        const vehicle = await VehicleService.getByPlateNumber(data.assigned_vehicle)
+        if (vehicle) {
+          console.log('DriverService: Syncing vehicle for new driver:', data.assigned_vehicle, data.name)
+          await VehicleService.update(vehicle.id, { driver: data.name }, true)
+        }
+      } catch (syncError) {
+        console.error('DriverService: Vehicle sync failed for new driver:', syncError)
+        // 新規作成時は同期エラーでもドライバー作成を失敗させない
+        console.warn('ドライバーは作成されましたが、車両テーブルの同期に失敗しました')
+      }
+    }
+
     return DriverService.mapToDriver(data)
   }
 
-  static async update(id: number, updates: Partial<Driver>): Promise<Driver> {
-    const driverData: DriverUpdate = {}
-
-    if (updates.name !== undefined) driverData.name = updates.name
-    if (updates.employeeId !== undefined) driverData.employee_id = updates.employeeId
-    if (updates.team !== undefined) driverData.team = updates.team
-    if (updates.status !== undefined) driverData.status = updates.status
-    if (updates.assignedVehicle !== undefined) {
-      driverData.assigned_vehicle = updates.assignedVehicle || null
+  static async update(id: number, updates: Partial<Driver>, skipSync = false): Promise<Driver> {
+    console.log('DriverService.update called:', { id, updates, skipSync })
+    
+    // 現在のドライバーデータを取得
+    const currentDriver = await this.getById(id)
+    if (!currentDriver) {
+      throw new Error('Driver not found')
     }
-    if (updates.isNightShift !== undefined) driverData.is_night_shift = updates.isNightShift
+    
+    console.log('DriverService.update current driver:', currentDriver)
+    
+    // 車両の正規化関数（空文字をundefinedに変換）
+    const normalizeVehicle = (vehicle: string | undefined) => {
+      return vehicle && vehicle.trim() ? vehicle.trim() : undefined
+    }
+
+    const driverData: DriverUpdate = {}
+    let hasChanges = false
+
+    if (updates.name !== undefined && updates.name !== currentDriver.name) {
+      driverData.name = updates.name
+      hasChanges = true
+    }
+    if (updates.employeeId !== undefined && updates.employeeId !== currentDriver.employeeId) {
+      driverData.employee_id = updates.employeeId
+      hasChanges = true
+    }
+    if (updates.team !== undefined && updates.team !== currentDriver.team) {
+      driverData.team = updates.team
+      hasChanges = true
+    }
+    if (updates.status !== undefined && updates.status !== currentDriver.status) {
+      driverData.status = updates.status
+      hasChanges = true
+    }
+    if ('assignedVehicle' in updates) {
+      const normalizedNewVehicle = normalizeVehicle(updates.assignedVehicle)
+      const normalizedCurrentVehicle = normalizeVehicle(currentDriver.assignedVehicle)
+      if (normalizedNewVehicle !== normalizedCurrentVehicle) {
+        driverData.assigned_vehicle = normalizedNewVehicle || null
+        hasChanges = true
+        console.log('DriverService: Vehicle assignment change detected:', {
+          original: updates.assignedVehicle,
+          normalized: normalizedNewVehicle,
+          current: normalizedCurrentVehicle
+        })
+      }
+    }
+    if (updates.isNightShift !== undefined && updates.isNightShift !== currentDriver.isNightShift) {
+      driverData.is_night_shift = updates.isNightShift
+      hasChanges = true
+    }
     
     // パスワードが更新される場合はハッシュ化
     if (updates.password !== undefined && updates.password) {
@@ -117,34 +174,209 @@ export class DriverService {
       driverData.password = await bcrypt.hash(updates.password, saltRounds)
     }
     
-    if (updates.phone !== undefined) driverData.phone = updates.phone || null
-    if (updates.email !== undefined) driverData.email = updates.email || null
-    if (updates.address !== undefined) driverData.address = updates.address || null
-    if (updates.emergencyContactName !== undefined) driverData.emergency_contact_name = updates.emergencyContactName || null
-    if (updates.emergencyContactPhone !== undefined) driverData.emergency_contact_phone = updates.emergencyContactPhone || null
-    if (updates.licenseNumber !== undefined) driverData.license_number = updates.licenseNumber || null
-    if (updates.licenseClass !== undefined) driverData.license_class = updates.licenseClass || null
-    if (updates.licenseExpiryDate !== undefined) driverData.license_expiry_date = updates.licenseExpiryDate ? updates.licenseExpiryDate.toISOString().split('T')[0] : null
-    if (updates.hireDate !== undefined) driverData.hire_date = updates.hireDate ? updates.hireDate.toISOString().split('T')[0] : null
-    if (updates.birthDate !== undefined) driverData.birth_date = updates.birthDate ? updates.birthDate.toISOString().split('T')[0] : null
-    if (updates.notes !== undefined) driverData.notes = updates.notes || null
-    if (updates.holidayTeams !== undefined) driverData.holiday_teams = updates.holidayTeams ? JSON.stringify(updates.holidayTeams) : '[]'
+    if (updates.phone !== undefined && updates.phone !== currentDriver.phone) {
+      driverData.phone = updates.phone || null
+      hasChanges = true
+    }
+    if (updates.email !== undefined && updates.email !== currentDriver.email) {
+      driverData.email = updates.email || null
+      hasChanges = true
+    }
+    if (updates.address !== undefined && updates.address !== currentDriver.address) {
+      driverData.address = updates.address || null
+      hasChanges = true
+    }
+    if (updates.emergencyContactName !== undefined && updates.emergencyContactName !== currentDriver.emergencyContactName) {
+      driverData.emergency_contact_name = updates.emergencyContactName || null
+      hasChanges = true
+    }
+    if (updates.emergencyContactPhone !== undefined && updates.emergencyContactPhone !== currentDriver.emergencyContactPhone) {
+      driverData.emergency_contact_phone = updates.emergencyContactPhone || null
+      hasChanges = true
+    }
+    if (updates.licenseNumber !== undefined && updates.licenseNumber !== currentDriver.licenseNumber) {
+      driverData.license_number = updates.licenseNumber || null
+      hasChanges = true
+    }
+    if (updates.licenseClass !== undefined && updates.licenseClass !== currentDriver.licenseClass) {
+      driverData.license_class = updates.licenseClass || null
+      hasChanges = true
+    }
+    if (updates.licenseExpiryDate !== undefined) {
+      const newDate = updates.licenseExpiryDate ? updates.licenseExpiryDate.toISOString().split('T')[0] : null
+      const oldDate = currentDriver.licenseExpiryDate ? currentDriver.licenseExpiryDate.toISOString().split('T')[0] : null
+      if (newDate !== oldDate) {
+        driverData.license_expiry_date = newDate
+        hasChanges = true
+      }
+    }
+    if (updates.hireDate !== undefined) {
+      const newDate = updates.hireDate ? updates.hireDate.toISOString().split('T')[0] : null
+      const oldDate = currentDriver.hireDate ? currentDriver.hireDate.toISOString().split('T')[0] : null
+      if (newDate !== oldDate) {
+        driverData.hire_date = newDate
+        hasChanges = true
+      }
+    }
+    if (updates.birthDate !== undefined) {
+      const newDate = updates.birthDate ? updates.birthDate.toISOString().split('T')[0] : null
+      const oldDate = currentDriver.birthDate ? currentDriver.birthDate.toISOString().split('T')[0] : null
+      if (newDate !== oldDate) {
+        driverData.birth_date = newDate
+        hasChanges = true
+      }
+    }
+    if (updates.notes !== undefined && updates.notes !== currentDriver.notes) {
+      driverData.notes = updates.notes || null
+      hasChanges = true
+    }
+    if (updates.holidayTeams !== undefined) {
+      const newTeams = updates.holidayTeams ? JSON.stringify(updates.holidayTeams) : '[]'
+      const oldTeams = currentDriver.holidayTeams ? JSON.stringify(currentDriver.holidayTeams) : '[]'
+      if (newTeams !== oldTeams) {
+        driverData.holiday_teams = newTeams
+        hasChanges = true
+      }
+    }
 
+    // 変更がない場合は早期リターン
+    if (!hasChanges && !updates.password) {
+      console.log('DriverService.update: No changes detected, returning current driver')
+      return currentDriver
+    }
+    
+    console.log('DriverService.update executing query:', { id, driverData, hasChanges })
+    
     const { data, error } = await supabase
       .from('drivers')
       .update(driverData)
       .eq('id', id)
       .select()
       .single()
+      
+    console.log('DriverService.update query result:', { data, error })
 
     if (error) {
       throw new Error(`Failed to update driver: ${error.message}`)
+    }
+
+    // 車両割り当てが変更された場合、車両テーブルを同期
+    const currentVehicleNormalized = normalizeVehicle(currentDriver.assignedVehicle)
+    const updatesVehicleNormalized = 'assignedVehicle' in updates ? normalizeVehicle(updates.assignedVehicle) : undefined
+    
+    const needsVehicleSync = !skipSync && (
+      ('assignedVehicle' in updates && updatesVehicleNormalized !== currentVehicleNormalized) ||
+      (updates.name !== undefined && updates.name !== currentDriver.name && currentDriver.assignedVehicle)
+    )
+    
+    console.log('DriverService: Sync conditions check:', {
+      currentVehicleNormalized,
+      updatesVehicleNormalized,
+      'vehicle assignment changed': updatesVehicleNormalized !== currentVehicleNormalized,
+      needsVehicleSync
+    })
+    
+    if (needsVehicleSync) {
+      const oldVehicle = currentDriver.assignedVehicle
+      const oldDriverName = currentDriver.name
+      const newVehicle = data.assigned_vehicle // 更新後の車両
+      const newDriverName = data.name // 更新後のドライバー名
+      
+      console.log('DriverService: Syncing vehicle assignment', {
+        oldVehicle,
+        newVehicle, 
+        oldDriverName,
+        newDriverName,
+        needsVehicleSync,
+        skipSync
+      })
+      
+      try {
+        const { VehicleService } = await import('./vehicleService')
+
+        // 1. 古い車両からドライバー割り当てを解除
+        if (oldVehicle && oldVehicle !== newVehicle) {
+          const previousVehicle = await VehicleService.getByPlateNumber(oldVehicle)
+          console.log('DriverService: Found previous vehicle:', previousVehicle)
+          
+          if (previousVehicle) {
+            // ドライバー名が変更前か後か、どちらかにマッチするかチェック
+            const isAssignedToThisDriver = previousVehicle.driver === oldDriverName || 
+                                          previousVehicle.driver === newDriverName
+            
+            console.log('DriverService: Checking old vehicle assignment:', {
+              vehiclePlateNumber: oldVehicle,
+              vehicleAssignedDriver: previousVehicle.driver,
+              oldDriverName,
+              newDriverName,
+              isAssignedToThisDriver
+            })
+            
+            if (isAssignedToThisDriver) {
+              console.log('DriverService: Removing driver from old vehicle:', oldVehicle)
+              await VehicleService.update(previousVehicle.id, { driver: undefined }, true)
+            } else {
+              console.log('DriverService: Old vehicle is not assigned to this driver, skipping removal')
+            }
+          } else {
+            console.warn('DriverService: Previous vehicle not found:', oldVehicle)
+          }
+        }
+
+        // 2. 新しい車両にドライバーを割り当て
+        if (newVehicle && newVehicle !== oldVehicle) {
+          const newVehicleRecord = await VehicleService.getByPlateNumber(newVehicle)
+          if (newVehicleRecord) {
+            console.log('DriverService: Assigning driver to new vehicle:', newVehicle, newDriverName)
+            await VehicleService.update(newVehicleRecord.id, { driver: newDriverName }, true)
+          }
+        }
+
+        // 3. ドライバー名が変更された場合、同じ車両のドライバー名を更新
+        if (newVehicle && newVehicle === oldVehicle && newDriverName !== oldDriverName) {
+          const vehicleRecord = await VehicleService.getByPlateNumber(newVehicle)
+          if (vehicleRecord) {
+            console.log('DriverService: Updating driver name for same vehicle:', newVehicle, newDriverName)
+            await VehicleService.update(vehicleRecord.id, { driver: newDriverName }, true)
+          }
+        }
+      } catch (syncError) {
+        console.error('DriverService: Vehicle sync failed:', syncError)
+        throw new Error(`ドライバーの更新は完了しましたが、車両テーブルの同期に失敗しました: ${syncError}`)
+      }
     }
 
     return DriverService.mapToDriver(data)
   }
 
   static async delete(id: number): Promise<void> {
+    console.log('DriverService.delete called:', { id })
+    
+    // 削除前にドライバー情報を取得し、車両との同期を実行
+    const driverToDelete = await this.getById(id)
+    if (!driverToDelete) {
+      throw new Error('Driver not found')
+    }
+    
+    console.log('DriverService.delete driver info:', driverToDelete)
+    
+    // 削除対象のドライバーに車両が割り当てられている場合、車両のドライバー割り当てを解除
+    if (driverToDelete.assignedVehicle) {
+      try {
+        const { VehicleService } = await import('./vehicleService')
+        const vehicle = await VehicleService.getByPlateNumber(driverToDelete.assignedVehicle)
+        if (vehicle && vehicle.driver === driverToDelete.name) {
+          console.log('DriverService.delete: Removing driver assignment from vehicle:', vehicle.plateNumber)
+          await VehicleService.update(vehicle.id, { driver: undefined }, true)
+        }
+      } catch (syncError) {
+        console.error('DriverService.delete: Vehicle sync failed:', syncError)
+        // 削除処理は継続するが、エラーを警告
+        console.warn('ドライバーを削除しますが、車両のドライバー割り当て解除に失敗しました')
+      }
+    }
+    
+    // ドライバーを削除
     const { error } = await supabase
       .from('drivers')
       .delete()
@@ -153,6 +385,8 @@ export class DriverService {
     if (error) {
       throw new Error(`Failed to delete driver: ${error.message}`)
     }
+    
+    console.log('DriverService.delete: Driver deleted successfully')
   }
 
   static async getByTeam(team: string): Promise<Driver[]> {
@@ -234,6 +468,24 @@ export class DriverService {
     const isPasswordValid = await bcrypt.compare(password, data.password)
     if (!isPasswordValid) {
       return null
+    }
+
+    return DriverService.mapToDriver(data)
+  }
+
+  // 名前でドライバーを検索
+  static async getByName(name: string): Promise<Driver | null> {
+    const { data, error } = await supabase
+      .from('drivers')
+      .select('*')
+      .eq('name', name)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null
+      }
+      throw new Error(`Failed to fetch driver by name: ${error.message}`)
     }
 
     return DriverService.mapToDriver(data)

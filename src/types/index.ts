@@ -209,7 +209,7 @@ export interface AuthState {
 export interface DriverNotification {
   id: number
   driverId: number
-  type: 'vehicle_inspection' | 'vehicle_swap' | 'schedule_change' | 'emergency' | 'vacation_status'
+  type: 'vehicle_inspection' | 'inspection_reserved' | 'vehicle_assignment' | 'schedule_change' | 'emergency' | 'vacation_status' | 'general'
   title: string
   message: string
   priority: 'low' | 'medium' | 'high' | 'urgent'
@@ -218,6 +218,23 @@ export interface DriverNotification {
   scheduledFor?: Date
   actionRequired: boolean
   actionUrl?: string
+}
+
+// 点検予約の型定義
+export interface InspectionReservation {
+  id: number
+  vehicleId: number
+  vehiclePlateNumber: string
+  driverId?: number
+  driverName?: string
+  inspectionType: string
+  scheduledDate: Date
+  deadlineDate: Date
+  status: 'scheduled' | 'completed' | 'cancelled'
+  memo?: string
+  reservedBy: string
+  createdAt: Date
+  updatedAt: Date
 }
 
 // 運転手ダッシュボード用の型定義

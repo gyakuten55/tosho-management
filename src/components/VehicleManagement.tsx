@@ -153,7 +153,8 @@ export default function VehicleManagement({}: VehicleManagementProps) {
     if (confirm('この車両を削除してもよろしいですか？')) {
       try {
         await VehicleService.delete(vehicleId)
-        setVehicles(vehicles.filter(v => v.id !== vehicleId))
+        // データベース同期後、最新データを再取得
+        await loadData()
       } catch (err) {
         console.error('Failed to delete vehicle:', err)
         alert('車両の削除に失敗しました')
@@ -165,14 +166,14 @@ export default function VehicleManagement({}: VehicleManagementProps) {
     try {
       if (selectedVehicle) {
         // 編集
-        const updatedVehicle = await VehicleService.update(selectedVehicle.id, vehicleData)
-        setVehicles(vehicles.map(v => 
-          v.id === selectedVehicle.id ? updatedVehicle : v
-        ))
+        await VehicleService.update(selectedVehicle.id, vehicleData)
+        // データベース同期後、最新データを再取得
+        await loadData()
       } else {
         // 新規追加
-        const newVehicle = await VehicleService.create(vehicleData as Omit<Vehicle, 'id'>)
-        setVehicles([...vehicles, newVehicle])
+        await VehicleService.create(vehicleData as Omit<Vehicle, 'id'>)
+        // データベース同期後、最新データを再取得
+        await loadData()
       }
       setCurrentView('list')
       setSelectedVehicle(null)
