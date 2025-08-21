@@ -265,16 +265,16 @@ export class InspectionReservationService {
       id: row.id,
       vehicleId: row.vehicle_id,
       vehiclePlateNumber: row.vehicle_plate_number,
-      driverId: row.driver_id,
-      driverName: row.driver_name,
+      driverId: row.driver_id || undefined,
+      driverName: row.driver_name || undefined,
       inspectionType: row.inspection_type,
       scheduledDate: new Date(row.scheduled_date),
       deadlineDate: new Date(row.deadline_date),
-      status: row.status,
-      memo: row.memo,
+      status: row.status as 'scheduled' | 'completed' | 'cancelled',
+      memo: row.memo || undefined,
       reservedBy: row.reserved_by,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
+      createdAt: new Date(row.created_at || new Date()),
+      updatedAt: new Date(row.updated_at || new Date())
     }
   }
 }

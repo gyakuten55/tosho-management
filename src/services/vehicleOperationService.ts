@@ -107,8 +107,7 @@ export class VehicleAssignmentChangeService {
       createdAt: new Date(row.created_at),
       createdBy: row.created_by,
       isTemporary: row.is_temporary || false,
-      endDate: row.end_date ? new Date(row.end_date) : undefined,
-      updatedAt: new Date(row.updated_at)
+      endDate: row.end_date ? new Date(row.end_date) : undefined
     }
   }
 }
@@ -194,9 +193,7 @@ export class DriverVehicleNotificationService {
       message: row.message,
       isRead: row.is_read || false,
       sentAt: new Date(row.sent_at),
-      priority: (row.priority as DriverVehicleNotification['priority']) || 'medium',
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
+      priority: (row.priority as DriverVehicleNotification['priority']) || 'medium'
     }
   }
 }
@@ -299,8 +296,7 @@ export class VehicleInoperativePeriodService {
       status: (row.status as VehicleInoperativePeriod['status']) || 'active',
       createdAt: new Date(row.created_at),
       createdBy: row.created_by,
-      notes: row.notes || undefined,
-      updatedAt: new Date(row.updated_at)
+      notes: row.notes || undefined
     }
   }
 }
@@ -375,8 +371,7 @@ export class DailyVehicleSwapService {
       newPlateNumber: row.new_plate_number,
       swapTime: new Date(row.swap_time),
       reason: row.reason,
-      status: (row.status as DailyVehicleSwap['status']) || 'active',
-      createdAt: new Date(row.created_at)
+      status: (row.status as DailyVehicleSwap['status']) || 'active'
     }
   }
 }

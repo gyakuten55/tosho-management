@@ -370,7 +370,7 @@ export default function VacationManagement({
         
         driversWithoutStatus.forEach(driver => {
           defaultRequests.push({
-            id: Date.now() + driver.id + currentDate.getTime() + Math.random(),
+            id: -(Math.floor(Date.now() / 1000) + driver.id),
             driverId: driver.id,
             driverName: driver.name,
             team: driver.team,
@@ -418,7 +418,7 @@ export default function VacationManagement({
         
         currentStats.forEach(stat => {
           const notification: VacationNotification = {
-            id: Date.now() + stat.driverId,
+            id: -(Math.floor(Date.now() / 1000) + stat.driverId),
             driverId: stat.driverId,
             driverName: stat.driverName,
             type: 'vacation_reminder',
@@ -515,7 +515,7 @@ export default function VacationManagement({
     
     if (driversWithoutStatus.length > 0) {
       const newRequests: VacationRequest[] = driversWithoutStatus.map(driver => ({
-        id: Date.now() + driver.id + Math.random(),
+        id: -(Math.floor(Date.now() / 1000) + driver.id),
         driverId: driver.id,
         driverName: driver.name,
         team: driver.team,
@@ -759,7 +759,7 @@ export default function VacationManagement({
     const teamDrivers = drivers.filter(driver => 
       (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
       (driver as any).holidayTeams &&
-      (driver as any).holidayTeams.includes(holidayTeam)
+      (driver as any).holidayTeams.includes(`${holidayTeam}チーム`)
     )
 
     if (teamDrivers.length === 0) {
@@ -775,7 +775,9 @@ export default function VacationManagement({
     try {
       // その日のチームドライバーの既存設定をデータベースから削除
       const existingRequests = vacationRequests.filter(req => 
-        isSameDay(req.date, selectedDate) && teamDrivers.some(driver => driver.id === req.driverId)
+        isSameDay(req.date, selectedDate) && 
+        teamDrivers.some(driver => driver.id === req.driverId) &&
+        req.id > 0 // データベースに実際に保存されているレコードのみ
       )
       
       for (const req of existingRequests) {
@@ -1037,13 +1039,11 @@ export default function VacationManagement({
                         // チーム別に休暇者をグループ化
                         const teamVacations: { [team: string]: number } = {}
                         dayInfo.vacations.forEach(v => {
-                          if (!v.isExternalDriver) {
-                            teamVacations[v.team] = (teamVacations[v.team] || 0) + 1
-                          }
+                          teamVacations[v.team] = (teamVacations[v.team] || 0) + 1
                         })
 
                         // 各チームの上限を取得して表示
-                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム']
+                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
                         return teams.map(team => {
                           const currentCount = teamVacations[team] || 0
                           const limit = getVacationLimitForDate(dayInfo.date, team)
@@ -1076,14 +1076,6 @@ export default function VacationManagement({
                         </div>
                       )}
                       
-                      {/* 外部ドライバーの休暇 */}
-                      {dayInfo.externalDriverOffCount > 0 && (
-                        <div className="text-xs">
-                          <span className="font-medium text-purple-600">
-                            外部休: {dayInfo.externalDriverOffCount}人
-                          </span>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1424,7 +1416,7 @@ export default function VacationManagement({
                     祝日チーム（A〜G）単位で一括して出勤・休暇を設定できます
                   </p>
                   <div className="grid grid-cols-7 gap-2">
-                    {['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((team) => {
+                    {['Aチーム', 'Bチーム', 'Cチーム', 'Dチーム', 'Eチーム', 'Fチーム', 'Gチーム'].map((team) => {
                       const teamDrivers = drivers.filter(driver => 
                         (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
                         (driver as any).holidayTeams &&
@@ -1434,19 +1426,19 @@ export default function VacationManagement({
                       return (
                         <div key={team} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                           <div className="text-center mb-2">
-                            <span className="font-bold text-lg text-gray-900">{team}</span>
+                            <span className="font-bold text-lg text-gray-900">{team.replace('チーム', '')}</span>
                             <p className="text-xs text-gray-600">{teamDrivers.length}人</p>
                           </div>
                           <div className="space-y-1">
                             <button
-                              onClick={() => handleHolidayTeamBulkStatus(team, 'working')}
+                              onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'working')}
                               className="w-full text-xs py-1 px-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                               disabled={teamDrivers.length === 0}
                             >
                               出勤
                             </button>
                             <button
-                              onClick={() => handleHolidayTeamBulkStatus(team, 'day_off')}
+                              onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'day_off')}
                               className="w-full text-xs py-1 px-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                               disabled={teamDrivers.length === 0}
                             >

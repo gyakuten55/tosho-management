@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { VacationSettingsService } from '@/services/vacationSettingsService'
 
 export default function ResetSettingsPage() {
@@ -59,12 +60,12 @@ export default function ResetSettingsPage() {
         )}
 
         <div className="mt-6">
-          <a 
+          <Link 
             href="/"
             className="text-blue-600 hover:text-blue-800 text-sm underline"
           >
             ← ホームに戻る
-          </a>
+          </Link>
         </div>
       </div>
     </div>

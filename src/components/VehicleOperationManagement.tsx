@@ -48,6 +48,7 @@ import { getAllInspectionDates, getNextInspectionDate } from '@/utils/inspection
 import { VehicleService } from '@/services/vehicleService'
 import { DriverService } from '@/services/driverService'
 import { DriverNotificationService } from '@/services/driverNotificationService'
+import { InspectionReservationService } from '@/services/inspectionReservationService'
 import { VacationService } from '@/services/vacationService'
 import { 
   VehicleAssignmentChangeService,

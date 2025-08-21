@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Save, X, Users, Phone, Mail, Calendar, Car, MapPin, Lock, Eye, EyeOff } from 'lucide-react'
 import { Driver, Vehicle } from '@/types'
-import { HolidayTeamService } from '@/services/holidayService'
 
 interface DriverFormProps {
   driver?: Driver | null
@@ -43,20 +42,9 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [availableHolidayTeams, setAvailableHolidayTeams] = useState<string[]>([])
+  // 祝日チーム（A〜G）の固定リスト
+  const holidayTeams = ['Aチーム', 'Bチーム', 'Cチーム', 'Dチーム', 'Eチーム', 'Fチーム', 'Gチーム']
 
-  // 祝日チームデータを読み込み
-  useEffect(() => {
-    const loadHolidayTeams = async () => {
-      try {
-        const teams = await HolidayTeamService.getAll()
-        setAvailableHolidayTeams(teams.map(team => team.teamName))
-      } catch (error) {
-        console.error('Failed to load holiday teams:', error)
-      }
-    }
-    loadHolidayTeams()
-  }, [])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -415,7 +403,51 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
               {errors.team && <p className="text-red-500 text-sm mt-1">{errors.team}</p>}
             </div>
 
-
+            {/* 祝日チーム - 配送センターチーム・外部ドライバー選択時のみ表示 */}
+            {(formData.team === '配送センターチーム' || formData.team === '外部ドライバー') && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Calendar className="h-4 w-4 inline mr-1" />
+                  祝日チーム（A〜G）
+                </label>
+                <p className="text-sm text-gray-500 mb-4">
+                  選択したチームに自動配属されます（複数選択可）
+                </p>
+                
+                <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                  {holidayTeams.map((teamName) => (
+                    <label key={teamName} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                      <input
+                        type="checkbox"
+                        checked={formData.holidayTeams.includes(teamName)}
+                        onChange={(e) => handleHolidayTeamChange(teamName, e.target.checked)}
+                        className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm font-medium text-gray-700">{teamName}</span>
+                    </label>
+                  ))}
+                </div>
+                
+                {formData.holidayTeams.length > 0 && (
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-900">選択中のチーム:</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {formData.holidayTeams.map((team) => (
+                        <span
+                          key={team}
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        >
+                          {team}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -623,63 +655,6 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
           </div>
         </div>
 
-        {/* 祝日チーム */}
-        {(formData.team === '配送センターチーム' || formData.team === '外部ドライバー') && (
-          <div className="card p-6">
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="h-8 w-8 bg-red-100 rounded-lg flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">祝日チーム</h3>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                祝日チーム（A〜G）
-              </label>
-              <p className="text-sm text-gray-500 mb-4">
-                配送センターチーム・外部ドライバーが祝日に所属するチームを選択してください（複数選択可）
-              </p>
-              
-              <div className="grid grid-cols-3 gap-2">
-                {availableHolidayTeams.map((teamName) => (
-                  <label key={teamName} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
-                    <input
-                      type="checkbox"
-                      checked={formData.holidayTeams.includes(teamName)}
-                      onChange={(e) => handleHolidayTeamChange(teamName, e.target.checked)}
-                      className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                    />
-                    <span className="text-sm font-medium text-gray-700">{teamName}</span>
-                  </label>
-                ))}
-                
-                {availableHolidayTeams.length === 0 && (
-                  <p className="text-sm text-gray-500">祝日勤務チームがありません</p>
-                )}
-              </div>
-              
-              {formData.holidayTeams.length > 0 && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-900">選択中のチーム:</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {formData.holidayTeams.map((team) => (
-                      <span
-                        key={team}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                      >
-                        {team}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* 備考 */}
         <div className="card p-6">

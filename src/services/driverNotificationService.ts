@@ -163,25 +163,6 @@ export class DriverNotificationService {
   }
 
   /**
-   * 通知を削除
-   */
-  static async delete(notificationId: number): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('driver_notifications')
-        .delete()
-        .eq('id', notificationId)
-
-      if (error) {
-        throw new Error(`Failed to delete driver notification: ${error.message}`)
-      }
-    } catch (error) {
-      console.error('Failed to delete driver notification:', error)
-      throw error
-    }
-  }
-
-  /**
    * 未読通知の数を取得
    */
   static async getUnreadCount(driverId: number): Promise<number> {
@@ -420,7 +401,7 @@ export class DriverNotificationService {
       message: row.message,
       priority: row.priority as DriverNotification['priority'],
       isRead: row.is_read || false,
-      createdAt: new Date(row.created_at),
+      createdAt: new Date(row.created_at || new Date()),
       scheduledFor: row.scheduled_for ? new Date(row.scheduled_for) : undefined,
       actionRequired: row.action_required || false
     }
