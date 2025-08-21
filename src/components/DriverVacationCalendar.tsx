@@ -153,6 +153,8 @@ export default function DriverVacationCalendar({
         return 'bg-red-100 text-red-800 border-red-200'
       case 'night_shift':
         return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'working':
+        return 'bg-green-100 text-green-800 border-green-200'
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200'
     }
@@ -164,6 +166,8 @@ export default function DriverVacationCalendar({
         return <X className="h-3 w-3" />
       case 'night_shift':
         return <Moon className="h-3 w-3" />
+      case 'working':
+        return <Check className="h-3 w-3" />
       default:
         return null
     }
@@ -273,12 +277,13 @@ export default function DriverVacationCalendar({
               </div>
 
               {/* 休暇申請表示 */}
-              {dayInfo.vacationRequest && (
+              {dayInfo.vacationRequest && dayInfo.vacationRequest.workStatus !== 'working' && (
                 <div className={`text-xs px-2 py-1 rounded border ${getStatusColor(dayInfo.vacationRequest.workStatus)}`}>
                   <div className="flex items-center space-x-1">
                     {getStatusIcon(dayInfo.vacationRequest.workStatus)}
                     <span>
-                      {dayInfo.vacationRequest.workStatus === 'day_off' ? '休暇' : '夜勤'}
+                      {dayInfo.vacationRequest.workStatus === 'day_off' ? '休暇' : 
+                       dayInfo.vacationRequest.workStatus === 'night_shift' ? '夜勤' : '出勤'}
                     </span>
                   </div>
                 </div>

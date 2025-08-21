@@ -891,7 +891,28 @@ export default function VacationManagement({
       // データベースから削除
       await VacationService.delete(vacationId)
       
-      const updatedRequests = vacationRequests.filter(req => req.id !== vacationId)
+      // 削除後、該当ドライバーを明示的に「出勤」状態として登録
+      const workingRequest = {
+        driverId: vacationToDelete.driverId,
+        driverName: vacationToDelete.driverName,
+        team: vacationToDelete.team,
+        employeeId: vacationToDelete.employeeId,
+        date: vacationToDelete.date,
+        workStatus: 'working' as const,
+        isOff: false,
+        type: 'working' as const,
+        reason: '休暇削除により出勤に変更',
+        status: 'approved' as const,
+        requestDate: new Date(),
+        isExternalDriver: vacationToDelete.isExternalDriver
+      }
+      
+      const newWorkingRequest = await VacationService.create(workingRequest)
+      
+      // 状態を更新（削除されたアイテムを除き、新しい出勤レコードを追加）
+      const updatedRequests = vacationRequests
+        .filter(req => req.id !== vacationId)
+        .concat([newWorkingRequest])
       setVacationRequests(updatedRequests)
       
       // 統計を更新
