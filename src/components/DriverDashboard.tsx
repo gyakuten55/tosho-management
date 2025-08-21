@@ -155,8 +155,8 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
 
     initializeData()
 
-    // 1分ごとにデータを更新（管理画面での変更を早期に反映）
-    const interval = setInterval(initializeData, 1 * 60 * 1000)
+    // 30秒ごとにデータを更新（管理画面での変更を早期に反映）
+    const interval = setInterval(initializeData, 30 * 1000)
     return () => clearInterval(interval)
   }, [user])
 
@@ -550,6 +550,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
       existingRequests={vacationRequests}
       monthlyStats={monthlyVacationStats}
       vacationSettings={vacationSettings}
+      allVacationRequests={allVacationRequests}
       onRequestSubmit={handleVacationRequest}
       onRequestDelete={handleVacationDelete}
     />

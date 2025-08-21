@@ -24,6 +24,7 @@ interface DriverVacationCalendarProps {
   existingRequests: VacationRequest[]
   monthlyStats: MonthlyVacationStats | null
   vacationSettings: VacationSettings | null
+  allVacationRequests: VacationRequest[]
   onRequestSubmit: (request: Omit<VacationRequest, 'id' | 'requestDate'>) => void
   onRequestDelete?: (requestId: number) => void
 }
@@ -48,6 +49,7 @@ export default function DriverVacationCalendar({
   existingRequests, 
   monthlyStats,
   vacationSettings,
+  allVacationRequests,
   onRequestSubmit,
   onRequestDelete,
 }: DriverVacationCalendarProps) {
@@ -62,7 +64,6 @@ export default function DriverVacationCalendar({
     vacationDrivers: VacationRequest[]
   } | null>(null)
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
-  const [allVacationRequests, setAllVacationRequests] = useState<VacationRequest[]>([])
 
   // チーム別・日付別の休暇上限を取得
   const getVacationLimitForTeamAndDate = (team: string, date: Date) => {
@@ -81,21 +82,17 @@ export default function DriverVacationCalendar({
     return vacationSettings.teamMonthlyWeekdayLimits[team]?.[month]?.[weekday] || 0
   }
 
-  // 全ドライバーと全休暇データを取得
+  // 全ドライバーデータを取得
   useEffect(() => {
-    const loadAllData = async () => {
+    const loadAllDrivers = async () => {
       try {
-        const [driversData, vacationsData] = await Promise.all([
-          DriverService.getAll(),
-          VacationService.getAll()
-        ])
+        const driversData = await DriverService.getAll()
         setAllDrivers(driversData)
-        setAllVacationRequests(vacationsData)
       } catch (error) {
-        console.error('Failed to load all data:', error)
+        console.error('Failed to load drivers data:', error)
       }
     }
-    loadAllData()
+    loadAllDrivers()
   }, [])
 
   if (!currentUser) {
@@ -165,6 +162,40 @@ export default function DriverVacationCalendar({
   }
 
   const calendarDays = generateCalendarDays()
+
+  // 現在表示中の月の統計を計算
+  const calculateCurrentMonthStats = (): MonthlyVacationStats | null => {
+    if (!currentUser) return null
+
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() + 1
+
+    // 現在の月の自分の休暇申請を取得
+    const monthlyVacations = allVacationRequests.filter(req => 
+      req.driverId === currentUser.id &&
+      req.date.getFullYear() === year &&
+      req.date.getMonth() + 1 === month &&
+      req.workStatus === 'day_off'
+    )
+
+    const totalOffDays = monthlyVacations.length
+    const requiredMinimumDays = vacationSettings?.minimumOffDaysPerMonth || 9
+    const remainingRequiredDays = Math.max(0, requiredMinimumDays - totalOffDays)
+
+    return {
+      driverId: currentUser.id,
+      driverName: currentUser.name,
+      team: currentUser.team,
+      employeeId: currentUser.employeeId,
+      year,
+      month,
+      totalOffDays,
+      requiredMinimumDays,
+      remainingRequiredDays
+    }
+  }
+
+  const currentMonthStats = calculateCurrentMonthStats()
 
   const handleDateClick = (dayInfo: DailyInfo) => {
     if (!dayInfo.isCurrentMonth) return
@@ -271,27 +302,33 @@ export default function DriverVacationCalendar({
       </div>
 
       {/* 月間統計 */}
-      {monthlyStats && (
+      {currentMonthStats && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            {monthlyStats.year}年{monthlyStats.month}月の休暇統計
+            {currentMonthStats.year}年{currentMonthStats.month}月の休暇統計
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{monthlyStats.totalOffDays}</div>
+              <div className="text-2xl font-bold text-blue-600">{currentMonthStats.totalOffDays}</div>
               <div className="text-sm text-gray-600">取得日数</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{monthlyStats.requiredMinimumDays}</div>
+              <div className="text-2xl font-bold text-green-600">{currentMonthStats.requiredMinimumDays}</div>
               <div className="text-sm text-gray-600">必要日数</div>
             </div>
             <div className="text-center">
               <div className={`text-2xl font-bold ${
-                monthlyStats.remainingRequiredDays > 0 ? 'text-orange-600' : 'text-green-600'
+                currentMonthStats.remainingRequiredDays > 0 ? 'text-orange-600' : 'text-green-600'
               }`}>
-                {monthlyStats.remainingRequiredDays}
+                {currentMonthStats.remainingRequiredDays}
               </div>
               <div className="text-sm text-gray-600">残り必要日数</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {((currentMonthStats.totalOffDays / currentMonthStats.requiredMinimumDays) * 100).toFixed(0)}%
+              </div>
+              <div className="text-sm text-gray-600">達成率</div>
             </div>
           </div>
         </div>
