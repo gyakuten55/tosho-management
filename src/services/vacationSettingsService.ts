@@ -28,7 +28,6 @@ export class VacationSettingsService {
   static async update(settings: VacationSettings): Promise<VacationSettings> {
     const settingsData: VacationSettingsUpdate = {
       minimum_off_days_per_month: settings.minimumOffDaysPerMonth,
-      maximum_off_days_per_month: settings.maximumOffDaysPerMonth,
       notification_date: settings.notificationDate,
       team_monthly_weekday_limits: settings.teamMonthlyWeekdayLimits as any,
       specific_date_limits: settings.specificDateLimits as any,
@@ -135,7 +134,6 @@ export class VacationSettingsService {
 
     const defaultSettings: VacationSettings = {
       minimumOffDaysPerMonth: 9,
-      maximumOffDaysPerMonth: 12,
       notificationDate: 25,
       teamMonthlyWeekdayLimits,
       specificDateLimits: {},
@@ -196,7 +194,6 @@ export class VacationSettingsService {
     
     return {
       minimumOffDaysPerMonth: row.minimum_off_days_per_month,
-      maximumOffDaysPerMonth: row.maximum_off_days_per_month,
       notificationDate: row.notification_date,
       teamMonthlyWeekdayLimits,
       specificDateLimits: row.specific_date_limits as any || {},

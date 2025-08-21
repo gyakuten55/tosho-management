@@ -162,7 +162,6 @@ export default function VacationManagement({
             totalOffDays: 0,
             requiredMinimumDays: settings.minimumOffDaysPerMonth,
             remainingRequiredDays: settings.minimumOffDaysPerMonth,
-            maxAllowedDays: settings.maximumOffDaysPerMonth
           })
         }
       }
@@ -179,7 +178,7 @@ export default function VacationManagement({
   
 
   // ソート用のstate
-  const [sortField, setSortField] = useState<'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team' | 'employeeId' | 'requiredMinimumDays' | 'maxAllowedDays'>('driverName')
+  const [sortField, setSortField] = useState<'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team' | 'employeeId' | 'requiredMinimumDays'>('driverName')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // 指定日付とチームに対する休暇上限を取得する関数
@@ -199,15 +198,15 @@ export default function VacationManagement({
       dateString,
       team,
       specificDateLimits: vacationSettings.specificDateLimits,
-      hasSpecificLimit: !!vacationSettings.specificDateLimits[dateString],
+      hasSpecificLimit: !!vacationSettings.specificDateLimits[dateString]?.[team],
       utcDate: date.toISOString().split('T')[0],
       localDate: dateString
     })
 
     // 1. 特定日付設定（最優先）
-    if (vacationSettings.specificDateLimits && vacationSettings.specificDateLimits[dateString]) {
-      console.log('Using specific date limit:', vacationSettings.specificDateLimits[dateString])
-      return vacationSettings.specificDateLimits[dateString]
+    if (vacationSettings.specificDateLimits && vacationSettings.specificDateLimits[dateString]?.[team] !== undefined) {
+      console.log('Using specific date limit:', vacationSettings.specificDateLimits[dateString][team])
+      return vacationSettings.specificDateLimits[dateString][team]
     }
 
     // 2. チーム別月別曜日設定
@@ -281,7 +280,6 @@ export default function VacationManagement({
             totalOffDays,
             requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
             remainingRequiredDays,
-            maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
           })
         })
       })
@@ -481,7 +479,6 @@ export default function VacationManagement({
             totalOffDays,
             requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
             remainingRequiredDays,
-            maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
           })
         })
         
@@ -702,7 +699,11 @@ export default function VacationManagement({
         // 新しい統一設定から上限を取得
         const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
         
-        if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
+        // 上限チェック（0人制限の場合は即座に拒否、それ以外は既存数で判定）
+        if (vacationLimit === 0) {
+          alert(`この日は休暇登録が禁止されています。（${driver.team}の上限: 0人）`)
+          return
+        } else if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
           alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
           return
         }
@@ -767,6 +768,41 @@ export default function VacationManagement({
       return
     }
 
+    // 休暇設定の場合は上限チェック
+    if (workStatus === 'day_off') {
+      // チーム別に分類
+      const teamGroups = teamDrivers.reduce((groups, driver) => {
+        if (!groups[driver.team]) groups[driver.team] = []
+        groups[driver.team].push(driver)
+        return groups
+      }, {} as { [team: string]: typeof teamDrivers })
+
+      // 各チームの上限をチェック
+      for (const [team, driversInTeam] of Object.entries(teamGroups)) {
+        const vacationLimit = getVacationLimitForDate(selectedDate, team)
+        
+        if (vacationLimit === 0) {
+          alert(`この日は${team}の休暇申請が禁止されています。（上限: 0人）`)
+          return
+        }
+        
+        // 現在の休暇者数（祝日チーム一括設定対象外のドライバー）
+        const currentVacations = vacationRequests.filter(req => 
+          isSameDay(req.date, selectedDate) && 
+          req.workStatus === 'day_off' && 
+          req.team === team &&
+          !teamDrivers.some(td => td.id === req.driverId) // 今回の設定対象外
+        ).length
+        
+        const newVacationCount = currentVacations + driversInTeam.length
+        
+        if (newVacationCount > vacationLimit) {
+          alert(`${team}の休暇上限を超えます。（現在: ${currentVacations}人 + 追加: ${driversInTeam.length}人 = ${newVacationCount}人、上限: ${vacationLimit}人）`)
+          return
+        }
+      }
+    }
+
     const statusText = workStatus === 'working' ? '出勤' : '休暇'
     const confirmMessage = `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}に祝日チーム${holidayTeam}の全員（${teamDrivers.length}人）を${statusText}に設定しますか？\n\n対象ドライバー:\n${teamDrivers.map(d => `・${d.name} (${d.team})`).join('\n')}\n\n※ 既存の設定は上書きされます。`
     
@@ -828,6 +864,31 @@ export default function VacationManagement({
   // 全員一括設定処理
   const handleBulkWorkStatus = async (workStatus: 'working' | 'day_off', confirmMessage: string) => {
     if (!selectedDate) return
+    
+    // 休暇設定の場合は上限チェック
+    if (workStatus === 'day_off') {
+      // チーム別に分類
+      const teamGroups = drivers.reduce((groups, driver) => {
+        if (!groups[driver.team]) groups[driver.team] = []
+        groups[driver.team].push(driver)
+        return groups
+      }, {} as { [team: string]: typeof drivers })
+
+      // 各チームの上限をチェック
+      for (const [team, driversInTeam] of Object.entries(teamGroups)) {
+        const vacationLimit = getVacationLimitForDate(selectedDate, team)
+        
+        if (vacationLimit === 0) {
+          alert(`この日は${team}の休暇申請が禁止されています。（上限: 0人）`)
+          return
+        }
+        
+        if (driversInTeam.length > vacationLimit) {
+          alert(`${team}の休暇上限を超えます。（対象: ${driversInTeam.length}人、上限: ${vacationLimit}人）`)
+          return
+        }
+      }
+    }
     
     if (!confirm(confirmMessage)) return
 
@@ -1223,17 +1284,6 @@ export default function VacationManagement({
                     )}
                   </div>
                 </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('maxAllowedDays')}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span>上限日数</span>
-                    {sortField === 'maxAllowedDays' && (
-                      sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-                    )}
-                  </div>
-                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   ステータス
                 </th>
@@ -1264,9 +1314,6 @@ export default function VacationManagement({
                     }`}>
                       {stat.remainingRequiredDays}日
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-gray-700">{stat.maxAllowedDays}日</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {stat.remainingRequiredDays === 0 ? (
@@ -1309,7 +1356,7 @@ export default function VacationManagement({
   }
 
   // ソート処理
-  const handleSort = (field: 'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team' | 'employeeId' | 'requiredMinimumDays' | 'maxAllowedDays') => {
+  const handleSort = (field: 'driverName' | 'totalOffDays' | 'remainingRequiredDays' | 'team' | 'employeeId' | 'requiredMinimumDays') => {
     if (sortField === field) {
       setSortDirection(prevDirection => prevDirection === 'asc' ? 'desc' : 'asc')
     } else {
@@ -1348,10 +1395,6 @@ export default function VacationManagement({
         case 'requiredMinimumDays':
           aValue = a.requiredMinimumDays
           bValue = b.requiredMinimumDays
-          break
-        case 'maxAllowedDays':
-          aValue = a.maxAllowedDays
-          bValue = b.maxAllowedDays
           break
         default:
           aValue = a.driverName

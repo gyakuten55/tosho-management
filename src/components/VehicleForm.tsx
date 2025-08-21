@@ -33,7 +33,7 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
     team: '配送センターチーム',
     status: 'normal',
     inspectionDate: format(new Date(), 'yyyy-MM-dd'),
-    garage: '本社車庫',
+    garage: '1車庫',
     notes: '',
     hasCrane: false
   })
@@ -141,12 +141,11 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
   }
 
   const garages = [
-    '本社車庫',
-    '東車庫',
-    '西車庫',
-    '整備工場',
-    '外部整備工場',
-    'その他'
+    '1車庫',
+    '2車庫',
+    '3車庫',
+    '4車庫',
+    '5車庫'
   ]
 
   // driversはpropsから受け取るように変更

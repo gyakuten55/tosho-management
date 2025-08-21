@@ -42,9 +42,10 @@ export default function VacationCalendarView({
   // チーム色を取得
   const getTeamColor = (team: string) => {
     const colors = {
-      'A-1': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
-      'A-2': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
-      'B': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' }
+      '配送センターチーム': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
+      '常駐チーム': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
+      'Bチーム': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
+      '外部ドライバー': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' }
     }
     return colors[team as keyof typeof colors] || { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200' }
   }
@@ -80,6 +81,24 @@ export default function VacationCalendarView({
     }
   }
 
+  // 特定日付の上限設定を取得
+  const getVacationLimitForTeamAndDate = (team: string, date: Date) => {
+    const dateString = format(date, 'yyyy-MM-dd')
+    
+    // 特定日付設定があるかチェック（チーム別）
+    if (vacationSettings.specificDateLimits[dateString]?.[team] !== undefined) {
+      console.log(`Using specific limit for ${team} on ${dateString}:`, vacationSettings.specificDateLimits[dateString][team])
+      return vacationSettings.specificDateLimits[dateString][team]
+    }
+    
+    // 基本設定から取得
+    const weekday = getDay(date)
+    const month = date.getMonth() + 1
+    const basicLimit = vacationSettings.teamMonthlyWeekdayLimits[team]?.[month]?.[weekday] || 0
+    console.log(`Using basic limit for ${team} on ${dateString} (month:${month}, weekday:${weekday}):`, basicLimit)
+    return basicLimit
+  }
+
   // チーム別休暇取得者数を取得
   const getTeamVacationStats = (date: Date) => {
     const dayVacationRequests = filteredRequests.filter(request => 
@@ -87,16 +106,16 @@ export default function VacationCalendarView({
     )
     
     const teamStats = {
-      'A-1': { off: 0, total: 0 },
-      'A-2': { off: 0, total: 0 },
-      'B': { off: 0, total: 0 }
+      '配送センターチーム': { off: 0, total: 0 },
+      '常駐チーム': { off: 0, total: 0 },
+      'Bチーム': { off: 0, total: 0 },
+      '外部ドライバー': { off: 0, total: 0 }
     }
     
-    // 各チームの総ドライバー数を計算（全期間のドライバーから）
-    drivers.forEach(driver => {
-      if (teamStats[driver.team as keyof typeof teamStats]) {
-        teamStats[driver.team as keyof typeof teamStats].total++
-      }
+    // 各チームの休暇上限を計算（特定日付設定を考慮）
+    Object.keys(teamStats).forEach(team => {
+      const limit = getVacationLimitForTeamAndDate(team, date)
+      teamStats[team as keyof typeof teamStats].total = limit
     })
     
     // 休暇取得者数をカウント
@@ -184,9 +203,10 @@ export default function VacationCalendarView({
             className="form-select"
           >
             <option value="all">すべてのチーム</option>
-                              <option value="A-1">A-1</option>
-                  <option value="A-2">A-2</option>
-                  <option value="B">B</option>
+            <option value="配送センターチーム">配送センターチーム</option>
+            <option value="常駐チーム">常駐チーム</option>
+            <option value="Bチーム">Bチーム</option>
+            <option value="外部ドライバー">外部ドライバー</option>
           </select>
           <button
             onClick={() => setCurrentDate(new Date())}
@@ -203,15 +223,19 @@ export default function VacationCalendarView({
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center">
             <div className="w-4 h-4 bg-red-100 border border-red-200 rounded mr-2"></div>
-            <span>A-1チーム</span>
+            <span>配送センター</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-blue-100 border border-blue-200 rounded mr-2"></div>
-            <span>A-2チーム</span>
+            <span>常駐</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-green-100 border border-green-200 rounded mr-2"></div>
-            <span>Bチーム</span>
+            <span>B</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-purple-100 border border-purple-200 rounded mr-2"></div>
+            <span>外部ドライバー</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-gray-300 rounded mr-2"></div>
@@ -288,7 +312,7 @@ export default function VacationCalendarView({
                           key={team}
                           className={`text-xs px-2 py-1 rounded ${teamColor.bg} ${teamColor.text} ${teamColor.border} border font-medium flex items-center justify-between`}
                         >
-                          <span>{team}</span>
+                          <span>{team.replace('チーム', '')}</span>
                           <span>{stats.off}/{stats.total}</span>
                         </div>
                       )

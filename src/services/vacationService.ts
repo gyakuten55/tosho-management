@@ -94,13 +94,16 @@ export class VacationService {
       .update(requestData)
       .eq('id', id)
       .select()
-      .single()
 
     if (error) {
       throw new Error(`Failed to update vacation request: ${error.message}`)
     }
 
-    return this.mapToVacationRequest(data)
+    if (!data || data.length === 0) {
+      throw new Error(`No vacation request found with id: ${id}`)
+    }
+
+    return this.mapToVacationRequest(data[0])
   }
 
   static async delete(id: number): Promise<void> {

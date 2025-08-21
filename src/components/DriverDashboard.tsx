@@ -18,15 +18,17 @@ import {
   Home,
   X
 } from 'lucide-react'
-import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats } from '@/types'
+import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats, VacationSettings, Driver } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import DriverVacationCalendar from './DriverVacationCalendar'
 import DriverVehicleInfo from './DriverVehicleInfo'
 import { VacationService } from '@/services/vacationService'
+import { VacationSettingsService } from '@/services/vacationSettingsService'
 import { VehicleService } from '@/services/vehicleService'
 import { DriverService } from '@/services/driverService'
 import { DriverNotificationService } from '@/services/driverNotificationService'
 import { useAuth } from '@/contexts/AuthContext'
+import { isSameDay } from 'date-fns'
 
 interface DriverDashboardProps {
   onLogout: () => void
@@ -41,6 +43,9 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const [upcomingInspections, setUpcomingInspections] = useState<InspectionSchedule[]>([])
   const [monthlyVacationStats, setMonthlyVacationStats] = useState<MonthlyVacationStats | null>(null)
   const [driverInfo, setDriverInfo] = useState<any>(null)
+  const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
+  const [allDrivers, setAllDrivers] = useState<Driver[]>([])
+  const [allVacationRequests, setAllVacationRequests] = useState<VacationRequest[]>([])
 
   // データの初期化と定期更新
   useEffect(() => {
@@ -52,6 +57,15 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
         const drivers = await DriverService.getAll()
         const currentDriver = drivers.find(d => d.employeeId === user.employeeId)
         setDriverInfo(currentDriver)
+        setAllDrivers(drivers)
+
+        // 休暇設定を取得
+        const settings = await VacationSettingsService.get()
+        setVacationSettings(settings)
+
+        // 全ての休暇申請データを取得（上限チェック用）
+        const allRequests = await VacationService.getAll()
+        setAllVacationRequests(allRequests)
 
         if (currentDriver) {
           // 休暇申請データを取得
@@ -131,8 +145,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
             month: currentMonth,
             totalOffDays: userVacations.length,
             requiredMinimumDays: 9,
-            remainingRequiredDays: Math.max(0, 9 - userVacations.length),
-            maxAllowedDays: 12
+            remainingRequiredDays: Math.max(0, 9 - userVacations.length)
           })
         }
       } catch (error) {
@@ -147,13 +160,75 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     return () => clearInterval(interval)
   }, [user])
 
+  // 指定日付とチームに対する休暇上限を取得する関数
+  const getVacationLimitForDate = (date: Date, team: string): number => {
+    if (!vacationSettings) return 3 // デフォルト値
+    
+    const month = date.getMonth() + 1 // 1-12
+    const weekday = date.getDay() // 0-6（日曜日=0）
+
+    console.log('Getting vacation limit:', { date, team, month, weekday, vacationSettings })
+
+    // 1. チーム別月別曜日設定
+    if (vacationSettings.teamMonthlyWeekdayLimits?.[team]?.[month]?.[weekday] !== undefined) {
+      const limit = vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday]
+      console.log('Using team monthly weekday limit:', limit)
+      return limit
+    }
+
+    // 2. 旧設定からのフォールバック（後方互換性）
+    if (vacationSettings.maxDriversOffPerDay?.[team] !== undefined) {
+      const limit = vacationSettings.maxDriversOffPerDay[team]
+      console.log('Using legacy team limit:', limit)
+      return limit
+    }
+
+    // 3. デフォルト値
+    const defaultLimit = vacationSettings.globalMaxDriversOffPerDay || 3
+    console.log('Using default limit:', defaultLimit)
+    return defaultLimit
+  }
+
   const handleVacationRequest = async (request: Omit<VacationRequest, 'id' | 'requestDate'>) => {
     try {
+      // 休暇申請の場合のみ上限チェックを行う
+      if (request.workStatus === 'day_off' && !request.isExternalDriver && vacationSettings && driverInfo) {
+        // その日の既存の休暇数をカウント（同じチーム、外部ドライバーを除く）
+        const existingVacations = allVacationRequests.filter(req => 
+          isSameDay(req.date, request.date) && 
+          req.workStatus === 'day_off' && 
+          req.team === request.team &&
+          !req.isExternalDriver
+        )
+        
+        // 上限を取得
+        const vacationLimit = getVacationLimitForDate(request.date, request.team)
+        
+        // デバッグ情報を表示
+        console.log('Vacation limit check:', {
+          date: request.date,
+          team: request.team,
+          existingCount: existingVacations.length,
+          limit: vacationLimit,
+          existingVacations: existingVacations.map(v => ({ name: v.driverName, date: v.date }))
+        })
+        
+        // 上限チェック（0人制限の場合は即座に拒否、それ以外は既存数で判定）
+        if (vacationLimit === 0) {
+          alert(`この日は休暇申請が禁止されています。（${request.team}の上限: 0人）`)
+          return
+        } else if (existingVacations.length >= vacationLimit) {
+          alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${request.team}の上限: ${vacationLimit}人）`)
+          return
+        }
+      }
+
       const newRequest = await VacationService.create({
         ...request,
         requestDate: new Date()
       })
       setVacationRequests(prev => [...prev, newRequest])
+      setAllVacationRequests(prev => [...prev, newRequest])
     } catch (error) {
       console.error('Failed to create vacation request:', error)
     }
@@ -163,6 +238,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     try {
       await VacationService.delete(requestId)
       setVacationRequests(prev => prev.filter(req => req.id !== requestId))
+      setAllVacationRequests(prev => prev.filter(req => req.id !== requestId))
     } catch (error) {
       console.error('Failed to delete vacation request:', error)
     }
@@ -251,6 +327,102 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
             <span>ログアウト</span>
           </button>
         </div>
+      </div>
+
+      {/* 通知パネル */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+            <Bell className="h-5 w-5 mr-2 text-blue-600" />
+            通知
+            {notifications.filter(n => !n.isRead).length > 0 && (
+              <span className="ml-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {notifications.filter(n => !n.isRead).length}
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center space-x-3">
+            {notifications.filter(n => !n.isRead).length > 0 && (
+              <button
+                onClick={handleAllNotificationsRead}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                すべて既読
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <button
+                onClick={handleAllNotificationsDelete}
+                className="text-sm text-red-600 hover:text-red-800"
+              >
+                すべて削除
+              </button>
+            )}
+          </div>
+        </div>
+        {notifications.length > 0 ? (
+          <div className="space-y-3">
+            {notifications.map(notification => (
+              <div key={notification.id} className={`p-4 rounded-lg border cursor-pointer ${
+                notification.isRead ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200'
+              }`} onClick={() => !notification.isRead && handleNotificationRead(notification.id)}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2">
+                      <h3 className="font-medium text-gray-900">{notification.title}</h3>
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${
+                        notification.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                        notification.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                        notification.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {notification.priority === 'urgent' ? '緊急' :
+                         notification.priority === 'high' ? '重要' :
+                         notification.priority === 'medium' ? '中' : '低'}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 mt-1">{notification.message}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs text-gray-500">
+                        {notification.createdAt ? new Date(notification.createdAt).toLocaleString('ja-JP') : ''}
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-0.5 text-xs rounded-full ${
+                          notification.type === 'vehicle_inspection' ? 'bg-orange-100 text-orange-800' :
+                          notification.type === 'assignment_change' ? 'bg-blue-100 text-blue-800' :
+                          notification.type === 'vacation_reminder' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {notification.type === 'vehicle_inspection' ? '点検' :
+                           notification.type === 'assignment_change' ? '車両' :
+                           notification.type === 'vacation_reminder' ? '休暇' : 'お知らせ'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-4">
+                    {!notification.isRead && (
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (confirm('この通知を削除しますか？')) {
+                          handleNotificationDelete(notification.id)
+                        }
+                      }}
+                      className="text-gray-400 hover:text-red-600 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-center py-8">新しい通知はありません</p>
+        )}
       </div>
 
       {/* 今日の情報カード */}
@@ -348,99 +520,6 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
         </div>
       </div>
 
-      {/* 通知パネル */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-            <Bell className="h-5 w-5 mr-2 text-blue-600" />
-            通知
-            {notifications.filter(n => !n.isRead).length > 0 && (
-              <span className="ml-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {notifications.filter(n => !n.isRead).length}
-              </span>
-            )}
-          </h2>
-          <div className="flex items-center space-x-3">
-            {notifications.filter(n => !n.isRead).length > 0 && (
-              <button
-                onClick={handleAllNotificationsRead}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                すべて既読
-              </button>
-            )}
-            {notifications.length > 0 && (
-              <button
-                onClick={handleAllNotificationsDelete}
-                className="text-sm text-red-600 hover:text-red-800"
-              >
-                すべて削除
-              </button>
-            )}
-          </div>
-        </div>
-        {notifications.length > 0 ? (
-          <div className="space-y-3">
-            {notifications.map(notification => (
-              <div key={notification.id} className={`p-4 rounded-lg border cursor-pointer ${
-                notification.isRead ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200'
-              }`} onClick={() => !notification.isRead && handleNotificationRead(notification.id)}>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="font-medium text-gray-900">{notification.title}</h3>
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${
-                        notification.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                        notification.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                        notification.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {notification.priority === 'urgent' ? '緊急' :
-                         notification.priority === 'high' ? '重要' :
-                         notification.priority === 'medium' ? '中' : '低'}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                    <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
-                      <span>{notification.createdAt.toLocaleDateString('ja-JP')}</span>
-                      <div className="flex items-center space-x-2">
-                        {notification.scheduledFor && (
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                            予定: {notification.scheduledFor.toLocaleDateString('ja-JP')}
-                          </span>
-                        )}
-                        {notification.actionRequired && (
-                          <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                            要対応
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 ml-2">
-                    {!notification.isRead && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (confirm('この通知を削除しますか？')) {
-                          handleNotificationDelete(notification.id)
-                        }
-                      }}
-                      className="text-gray-400 hover:text-red-600 transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500 text-center py-8">新しい通知はありません</p>
-        )}
-      </div>
 
       {/* クイックアクション */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -470,6 +549,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
       currentUser={driverInfo}
       existingRequests={vacationRequests}
       monthlyStats={monthlyVacationStats}
+      vacationSettings={vacationSettings}
       onRequestSubmit={handleVacationRequest}
       onRequestDelete={handleVacationDelete}
     />

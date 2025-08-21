@@ -11,7 +11,7 @@ export const initialVehicles: Vehicle[] = [
     team: '配送センターチーム',
     status: 'normal',
     inspectionDate: new Date('2025-08-15'), // 来月中旬に点検期限
-    garage: '本社車庫',
+    garage: '1車庫',
     notes: ''
   },
   {
@@ -23,7 +23,7 @@ export const initialVehicles: Vehicle[] = [
     team: '常駐チーム',
     status: 'normal',
     inspectionDate: new Date('2025-09-20'), // 翌々月に点検期限
-    garage: '東車庫',
+    garage: '2車庫',
     notes: ''
   },
   {
@@ -35,7 +35,7 @@ export const initialVehicles: Vehicle[] = [
     team: 'Bチーム',
     status: 'normal',
     inspectionDate: new Date('2025-08-05'), // 来月初旬に点検期限
-    garage: '西車庫',
+    garage: '3車庫',
     notes: ''
   }
 ]
@@ -129,7 +129,6 @@ export const initialMonthlyVacationStats: MonthlyVacationStats[] = []
 // 休暇設定データ（システム動作に必要なため維持）
 export const initialVacationSettings: VacationSettings = {
   minimumOffDaysPerMonth: 9,
-  maximumOffDaysPerMonth: 12,
   notificationDate: 25,
   
   // 新しい統一された休暇上限設定

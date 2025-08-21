@@ -94,7 +94,6 @@ export interface MonthlyVacationStats {
   totalOffDays: number  // その月の休暇日数
   requiredMinimumDays: number  // 月の最低必要休暇日数（9日）
   remainingRequiredDays: number  // 残り必要休暇日数
-  maxAllowedDays: number  // 月の上限休暇日数
 }
 
 // 期間設定の型定義
@@ -128,12 +127,11 @@ export interface MonthlyWeekdayLimits {
 // 新しい統一された休暇設定インターフェース
 export interface VacationSettings {
   minimumOffDaysPerMonth: number  // 月の最低休暇日数（デフォルト9日）
-  maximumOffDaysPerMonth: number  // 月の最大休暇日数
   notificationDate: number  // 通知日（月の何日に通知するか、デフォルト25日）
   
   // 統一された休暇上限設定
   teamMonthlyWeekdayLimits: TeamMonthlyWeekdayLimits  // チーム別月別曜日上限設定
-  specificDateLimits: { [dateString: string]: number }  // 特定日付設定（YYYY-MM-DD形式）
+  specificDateLimits: { [dateString: string]: { [teamName: string]: number } }  // 特定日付設定（YYYY-MM-DD形式でチーム別）
   
   // 後方互換性のために残しておく（削除予定）
   blackoutDates: Date[]  // 休暇取得不可日
