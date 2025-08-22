@@ -18,7 +18,7 @@ import {
   Home,
   X
 } from 'lucide-react'
-import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats, VacationSettings, Driver, InspectionReservation } from '@/types'
+import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats, VacationSettings, Driver, InspectionReservation, DepartureTime } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import DriverVacationCalendar from './DriverVacationCalendar'
 import DriverVehicleInfo from './DriverVehicleInfo'
@@ -28,6 +28,7 @@ import { VehicleService } from '@/services/vehicleService'
 import { DriverService } from '@/services/driverService'
 import { DriverNotificationService } from '@/services/driverNotificationService'
 import { InspectionReservationService } from '@/services/inspectionReservationService'
+import { DepartureTimeService } from '@/services/departureTimeService'
 import { useAuth } from '@/contexts/AuthContext'
 import { isSameDay, differenceInDays } from 'date-fns'
 
@@ -48,6 +49,9 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
   const [allVacationRequests, setAllVacationRequests] = useState<VacationRequest[]>([])
   const [inspectionReservations, setInspectionReservations] = useState<InspectionReservation[]>([])
+  const [departureTimes, setDepartureTimes] = useState<DepartureTime[]>([])
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedTime, setSelectedTime] = useState<string>('08:00')
 
   // データの初期化と定期更新
   useEffect(() => {
@@ -135,6 +139,15 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
           } catch (notificationError: any) {
             console.warn('Failed to load notifications (table may not exist):', notificationError)
             setNotifications([])
+          }
+
+          // 出庫時間を取得
+          try {
+            const driverDepartureTimes = await DepartureTimeService.getByDriverId(currentDriver.id)
+            setDepartureTimes(driverDepartureTimes)
+          } catch (departureError: any) {
+            console.warn('Failed to load departure times (table may not exist):', departureError)
+            setDepartureTimes([])
           }
 
           // 月間休暇統計の生成
@@ -665,6 +678,161 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     />
   )
 
+  const renderDepartureTime = () => {
+    const timeOptions = DepartureTimeService.generateTimeOptions()
+    
+    const handleDepartureTimeSubmit = async () => {
+      if (!driverInfo) return
+
+      try {
+        // 既存の出庫時間があるかチェック
+        const existingTime = await DepartureTimeService.getByDriverAndDate(driverInfo.id, selectedDate)
+        
+        if (existingTime) {
+          // 更新
+          await DepartureTimeService.update(existingTime.id, {
+            departureTime: selectedTime,
+            vehicleId: assignedVehicle?.id,
+            vehiclePlateNumber: assignedVehicle?.plateNumber
+          })
+        } else {
+          // 新規作成
+          await DepartureTimeService.create({
+            driverId: driverInfo.id,
+            driverName: driverInfo.name,
+            employeeId: driverInfo.employeeId,
+            vehicleId: assignedVehicle?.id,
+            vehiclePlateNumber: assignedVehicle?.plateNumber,
+            departureDate: selectedDate,
+            departureTime: selectedTime
+          })
+        }
+
+        // データを再読み込み
+        const updatedDepartureTimes = await DepartureTimeService.getByDriverId(driverInfo.id)
+        setDepartureTimes(updatedDepartureTimes)
+        
+        alert('出庫時間を登録しました')
+      } catch (error) {
+        console.error('Failed to register departure time:', error)
+        alert('出庫時間の登録に失敗しました')
+      }
+    }
+
+    const handleDelete = async (id: number) => {
+      if (!confirm('この出庫時間を削除しますか？')) return
+
+      try {
+        await DepartureTimeService.delete(id)
+        const updatedDepartureTimes = await DepartureTimeService.getByDriverId(driverInfo.id)
+        setDepartureTimes(updatedDepartureTimes)
+        alert('出庫時間を削除しました')
+      } catch (error) {
+        console.error('Failed to delete departure time:', error)
+        alert('出庫時間の削除に失敗しました')
+      }
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* 出庫時間登録フォーム */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+            <Clock className="h-5 w-5 mr-2 text-blue-600" />
+            出庫時間登録
+          </h2>
+          
+          <div className="space-y-4">
+            {/* 日付選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                日付を選択
+              </label>
+              <input
+                type="date"
+                value={selectedDate.toISOString().split('T')[0]}
+                onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            {/* 時間選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                出庫時間を選択（15分刻み）
+              </label>
+              <select
+                value={selectedTime}
+                onChange={(e) => setSelectedTime(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {timeOptions.map(time => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 担当車両表示 */}
+            {assignedVehicle && (
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-sm text-gray-600">担当車両</p>
+                <p className="font-medium text-gray-900">{assignedVehicle.plateNumber} ({assignedVehicle.model})</p>
+              </div>
+            )}
+
+            {/* 登録ボタン */}
+            <button
+              onClick={handleDepartureTimeSubmit}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              出庫時間を登録
+            </button>
+          </div>
+        </div>
+
+        {/* 登録済み出庫時間一覧 */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+            <Calendar className="h-5 w-5 mr-2 text-green-600" />
+            登録済み出庫時間
+          </h2>
+          
+          {departureTimes.length > 0 ? (
+            <div className="space-y-3">
+              {departureTimes.slice(0, 10).map(depTime => (
+                <div key={depTime.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-4">
+                      <span className="font-medium text-gray-900">
+                        {depTime.departureDate.toLocaleDateString('ja-JP')}
+                      </span>
+                      <span className="text-lg font-bold text-blue-600">
+                        {depTime.departureTime}
+                      </span>
+                      {depTime.vehiclePlateNumber && (
+                        <span className="text-sm text-gray-600">
+                          車両: {depTime.vehiclePlateNumber}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(depTime.id)}
+                    className="text-red-600 hover:text-red-800 px-2 py-1 rounded-lg hover:bg-red-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">登録された出庫時間はありません</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const renderContent = () => {
     switch (currentView) {
       case 'vacation':
@@ -675,6 +843,8 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
             <p className="text-gray-500">担当車両が割り当てられていません</p>
           </div>
         )
+      case 'departure':
+        return renderDepartureTime()
       default:
         return renderDashboard()
     }
@@ -712,6 +882,15 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
             >
               <Car className="h-4 w-4" />
               <span>車両情報</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('departure')}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                currentView === 'departure' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Clock className="h-4 w-4" />
+              <span>出庫時間</span>
             </button>
           </div>
 

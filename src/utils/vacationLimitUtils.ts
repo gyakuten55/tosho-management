@@ -14,11 +14,16 @@ export function getVacationLimitForDate(date: Date, settings: VacationSettings, 
   
   // 1. 特定日付設定（最優先）
   if (settings.specificDateLimits && settings.specificDateLimits[dateStr]) {
-    return {
-      limit: settings.specificDateLimits[dateStr],
-      appliedRule: VacationLimitPriority.SPECIFIC_DATE,
-      ruleName: '特定日付設定',
-      ruleDetails: `${dateStr} の個別設定: ${settings.specificDateLimits[dateStr]}人`
+    const dateLimit = settings.specificDateLimits[dateStr]
+    const limit = team && typeof dateLimit === 'object' ? dateLimit[team] : typeof dateLimit === 'number' ? dateLimit : 0
+    
+    if (limit !== undefined) {
+      return {
+        limit,
+        appliedRule: VacationLimitPriority.SPECIFIC_DATE,
+        ruleName: '特定日付設定',
+        ruleDetails: `${dateStr} の個別設定${team ? ` (${team}チーム)` : ''}: ${limit}人`
+      }
     }
   }
 

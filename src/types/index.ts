@@ -546,4 +546,18 @@ export interface DailyVehicleSwap {
   status: 'active' | 'completed'
 }
 
+// 出庫時間管理の型定義
+export interface DepartureTime {
+  id: number
+  driverId: number
+  driverName: string
+  employeeId: string
+  vehicleId?: number
+  vehiclePlateNumber?: string
+  departureDate: Date
+  departureTime: string // HH:mm形式
+  createdAt: Date
+  updatedAt: Date
+}
+
  

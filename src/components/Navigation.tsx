@@ -1,6 +1,6 @@
 'use client'
 
-import { Car, Users, Settings, CalendarDays, Bell, Truck, FileText, LogOut } from 'lucide-react'
+import { Car, Users, Settings, CalendarDays, Bell, Truck, FileText, LogOut, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface NavigationProps {
@@ -24,6 +24,7 @@ export default function Navigation({ currentView, onViewChange }: NavigationProp
     { id: 'drivers', label: 'ドライバー管理', icon: Users },
     { id: 'vacation', label: '休暇管理', icon: CalendarDays },
     { id: 'vehicle-operation', label: '車両稼働管理', icon: Truck },
+    { id: 'departure-time', label: '出庫時間管理', icon: Clock },
     { id: 'stock-system', label: '資料ストック', icon: FileText, isExternal: true, url: 'https://tosho-stock.vercel.app/' },
     { id: 'settings', label: '設定', icon: Settings },
   ]

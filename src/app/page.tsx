@@ -22,6 +22,7 @@ import DriverDashboard from '@/components/DriverDashboard'
 import DriverVacationRequest from '@/components/DriverVacationRequest'
 import DriverVehicleInfo from '@/components/DriverVehicleInfo'
 import VehicleOperationManagement from '@/components/VehicleOperationManagement'
+import DepartureTimeManagement from '@/components/DepartureTimeManagement'
 import { Vehicle, Driver, VacationRequest, DriverNotification, VehicleAssignmentChange, DriverVehicleNotification, VehicleInoperativePeriod, VehicleInoperativeNotification } from '@/types'
 import VacationManagement from '@/components/VacationManagement'
 import { useAuth } from '@/contexts/AuthContext'
@@ -80,6 +81,8 @@ export default function Home() {
         return <SettingsComponent />
       case 'vehicle-operation':
         return <VehicleOperationManagement />
+      case 'departure-time':
+        return <DepartureTimeManagement />
       default:
         return null
     }
