@@ -18,7 +18,7 @@ import {
   Home,
   X
 } from 'lucide-react'
-import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats, VacationSettings, Driver } from '@/types'
+import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats, VacationSettings, Driver, InspectionReservation } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import DriverVacationCalendar from './DriverVacationCalendar'
 import DriverVehicleInfo from './DriverVehicleInfo'
@@ -27,8 +27,9 @@ import { VacationSettingsService } from '@/services/vacationSettingsService'
 import { VehicleService } from '@/services/vehicleService'
 import { DriverService } from '@/services/driverService'
 import { DriverNotificationService } from '@/services/driverNotificationService'
+import { InspectionReservationService } from '@/services/inspectionReservationService'
 import { useAuth } from '@/contexts/AuthContext'
-import { isSameDay } from 'date-fns'
+import { isSameDay, differenceInDays } from 'date-fns'
 
 interface DriverDashboardProps {
   onLogout: () => void
@@ -46,6 +47,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
   const [allVacationRequests, setAllVacationRequests] = useState<VacationRequest[]>([])
+  const [inspectionReservations, setInspectionReservations] = useState<InspectionReservation[]>([])
 
   // データの初期化と定期更新
   useEffect(() => {
@@ -66,6 +68,15 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
         // 全ての休暇申請データを取得（上限チェック用）
         const allRequests = await VacationService.getAll()
         setAllVacationRequests(allRequests)
+
+        // 点検予約データを取得
+        try {
+          const reservations = await InspectionReservationService.getAll()
+          setInspectionReservations(reservations)
+        } catch (reservationError: any) {
+          console.warn('Failed to load inspection reservations (table may not exist):', reservationError)
+          setInspectionReservations([])
+        }
 
         if (currentDriver) {
           // 休暇申請データを取得
@@ -301,6 +312,49 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
   }
 
+  // 点検実施日までの日数を計算するヘルパー関数
+  const getInspectionCountdown = () => {
+    if (!assignedVehicle || !driverInfo) return null
+
+    // 担当車両の点検予約を取得（キャンセル済みを除外）
+    const vehicleInspections = inspectionReservations.filter(inspection => 
+      inspection.vehicleId === assignedVehicle.id && 
+      inspection.status === 'scheduled' && // キャンセル済み（cancelled）を除外
+      inspection.scheduledDate >= new Date() // 今日以降の予約のみ
+    )
+
+    if (vehicleInspections.length === 0) return null
+
+    // 最も近い点検予約を取得
+    const nextInspection = vehicleInspections
+      .sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime())[0]
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) // 時間をリセットして日付のみで比較
+    const inspectionDate = new Date(nextInspection.scheduledDate)
+    inspectionDate.setHours(0, 0, 0, 0) // 時間をリセットして日付のみで比較
+    const daysUntilInspection = Math.ceil((inspectionDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    // 10日前からカウントダウンを表示
+    if (daysUntilInspection <= 10 && daysUntilInspection >= 0) {
+      return {
+        daysLeft: daysUntilInspection,
+        inspectionDate: nextInspection.scheduledDate,
+        vehiclePlateNumber: nextInspection.vehiclePlateNumber,
+        memo: nextInspection.memo
+      }
+    }
+
+    return null
+  }
+
+  const getCountdownColor = (daysLeft: number) => {
+    if (daysLeft === 0) return 'bg-red-100 text-red-800 border-red-200'
+    if (daysLeft <= 3) return 'bg-orange-100 text-orange-800 border-orange-200'
+    if (daysLeft <= 6) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    return 'bg-blue-100 text-blue-800 border-blue-200'
+  }
+
   const renderDashboard = () => (
     <div className="space-y-6">
       {/* ヘッダー */}
@@ -389,13 +443,13 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                       <div className="flex items-center space-x-2">
                         <span className={`px-2 py-0.5 text-xs rounded-full ${
                           notification.type === 'vehicle_inspection' ? 'bg-orange-100 text-orange-800' :
-                          notification.type === 'assignment_change' ? 'bg-blue-100 text-blue-800' :
-                          notification.type === 'vacation_reminder' ? 'bg-green-100 text-green-800' :
+                          notification.type === 'vehicle_assignment' ? 'bg-blue-100 text-blue-800' :
+                          notification.type === 'vacation_status' ? 'bg-green-100 text-green-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
                           {notification.type === 'vehicle_inspection' ? '点検' :
-                           notification.type === 'assignment_change' ? '車両' :
-                           notification.type === 'vacation_reminder' ? '休暇' : 'お知らせ'}
+                           notification.type === 'vehicle_assignment' ? '車両' :
+                           notification.type === 'vacation_status' ? '休暇' : 'お知らせ'}
                         </span>
                       </div>
                     </div>
@@ -424,6 +478,54 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
           <p className="text-gray-500 text-center py-8">新しい通知はありません</p>
         )}
       </div>
+
+      {/* 点検実施日カウントダウン */}
+      {(() => {
+        const countdown = getInspectionCountdown()
+        if (!countdown) return null
+        
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <Clock className="h-5 w-5 mr-2 text-orange-600" />
+              点検実施日カウントダウン
+            </h2>
+            <div className={`p-4 rounded-lg border ${getCountdownColor(countdown.daysLeft)}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <Car className="h-6 w-6" />
+                  <span className="font-bold text-lg">{countdown.vehiclePlateNumber}</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold">
+                    {countdown.daysLeft === 0 ? '当日' : `あと${countdown.daysLeft}日`}
+                  </div>
+                  <div className="text-sm opacity-75">
+                    {countdown.inspectionDate.toLocaleDateString('ja-JP', { 
+                      month: 'long', 
+                      day: 'numeric',
+                      weekday: 'short'
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="text-sm">
+                <div className="font-medium mb-1">
+                  {countdown.daysLeft === 0 ? 
+                    '🚨 本日は点検実施日です' : 
+                    `📅 点検実施日まで${countdown.daysLeft}日`
+                  }
+                </div>
+                {countdown.memo && (
+                  <div className="text-xs opacity-75 mt-2">
+                    備考: {countdown.memo}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 今日の情報カード */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

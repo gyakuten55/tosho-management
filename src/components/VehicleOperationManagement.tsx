@@ -119,13 +119,48 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         setVacationRequests(vacationData)
         
         // Load operation-related data
-        const [assignmentChanges, inoperativePeriods] = await Promise.all([
+        const [assignmentChanges, inoperativePeriods, inspectionReservations] = await Promise.all([
           VehicleAssignmentChangeService.getAll(),
-          VehicleInoperativePeriodService.getAll()
+          VehicleInoperativePeriodService.getAll(),
+          InspectionReservationService.getAll()
         ])
         
         setVehicleAssignmentChanges(assignmentChanges)
         setVehicleInoperativePeriods(inoperativePeriods)
+        
+        // 点検予約データをinspectionBookingsのフォーマットに変換
+        const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+        const duplicateKeys: string[] = []
+        
+        console.log(`Loading ${inspectionReservations.length} inspection reservations from database`)
+        
+        inspectionReservations.forEach(reservation => {
+          if (reservation.status === 'scheduled') {
+            const bookingKey = `${reservation.vehicleId}_${reservation.deadlineDate.toISOString().split('T')[0]}`
+            
+            // 重複チェック
+            if (bookingsMap[bookingKey]) {
+              duplicateKeys.push(bookingKey)
+              console.warn(`Duplicate booking key detected: ${bookingKey}`)
+            }
+            
+            bookingsMap[bookingKey] = {
+              isReservationCompleted: true,
+              memo: reservation.memo || '',
+              hasCraneInspection: false, // 必要に応じて車両情報から判定
+              reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
+              vehicleId: reservation.vehicleId,
+              inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+            }
+          }
+        })
+        
+        console.log(`Created ${Object.keys(bookingsMap).length} unique inspection bookings`)
+        if (duplicateKeys.length > 0) {
+          console.warn(`Found ${duplicateKeys.length} duplicate keys:`, duplicateKeys)
+        }
+        
+        setInspectionBookings(bookingsMap)
         
       } catch (err) {
         console.error('Failed to load operation data:', err)
@@ -421,22 +456,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     const reservationDate = new Date(inspectionReservationDate)
     const inspectionDeadline = getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
     
-    // 特定の点検期限日をキーとして管理（車両ID + 点検期限日）
-    const bookingKey = `${selectedInspectionVehicle.id}_${format(inspectionDeadline, 'yyyy-MM-dd')}`
-    
-    // 点検予約データを更新
-    setInspectionBookings(prev => ({
-      ...prev,
-      [bookingKey]: {
-        isReservationCompleted: true,
-        memo: inspectionMemo,
-        hasCraneInspection: selectedInspectionVehicle.model.includes('クレーン'),
-        reservationDate: inspectionReservationDate,
-        vehicleId: selectedInspectionVehicle.id,
-        inspectionDeadline: format(inspectionDeadline, 'yyyy-MM-dd')
-      }
-    }))
-
     // 点検予約をデータベースに保存
     try {
       const driverInfo = drivers.find(d => d.name === selectedInspectionVehicle.driver)
@@ -462,8 +481,31 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
           driverInfo.employeeId
         )
       }
+
+      // データベース保存成功後、最新の点検予約データを再取得
+      const updatedReservations = await InspectionReservationService.getAll()
+      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+      
+      updatedReservations.forEach(reservation => {
+        if (reservation.status === 'scheduled') {
+          const bookingKey = `${reservation.vehicleId}_${reservation.deadlineDate.toISOString().split('T')[0]}`
+          bookingsMap[bookingKey] = {
+            isReservationCompleted: true,
+            memo: reservation.memo || '',
+            hasCraneInspection: false,
+            reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
+            vehicleId: reservation.vehicleId,
+            inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+          }
+        }
+      })
+      
+      setInspectionBookings(bookingsMap)
+      
     } catch (error) {
       console.error('Failed to save inspection reservation:', error)
+      alert('点検予約の保存に失敗しました。')
+      return
     }
 
     // 予約日が今日の場合、車両のステータスを「点検中」に変更
@@ -488,14 +530,65 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   }
 
   // 点検予約取り消し処理
-  const handleCancelReservation = (bookingKey: string, vehiclePlateNumber: string) => {
+  const handleCancelReservation = async (bookingKey: string, vehiclePlateNumber: string) => {
     if (!confirm(`${vehiclePlateNumber} の点検予約を取り消しますか？`)) return
 
-    const updatedBookings = { ...inspectionBookings }
-    delete updatedBookings[bookingKey]
-    setInspectionBookings(updatedBookings)
+    try {
+      // データベースから該当する予約を検索して削除
+      const booking = inspectionBookings[bookingKey]
+      if (booking) {
+        const reservations = await InspectionReservationService.getByVehicleId(booking.vehicleId)
+        const targetReservation = reservations.find(r => 
+          r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
+          r.status === 'scheduled'
+        )
+        
+        if (targetReservation) {
+          // データベースから完全に削除
+          await InspectionReservationService.delete(targetReservation.id)
+          
+          // 担当ドライバーにキャンセル通知を送信
+          const vehicle = vehicles.find(v => v.id === booking.vehicleId)
+          if (vehicle && vehicle.driver) {
+            const driver = drivers.find(d => d.name === vehicle.driver)
+            if (driver) {
+              await DriverNotificationService.createVehicleInspectionCancelledNotification(
+                driver.id,
+                vehiclePlateNumber,
+                new Date(booking.reservationDate!),
+                driver.name,
+                driver.employeeId
+              )
+            }
+          }
+        }
+      }
 
-    alert(`${vehiclePlateNumber} の点検予約を取り消しました。`)
+      // データベースから最新の点検予約データを再取得して状態を更新
+      const updatedReservations = await InspectionReservationService.getAll()
+      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+      
+      updatedReservations.forEach(reservation => {
+        if (reservation.status === 'scheduled') {
+          const bookingKey = `${reservation.vehicleId}_${reservation.deadlineDate.toISOString().split('T')[0]}`
+          bookingsMap[bookingKey] = {
+            isReservationCompleted: true,
+            memo: reservation.memo || '',
+            hasCraneInspection: false,
+            reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
+            vehicleId: reservation.vehicleId,
+            inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+          }
+        }
+      })
+      
+      setInspectionBookings(bookingsMap)
+
+      alert(`${vehiclePlateNumber} の点検予約を取り消しました。担当ドライバーに通知を送信しました。`)
+    } catch (error) {
+      console.error('Failed to cancel inspection reservation:', error)
+      alert('点検予約の取り消しに失敗しました。')
+    }
   }
 
   // 一時的車両割り当て処理
@@ -1843,12 +1936,18 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
           inspectionDeadline: new Date(booking.inspectionDeadline)
         }
       })
+      .filter(item => item.vehicle !== undefined) // 車両が見つからない予約を除外
       .sort((a, b) => {
         if (a.reservationDate && b.reservationDate) {
           return a.reservationDate.getTime() - b.reservationDate.getTime()
         }
         return 0
       })
+
+    // デバッグログを追加
+    console.log(`Rendering reservation list: ${reservationList.length} valid reservations`)
+    console.log('InspectionBookings state:', inspectionBookings)
+    console.log('Vehicles data:', vehicles.map(v => ({ id: v.id, plateNumber: v.plateNumber })))
 
     return (
       <div className="space-y-6">

@@ -324,8 +324,7 @@ export default function VacationManagement({
           month,
           totalOffDays,
           requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
-          remainingRequiredDays,
-          maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
+          remainingRequiredDays
         })
       })
       
@@ -478,7 +477,7 @@ export default function VacationManagement({
             month,
             totalOffDays,
             requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
-            remainingRequiredDays,
+            remainingRequiredDays
           })
         })
         
@@ -1016,8 +1015,7 @@ export default function VacationManagement({
       month,
       totalOffDays,
       requiredMinimumDays: vacationSettings?.minimumOffDaysPerMonth || 0,
-      remainingRequiredDays,
-      maxAllowedDays: vacationSettings?.maximumOffDaysPerMonth || 0
+      remainingRequiredDays
     }
 
     if (existingStatIndex >= 0) {

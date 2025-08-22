@@ -390,6 +390,47 @@ export class DriverNotificationService {
   }
 
   /**
+   * 点検予約キャンセル通知を作成
+   */
+  static async createVehicleInspectionCancelledNotification(
+    driverId: number,
+    vehiclePlateNumber: string,
+    cancelledDate: Date,
+    driverName?: string,
+    employeeId?: string
+  ): Promise<DriverNotification> {
+    try {
+      const notificationData: DriverNotificationInsert = {
+        driver_id: driverId,
+        driver_name: driverName || '',
+        employee_id: employeeId || '',
+        type: 'vehicle_inspection',
+        title: '点検予約キャンセルのお知らせ',
+        message: `担当車両 ${vehiclePlateNumber} の点検予約（${cancelledDate.toLocaleDateString('ja-JP')}）がキャンセルされました。`,
+        priority: 'high',
+        is_read: false,
+        action_required: true,
+        scheduled_for: new Date().toISOString()
+      }
+
+      const { data, error } = await supabase
+        .from('driver_notifications')
+        .insert(notificationData)
+        .select()
+        .single()
+
+      if (error) {
+        throw new Error(`Failed to create inspection cancelled notification: ${error.message}`)
+      }
+
+      return this.mapToDriverNotification(data)
+    } catch (error) {
+      console.error('Failed to create inspection cancelled notification:', error)
+      throw error
+    }
+  }
+
+  /**
    * データベース行をDriverNotification型にマップ
    */
   private static mapToDriverNotification(row: DriverNotificationRow): DriverNotification {
