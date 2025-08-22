@@ -71,7 +71,7 @@ export default function Login({}: LoginProps) {
               className="text-2xl font-bold text-gray-900"
               style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#111827', margin: '0' }}
             >
-              東京陸送株式会社
+              東翔運輸株式会社
             </h1>
             <p 
               className="text-gray-600 mt-2"
