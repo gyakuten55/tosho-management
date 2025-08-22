@@ -162,7 +162,10 @@ export default function DriverVacationCalendar({
     })
   }
 
-  const calendarDays = useMemo(() => generateCalendarDays(), [currentDate, allVacationRequests, existingRequests, currentUser, vacationSettings])
+  const calendarDays = useMemo(() => {
+    if (!currentUser) return []
+    return generateCalendarDays()
+  }, [currentDate, allVacationRequests, existingRequests, currentUser, vacationSettings])
 
   // 現在表示中の月の統計を計算
   const calculateCurrentMonthStats = (): MonthlyVacationStats | null => {
