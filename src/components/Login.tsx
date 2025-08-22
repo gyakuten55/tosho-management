@@ -242,18 +242,6 @@ export default function Login({}: LoginProps) {
           <div className="mt-6 text-center text-sm text-gray-600" style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.875rem', color: '#4b5563' }}>
             <p style={{ margin: '0 0 0.5rem 0' }}>ログインに問題がある場合は、管理者にお問い合わせください</p>
           </div>
-
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg border text-sm" style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #e5e7eb', fontSize: '0.875rem' }}>
-            <p className="font-medium text-gray-700 mb-2" style={{ fontWeight: '500', color: '#374151', margin: '0 0 0.5rem 0' }}>認証情報:</p>
-            <div className="space-y-1" style={{ lineHeight: '1.25' }}>
-              <p style={{ margin: '0', color: '#374151', fontWeight: '500' }}>管理者:</p>
-              <p style={{ margin: '0 0 0.25rem 1rem', color: '#374151' }}>メール: admin@tosho-management.com</p>
-              <p style={{ margin: '0 0 0.5rem 1rem', color: '#374151' }}>パスワード: admin12345</p>
-              <p style={{ margin: '0', color: '#374151', fontWeight: '500' }}>運転手:</p>
-              <p style={{ margin: '0 0 0.25rem 1rem', color: '#374151' }}>社員ID: B001, C001, B002, C002</p>
-              <p style={{ margin: '0 0 0 1rem', color: '#374151' }}>パスワード: 任意の文字列</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
