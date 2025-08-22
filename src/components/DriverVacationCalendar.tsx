@@ -95,19 +95,9 @@ export default function DriverVacationCalendar({
     loadAllDrivers()
   }, [])
 
-
-  if (!currentUser) {
-    return (
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="text-center text-gray-500">
-          ユーザー情報を読み込み中...
-        </div>
-      </div>
-    )
-  }
-
   // カレンダーの日付情報を生成
   const generateCalendarDays = (): DailyInfo[] => {
+    if (!currentUser) return []
     const monthStart = startOfMonth(currentDate)
     const monthEnd = endOfMonth(currentDate)
     const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 }) // 日曜始まり
@@ -162,10 +152,17 @@ export default function DriverVacationCalendar({
     })
   }
 
-  const calendarDays = useMemo(() => {
-    if (!currentUser) return []
-    return generateCalendarDays()
-  }, [currentDate, allVacationRequests, existingRequests, currentUser, vacationSettings])
+  const calendarDays = useMemo(() => generateCalendarDays(), [currentDate, allVacationRequests, existingRequests, currentUser, vacationSettings])
+
+  if (!currentUser) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="text-center text-gray-500">
+          ユーザー情報を読み込み中...
+        </div>
+      </div>
+    )
+  }
 
   // 現在表示中の月の統計を計算
   const calculateCurrentMonthStats = (): MonthlyVacationStats | null => {
