@@ -6,7 +6,6 @@ import {
   Plus, 
   Search, 
   Filter, 
-  Eye, 
   Edit, 
   Trash2, 
   UserCheck, 
@@ -15,7 +14,6 @@ import {
   Car,
   Phone,
   Mail,
-  Clock,
   AlertTriangle,
   CheckCircle
 } from 'lucide-react'
@@ -66,23 +64,6 @@ export default function DriverManagement({}: DriverManagementProps) {
 
 
 
-  const toggleNightShift = async (driverId: number) => {
-    try {
-      const driver = drivers.find(d => d.id === driverId)
-      if (!driver) return
-      
-      const isCurrentlyNightShift = driver.isNightShift
-      const updatedDriver = await DriverService.update(driverId, {
-        isNightShift: !isCurrentlyNightShift,
-        status: (!isCurrentlyNightShift ? 'night_shift' : 'working') as Driver['status']
-      })
-      
-      setDrivers(drivers.map(d => d.id === driverId ? updatedDriver : d))
-    } catch (err) {
-      console.error('Failed to toggle night shift:', err)
-      alert('夕勤状態の切替えに失敗しました')
-    }
-  }
 
   const handleDelete = async (driverId: number) => {
     if (confirm('このドライバーを削除してもよろしいですか？')) {
@@ -363,33 +344,12 @@ export default function DriverManagement({}: DriverManagementProps) {
                       <button
                         onClick={() => {
                           setSelectedDriver(driver)
-                          setCurrentView('detail')
-                        }}
-                        className="text-primary-600 hover:text-primary-900"
-                        title="詳細表示"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedDriver(driver)
                           setCurrentView('form')
                         }}
                         className="text-blue-600 hover:text-blue-900"
                         title="編集"
                       >
                         <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => toggleNightShift(driver.id)}
-                        className={`${
-                          driver.isNightShift 
-                            ? 'text-green-600 hover:text-green-900' 
-                            : 'text-orange-600 hover:text-orange-900'
-                        }`}
-                        title={driver.isNightShift ? '夜勤解除' : '夜勤設定'}
-                      >
-                        <Clock className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(driver.id)}

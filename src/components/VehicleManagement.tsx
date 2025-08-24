@@ -13,7 +13,6 @@ import {
   Clock,
   Calendar,
   Settings,
-  Eye,
   MapPin
 } from 'lucide-react'
 import { format, addDays } from 'date-fns'
@@ -144,10 +143,6 @@ export default function VehicleManagement({}: VehicleManagementProps) {
     setCurrentView('form')
   }
 
-  const handleView = (vehicle: Vehicle) => {
-    setSelectedVehicle(vehicle)
-    setCurrentView('detail')
-  }
 
   const handleDelete = async (vehicleId: number) => {
     if (confirm('この車両を削除してもよろしいですか？')) {
@@ -335,15 +330,8 @@ export default function VehicleManagement({}: VehicleManagementProps) {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="font-medium text-gray-900">
-                          {vehicle.driver ? (
-                            vehicle.driver
-                          ) : (
-                            <button
-                              onClick={() => handleView(vehicle)}
-                              className="text-blue-600 hover:text-blue-800 cursor-pointer"
-                            >
-                              未割当
-                            </button>
+                          {vehicle.driver || (
+                            <span className="text-gray-500">未割当</span>
                           )}
                         </div>
                         <div className="text-sm text-gray-500">{vehicle.team}</div>
@@ -367,13 +355,6 @@ export default function VehicleManagement({}: VehicleManagementProps) {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleView(vehicle)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="詳細表示"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
                         <button
                           onClick={() => handleEdit(vehicle)}
                           className="text-primary-600 hover:text-primary-900"
