@@ -398,7 +398,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                 <option value="配送センターチーム">配送センターチーム</option>
                 <option value="常駐チーム">常駐チーム</option>
                 <option value="Bチーム">Bチーム</option>
-                <option value="外部ドライバー">外部ドライバー</option>
+                <option value="外部ドライバー">外部ドライバー(使用禁止)</option>
               </select>
               {errors.team && <p className="text-red-500 text-sm mt-1">{errors.team}</p>}
             </div>

@@ -84,6 +84,7 @@ export default function VacationManagement({
   const [selectedDriverId, setSelectedDriverId] = useState('')
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
   const [statsMonth, setStatsMonth] = useState(new Date()) // 統計タブ用の月選択state
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all') // モーダル内のチームフィルター
 
   useEffect(() => {
     loadVacationData()
@@ -606,6 +607,17 @@ export default function VacationManagement({
   // 選択した日付の勤務状態を取得（出勤、休暇、夜勤）
   const getWorkStatusForDate = (date: Date) => {
     return vacationRequests.filter(req => isSameDay(req.date, date))
+  }
+
+  // チームフィルターを適用した勤務状態を取得
+  const getFilteredWorkStatusForDate = (date: Date, teamFilter: string) => {
+    const allWorkStatus = getWorkStatusForDate(date)
+    
+    if (teamFilter === 'all') {
+      return allWorkStatus
+    }
+    
+    return allWorkStatus.filter(workStatus => workStatus.team === teamFilter)
   }
 
   // ドライバー名から担当車両を取得するヘルパー関数
@@ -1545,9 +1557,25 @@ export default function VacationManagement({
               {/* 既存の勤務状態一覧 */}
               {getWorkStatusForDate(selectedDate).length > 0 && (
                 <div>
-                  <h4 className="text-md font-semibold text-gray-900 mb-3">現在の勤務状態</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-md font-semibold text-gray-900">現在の勤務状態</h4>
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm text-gray-700">チーム:</label>
+                      <select
+                        value={selectedTeamFilter}
+                        onChange={(e) => setSelectedTeamFilter(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="all">全て</option>
+                        <option value="配送センターチーム">配送センターチーム</option>
+                        <option value="常駐チーム">常駐チーム</option>
+                        <option value="Bチーム">Bチーム</option>
+                        <option value="外部ドライバー">外部ドライバー</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    {getWorkStatusForDate(selectedDate).map((workStatus) => (
+                    {getFilteredWorkStatusForDate(selectedDate, selectedTeamFilter).map((workStatus) => (
                       <div
                         key={workStatus.id}
                         className={`p-3 rounded-lg border flex items-center justify-between ${
