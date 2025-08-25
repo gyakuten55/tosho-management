@@ -164,6 +164,17 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
         newData.assignedVehicle = ''
       }
 
+      // ドライバー区分が変更された場合、社員IDのプレフィックスを自動更新
+      if (field === 'driverType' && typeof value === 'string') {
+        const currentId = prev.employeeId
+        if (currentId && currentId.length > 0) {
+          // 既存の数値部分を取得（プレフィックスを除く）
+          const idNumber = currentId.substring(1)
+          // 新しいプレフィックスを設定
+          const newPrefix = value === 'external' ? 'E' : 'B'
+          newData.employeeId = newPrefix + idNumber
+        }
+      }
       
       return newData
     })
