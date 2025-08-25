@@ -75,8 +75,8 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     if (!driver || formData.password) {
       if (!formData.password.trim()) {
         newErrors.password = 'パスワードは必須です'
-      } else if (formData.password.length < 8) {
-        newErrors.password = 'パスワードは8文字以上で入力してください'
+      } else if (formData.password.length < 4) {
+        newErrors.password = 'パスワードは4文字以上で入力してください'
       }
 
       if (formData.password !== formData.confirmPassword) {
@@ -331,7 +331,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                   className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                     errors.password ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder={driver ? "パスワードを変更する場合のみ入力" : "8文字以上で入力してください"}
+                  placeholder={driver ? "パスワードを変更する場合のみ入力" : "4文字以上で入力してください"}
                 />
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <button
