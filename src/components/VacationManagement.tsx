@@ -425,13 +425,13 @@ export default function VacationManagement({
             priority: 'high'
           }
           
-          setVacationNotifications([...vacationNotifications, notification])
+          setVacationNotifications(prev => [...prev, notification])
         })
       }
     }
     
     checkAndSendNotifications()
-  }, [vacationStats, vacationNotifications, setVacationNotifications])
+  }, [vacationStats])
 
   // 統計タブの月選択時に該当月の統計データを生成
   useEffect(() => {
@@ -1478,7 +1478,7 @@ export default function VacationManagement({
                     祝日チーム（A〜G）単位で一括して出勤・休暇を設定できます
                   </p>
                   <div className="grid grid-cols-7 gap-2">
-                    {['Aチーム', 'Bチーム', 'Cチーム', 'Dチーム', 'Eチーム', 'Fチーム', 'Gチーム'].map((team) => {
+                    {['祝日Aチーム', '祝日Bチーム', '祝日Cチーム', '祝日Dチーム', '祝日Eチーム', '祝日Fチーム', '祝日Gチーム'].map((team) => {
                       const teamDrivers = drivers.filter(driver => 
                         (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
                         (driver as any).holidayTeams &&
@@ -1488,7 +1488,7 @@ export default function VacationManagement({
                       return (
                         <div key={team} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                           <div className="text-center mb-2">
-                            <span className="font-bold text-lg text-gray-900">{team.replace('チーム', '')}</span>
+                            <span className="font-bold text-lg text-gray-900">{team.replace('祝日', '').replace('チーム', '')}</span>
                             <p className="text-xs text-gray-600">{teamDrivers.length}人</p>
                           </div>
                           <div className="space-y-1">

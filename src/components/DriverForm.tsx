@@ -43,7 +43,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   // 祝日チーム（A〜G）の固定リスト
-  const holidayTeams = ['Aチーム', 'Bチーム', 'Cチーム', 'Dチーム', 'Eチーム', 'Fチーム', 'Gチーム']
+  const holidayTeams = ['祝日Aチーム', '祝日Bチーム', '祝日Cチーム', '祝日Dチーム', '祝日Eチーム', '祝日Fチーム', '祝日Gチーム']
 
 
   const validateForm = () => {

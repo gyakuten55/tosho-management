@@ -215,22 +215,6 @@ export default function DriverManagement({}: DriverManagementProps) {
           
           <div className="flex gap-4">
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="all">すべての祝日チーム</option>
-              <option value="Aチーム">Aチーム</option>
-              <option value="Bチーム">Bチーム</option>
-              <option value="Cチーム">Cチーム</option>
-              <option value="Dチーム">Dチーム</option>
-              <option value="Eチーム">Eチーム</option>
-              <option value="Fチーム">Fチーム</option>
-              <option value="Gチーム">Gチーム</option>
-              <option value="none">祝日チーム未設定</option>
-            </select>
-            
-            <select
               value={filterTeam}
               onChange={(e) => setFilterTeam(e.target.value)}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -240,6 +224,22 @@ export default function DriverManagement({}: DriverManagementProps) {
               <option value="常駐チーム">常駐チーム</option>
               <option value="Bチーム">Bチーム</option>
               <option value="外部ドライバー">外部ドライバー</option>
+            </select>
+            
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="all">すべての祝日チーム</option>
+              <option value="祝日Aチーム">祝日Aチーム</option>
+              <option value="祝日Bチーム">祝日Bチーム</option>
+              <option value="祝日Cチーム">祝日Cチーム</option>
+              <option value="祝日Dチーム">祝日Dチーム</option>
+              <option value="祝日Eチーム">祝日Eチーム</option>
+              <option value="祝日Fチーム">祝日Fチーム</option>
+              <option value="祝日Gチーム">祝日Gチーム</option>
+              <option value="none">祝日チーム未設定</option>
             </select>
           </div>
         </div>
