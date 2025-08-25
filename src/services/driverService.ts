@@ -83,7 +83,7 @@ export class DriverService {
       license_expiry_date: driver.licenseExpiryDate ? driver.licenseExpiryDate.toISOString().split('T')[0] : null,
       hire_date: driver.hireDate ? driver.hireDate.toISOString().split('T')[0] : null,
       birth_date: driver.birthDate ? driver.birthDate.toISOString().split('T')[0] : null,
-      notes: driver.notes || null
+      notes: driver.isExternal ? `[EXTERNAL]${driver.notes || ''}` : (driver.notes || null)
     }
 
     const { data, error } = await supabase
@@ -237,6 +237,12 @@ export class DriverService {
         driverData.holiday_teams = newTeams
         hasChanges = true
       }
+    }
+    if ('isExternal' in updates && updates.isExternal !== currentDriver.isExternal) {
+      // isExternalフラグをnotesフィールドに埋め込み
+      const currentNotes = updates.notes !== undefined ? updates.notes : currentDriver.notes
+      driverData.notes = updates.isExternal ? `[EXTERNAL]${currentNotes || ''}` : (currentNotes || null)
+      hasChanges = true
     }
 
     // 変更がない場合は早期リターン
@@ -504,6 +510,14 @@ export class DriverService {
       holidayTeams = []
     }
 
+    // notesフィールドから外部ドライバーフラグを抽出
+    let isExternal = false
+    let cleanNotes = row.notes || undefined
+    if (row.notes && row.notes.startsWith('[EXTERNAL]')) {
+      isExternal = true
+      cleanNotes = row.notes.substring(10) || undefined // [EXTERNAL]を除去
+    }
+
     return {
       id: row.id,
       name: row.name,
@@ -522,8 +536,9 @@ export class DriverService {
       licenseExpiryDate: row.license_expiry_date ? new Date(row.license_expiry_date) : undefined,
       hireDate: row.hire_date ? new Date(row.hire_date) : undefined,
       birthDate: row.birth_date ? new Date(row.birth_date) : undefined,
-      notes: row.notes || undefined,
-      holidayTeams: holidayTeams
+      notes: cleanNotes,
+      holidayTeams: holidayTeams,
+      isExternal: isExternal
     }
   }
 }

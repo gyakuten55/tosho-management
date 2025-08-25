@@ -32,6 +32,7 @@ export interface Driver {
   birthDate?: Date
   notes?: string
   holidayTeams?: string[]  // 祝日チーム（複数選択可）
+  isExternal?: boolean  // 外部ドライバーフラグ（notesフィールドで管理）
 }
 
 export interface Holiday {

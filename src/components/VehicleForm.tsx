@@ -8,12 +8,13 @@ import { Vehicle, Driver } from '@/types'
 interface VehicleFormProps {
   vehicle?: Vehicle | null
   drivers?: Driver[]
+  vehicles?: Vehicle[]
   onSave: (vehicle: Partial<Vehicle>) => void
   onCancel: () => void
   onDriverUpdate?: (driverUpdates: { driverName: string; vehiclePlateNumber: string }[]) => void
 }
 
-export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, onDriverUpdate }: VehicleFormProps) {
+export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSave, onCancel, onDriverUpdate }: VehicleFormProps) {
   const [formData, setFormData] = useState<{
     plateNumber: string
     model: string
@@ -233,7 +234,19 @@ export default function VehicleForm({ vehicle, drivers = [], onSave, onCancel, o
                 >
                   <option value="">未割り当て</option>
                   {drivers
-                    .filter(driver => driver.team !== 'Bチーム') // Bチームは固定割り当て対象外
+                    .filter(driver => {
+                      // Bチームは固定割り当て対象外
+                      if (driver.team === 'Bチーム') return false
+                      
+                      // 他の車両に割り当てられているドライバーを除外
+                      // ただし、現在編集中の車両の担当者は選択可能
+                      const isAssignedToOther = vehicles.some(v => 
+                        v.driver === driver.name && 
+                        v.plateNumber !== vehicle?.plateNumber
+                      )
+                      
+                      return !isAssignedToOther
+                    })
                     .map(driver => (
                     <option key={driver.id} value={driver.name}>{driver.name} ({driver.team} - {driver.employeeId})</option>
                   ))}

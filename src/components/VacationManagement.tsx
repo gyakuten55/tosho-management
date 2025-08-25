@@ -697,9 +697,11 @@ export default function VacationManagement({
         return
       }
 
-      // 既存の勤務状態設定があるかチェック
+      // 既存の勤務状態設定があるかチェック（データベースに保存済みのもののみ）
       const existingRequest = vacationRequests.find(req =>
-        req.driverId === driver.id && isSameDay(req.date, selectedDate)
+        req.driverId === driver.id && 
+        isSameDay(req.date, selectedDate) &&
+        req.id > 0  // 正のIDを持つ（DBに保存済み）レコードのみ
       )
 
       // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
@@ -1135,7 +1137,7 @@ export default function VacationManagement({
                         })
 
                         // 各チームの上限を取得して表示
-                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム']
                         return teams.map(team => {
                           const currentCount = teamVacations[team] || 0
                           const limit = getVacationLimitForDate(dayInfo.date, team)

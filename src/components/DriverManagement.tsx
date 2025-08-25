@@ -147,16 +147,33 @@ export default function DriverManagement({}: DriverManagementProps) {
           setCurrentView('list')
           setSelectedDriver(null)
         }}
-        onVehicleUpdate={(updates) => {
-          // 車両の担当ドライバーを自動更新
-          const updatedVehicles = vehicles.map(vehicle => {
-            const update = updates.find(u => u.plateNumber === vehicle.plateNumber)
-            if (update) {
-              return { ...vehicle, driver: update.driverName || undefined }
-            }
-            return vehicle
-          })
-          setVehicles(updatedVehicles)
+        onVehicleUpdate={async (updates) => {
+          try {
+            // データベースの車両情報を更新
+            const updatePromises = updates.map(async (update) => {
+              const vehicle = vehicles.find(v => v.plateNumber === update.plateNumber)
+              if (vehicle) {
+                await VehicleService.update(vehicle.id, {
+                  driver: update.driverName || undefined
+                })
+              }
+            })
+            
+            await Promise.all(updatePromises)
+            
+            // ローカル状態を更新
+            const updatedVehicles = vehicles.map(vehicle => {
+              const update = updates.find(u => u.plateNumber === vehicle.plateNumber)
+              if (update) {
+                return { ...vehicle, driver: update.driverName || undefined }
+              }
+              return vehicle
+            })
+            setVehicles(updatedVehicles)
+          } catch (error) {
+            console.error('Failed to update vehicle assignment:', error)
+            alert('車両の割り当て更新に失敗しました')
+          }
         }}
       />
     )
@@ -223,7 +240,7 @@ export default function DriverManagement({}: DriverManagementProps) {
               <option value="配送センターチーム">配送センターチーム</option>
               <option value="常駐チーム">常駐チーム</option>
               <option value="Bチーム">Bチーム</option>
-              <option value="外部ドライバー">外部ドライバー</option>
+              <option value="外部ドライバー">外部ドライバー(使用禁止)</option>
             </select>
             
             <select

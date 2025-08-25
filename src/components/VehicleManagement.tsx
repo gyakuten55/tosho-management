@@ -183,6 +183,7 @@ export default function VehicleManagement({}: VehicleManagementProps) {
       <VehicleForm
         vehicle={selectedVehicle}
         drivers={drivers}
+        vehicles={vehicles}
         onSave={handleSave}
         onCancel={() => {
           setCurrentView('list')

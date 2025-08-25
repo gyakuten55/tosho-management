@@ -33,7 +33,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
     hireDate: driver?.hireDate ? driver.hireDate.toISOString().split('T')[0] : '',
     birthDate: driver?.birthDate ? driver.birthDate.toISOString().split('T')[0] : '',
     notes: driver?.notes || '',
-    driverType: driver ? (driver.employeeId.startsWith('E') ? 'external' : 'internal') : 'internal',
+    driverType: driver?.isExternal ? 'external' : 'internal',
     isNightShift: driver?.isNightShift || false,
     holidayTeams: driver?.holidayTeams || []
   })
@@ -144,8 +144,10 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
       hireDate: formData.hireDate ? new Date(formData.hireDate) : undefined,
       birthDate: formData.birthDate ? new Date(formData.birthDate) : undefined,
       notes: formData.notes || undefined,
-      holidayTeams: formData.holidayTeams
+      holidayTeams: formData.holidayTeams,
+      isExternal: formData.driverType === 'external'
     }
+
 
     // パスワードが入力されている場合のみ追加
     if (formData.password) {
@@ -164,17 +166,6 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
         newData.assignedVehicle = ''
       }
 
-      // ドライバー区分が変更された場合、社員IDのプレフィックスを自動更新
-      if (field === 'driverType' && typeof value === 'string') {
-        const currentId = prev.employeeId
-        if (currentId && currentId.length > 0) {
-          // 既存の数値部分を取得（プレフィックスを除く）
-          const idNumber = currentId.substring(1)
-          // 新しいプレフィックスを設定
-          const newPrefix = value === 'external' ? 'E' : 'B'
-          newData.employeeId = newPrefix + idNumber
-        }
-      }
       
       return newData
     })
