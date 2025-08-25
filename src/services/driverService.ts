@@ -230,7 +230,7 @@ export class DriverService {
       driverData.notes = updates.notes || null
       hasChanges = true
     }
-    if (updates.holidayTeams !== undefined) {
+    if ('holidayTeams' in updates) {
       const newTeams = updates.holidayTeams ? JSON.stringify(updates.holidayTeams) : '[]'
       const oldTeams = currentDriver.holidayTeams ? JSON.stringify(currentDriver.holidayTeams) : '[]'
       if (newTeams !== oldTeams) {

@@ -144,7 +144,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
       hireDate: formData.hireDate ? new Date(formData.hireDate) : undefined,
       birthDate: formData.birthDate ? new Date(formData.birthDate) : undefined,
       notes: formData.notes || undefined,
-      holidayTeams: formData.holidayTeams.length > 0 ? formData.holidayTeams : undefined
+      holidayTeams: formData.holidayTeams
     }
 
     // パスワードが入力されている場合のみ追加
