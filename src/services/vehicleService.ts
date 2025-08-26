@@ -46,6 +46,7 @@ export class VehicleService {
       team: vehicle.team,
       status: vehicle.status,
       inspection_date: vehicle.inspectionDate.toISOString().split('T')[0],
+      crane_annual_inspection_date: vehicle.craneAnnualInspectionDate ? vehicle.craneAnnualInspectionDate.toISOString().split('T')[0] : null,
       garage: vehicle.garage,
       notes: vehicle.notes || null
     }
@@ -136,6 +137,14 @@ export class VehicleService {
       const oldDate = currentVehicle.inspectionDate.toISOString().split('T')[0]
       if (newDate !== oldDate) {
         vehicleData.inspection_date = newDate
+        hasChanges = true
+      }
+    }
+    if ('craneAnnualInspectionDate' in updates) {
+      const newDate = updates.craneAnnualInspectionDate ? updates.craneAnnualInspectionDate.toISOString().split('T')[0] : null
+      const oldDate = currentVehicle.craneAnnualInspectionDate ? currentVehicle.craneAnnualInspectionDate.toISOString().split('T')[0] : null
+      if (newDate !== oldDate) {
+        vehicleData.crane_annual_inspection_date = newDate
         hasChanges = true
       }
     }
@@ -401,6 +410,7 @@ export class VehicleService {
       team: row.team,
       status: row.status as Vehicle['status'],
       inspectionDate: new Date(row.inspection_date),
+      craneAnnualInspectionDate: row.crane_annual_inspection_date ? new Date(row.crane_annual_inspection_date) : undefined,
       garage: row.garage,
       notes: row.notes || undefined
     }

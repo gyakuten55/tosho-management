@@ -284,9 +284,9 @@ export default function VehicleManagement({}: VehicleManagementProps) {
               onChange={(e) => setFilterTeam(e.target.value)}
             >
               <option value="all">すべてのチーム</option>
-                              <option value="A-1">A-1</option>
-                <option value="A-2">A-2</option>
-                <option value="B">B</option>
+              <option value="配送センターチーム">配送センターチーム</option>
+              <option value="常駐チーム">常駐チーム</option>
+              <option value="Bチーム">Bチーム</option>
             </select>
           </div>
         </div>

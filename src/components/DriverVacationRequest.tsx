@@ -80,7 +80,7 @@ export default function DriverVacationRequest({
   const canDeleteRequest = (request: VacationRequest) => {
     const today = new Date()
     const daysDifference = differenceInDays(request.date, today)
-    return daysDifference > 30  // 1ヶ月（30日）先からのみ削除可能
+    return daysDifference >= 10  // 10日以上先からのみ削除可能
   }
 
   const handleDateClick = (date: Date) => {
@@ -105,7 +105,7 @@ export default function DriverVacationRequest({
     if (!request) return
     
     if (!canDeleteRequest(request)) {
-      alert('1ヶ月以内の休暇申請の削除は管理者にお問い合わせください。')
+      alert('10日以内の休暇申請の削除は管理者にお問い合わせください。')
       return
     }
     

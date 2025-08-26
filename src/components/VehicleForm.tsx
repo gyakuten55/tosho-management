@@ -23,6 +23,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
     team: string
     status: 'normal' | 'inspection' | 'repair' | 'maintenance_due' | 'breakdown'
     inspectionDate: string
+    craneAnnualInspectionDate: string
     garage: string
     notes: string
     hasCrane: boolean
@@ -34,6 +35,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
     team: '配送センターチーム',
     status: 'normal',
     inspectionDate: format(new Date(), 'yyyy-MM-dd'),
+    craneAnnualInspectionDate: format(new Date(), 'yyyy-MM-dd'),
     garage: '1車庫',
     notes: '',
     hasCrane: false
@@ -51,6 +53,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
         team: vehicle.team,
         status: vehicle.status,
         inspectionDate: format(vehicle.inspectionDate, 'yyyy-MM-dd'),
+        craneAnnualInspectionDate: vehicle.craneAnnualInspectionDate ? format(vehicle.craneAnnualInspectionDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         garage: vehicle.garage,
         notes: vehicle.notes || '',
         hasCrane: vehicle.model.includes('クレーン')
@@ -93,6 +96,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
     const vehicleData = {
       ...formData,
       inspectionDate: new Date(formData.inspectionDate),
+      craneAnnualInspectionDate: formData.hasCrane ? new Date(formData.craneAnnualInspectionDate) : undefined,
       driver: formData.driver.trim() || undefined
     }
     
@@ -335,12 +339,30 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
                 </p>
               </div>
 
+              {/* クレーン年次点検日 */}
+              {formData.hasCrane && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    クレーン年次点検期限日 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={formData.craneAnnualInspectionDate}
+                    onChange={(e) => handleChange('craneAnnualInspectionDate', e.target.value)}
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    この日付を基準に1年ごとのクレーン年次点検期限が自動計算されます
+                  </p>
+                </div>
+              )}
+
               <div className="md:col-span-2">
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">点検日の統一管理について</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">点検日について</h4>
                   <p className="text-sm text-blue-700">
-                    設定した点検日とその3ヶ月間隔の日付がすべて「点検」として自動計算されます。<br/>
-                    車検やクレーン年次点検も含めて統一した点検として管理されます。
+                    • 通常点検: 3ヶ月ごとの定期点検として自動計算されます<br/>
+                    • クレーン年次点検: クレーン車の場合、年次点検期限も別途管理されます
                   </p>
                 </div>
               </div>

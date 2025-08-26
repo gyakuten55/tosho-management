@@ -6,7 +6,8 @@ export interface Vehicle {
   driver?: string
   team: string
   status: 'normal' | 'inspection' | 'repair' | 'maintenance_due' | 'breakdown' // 正常 | 点検中 | 修理中 | 点検期限
-  inspectionDate: Date // 点検日（3ヶ月ごとの点検基準日、車検・クレーン年次点検も含む）
+  inspectionDate: Date // 点検日（3ヶ月ごとの点検基準日）
+  craneAnnualInspectionDate?: Date // クレーン年次点検日（クレーン車のみ）
   garage: string // 車庫情報
   notes?: string
 }

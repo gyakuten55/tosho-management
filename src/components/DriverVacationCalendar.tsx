@@ -133,7 +133,7 @@ export default function DriverVacationCalendar({
       const canRequest = daysDifference >= 10 && isCurrentMonth // 10日以上先なら申請可能
       
       // 削除可能かチェック
-      const canDelete = vacationRequest ? differenceInDays(date, today) > 30 : false // 30日以上先なら削除可能
+      const canDelete = vacationRequest ? differenceInDays(date, today) >= 10 : false // 10日以上先なら削除可能
       
       return {
         date,
@@ -224,7 +224,7 @@ export default function DriverVacationCalendar({
           onRequestDelete(dayInfo.vacationRequest.id)
         }
       } else if (!dayInfo.canDelete) {
-        alert('申請から30日以内の休暇は削除できません。')
+        alert('申請から10日以内の休暇は削除できません。')
       }
     } else if (dayInfo.canRequest) {
       // 新規申請

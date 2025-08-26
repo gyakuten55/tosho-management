@@ -19,7 +19,7 @@ import {
   X,
   Menu
 } from 'lucide-react'
-import { Vehicle, DriverNotification, VacationRequest, InspectionSchedule, MonthlyVacationStats, VacationSettings, Driver, InspectionReservation, DepartureTime } from '@/types'
+import { Vehicle, DriverNotification, VacationRequest, MonthlyVacationStats, VacationSettings, Driver, InspectionReservation, DepartureTime } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import DriverVacationCalendar from './DriverVacationCalendar'
 import DriverVehicleInfo from './DriverVehicleInfo'
@@ -44,16 +44,17 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const [assignedVehicle, setAssignedVehicle] = useState<Vehicle | null>(null)
   const [notifications, setNotifications] = useState<DriverNotification[]>([])
   const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([])
-  const [upcomingInspections, setUpcomingInspections] = useState<InspectionSchedule[]>([])
   const [monthlyVacationStats, setMonthlyVacationStats] = useState<MonthlyVacationStats | null>(null)
   const [driverInfo, setDriverInfo] = useState<any>(null)
   const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
+  const [allVehicles, setAllVehicles] = useState<Vehicle[]>([])
   const [allVacationRequests, setAllVacationRequests] = useState<VacationRequest[]>([])
   const [inspectionReservations, setInspectionReservations] = useState<InspectionReservation[]>([])
   const [departureTimes, setDepartureTimes] = useState<DepartureTime[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedTime, setSelectedTime] = useState<string>('08:00')
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | undefined>(undefined)
 
   // データの初期化と定期更新
   useEffect(() => {
@@ -89,49 +90,19 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
           const requests = await VacationService.getByDriverId(currentDriver.id)
           setVacationRequests(requests)
 
-          // 割り当て車両を検索（運転手名で検索）
-          const vehicles = await VehicleService.getAll()
-          const userVehicle = vehicles.find(v => v.driver === currentDriver.name)
-          if (userVehicle) {
-            setAssignedVehicle(userVehicle)
-
-            // 点検予定を生成
-            const nextInspectionDate = getNextInspectionDate(userVehicle.inspectionDate)
-            const today = new Date()
-            const diffTime = nextInspectionDate.getTime() - today.getTime()
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-            
-            let inspectionStatus: 'urgent' | 'warning' | 'normal' = 'normal'
-            if (diffDays <= 7) inspectionStatus = 'urgent'
-            else if (diffDays <= 30) inspectionStatus = 'warning'
-
-            setUpcomingInspections([
-              {
-                id: userVehicle.id,
-                vehicleId: userVehicle.id,
-                vehicleNumber: userVehicle.plateNumber,
-                type: '定期点検',
-                date: nextInspectionDate,
-                status: inspectionStatus,
-                driver: user?.displayName || '',
-                team: user?.team || ''
-              }
-            ])
-
-            // 点検日が近い場合は自動で通知を生成
-            if (diffDays <= 14) {
-              try {
-                await DriverNotificationService.createVehicleInspectionNotification(
-                  currentDriver.id,
-                  userVehicle.plateNumber,
-                  nextInspectionDate,
-                  currentDriver.name,
-                  currentDriver.employeeId
-                )
-              } catch (notificationError) {
-                console.warn('Failed to create inspection notification:', notificationError)
-              }
+          // 担当車両を検索（ドライバーは全車両にアクセス権限がないため、担当車両のみを使用）
+          try {
+            const vehicles = await VehicleService.getAll()
+            setAllVehicles(vehicles)
+            const userVehicle = vehicles.find(v => v.driver === currentDriver.name)
+            if (userVehicle) {
+              setAssignedVehicle(userVehicle)
+              setSelectedVehicleId(userVehicle.id) // デフォルトで担当車両を選択
             }
+          } catch (vehicleError: any) {
+            console.warn('Failed to load vehicles (permission denied):', vehicleError)
+            // 全車両取得に失敗した場合は空配列を設定し、担当車両のみで動作
+            setAllVehicles([])
           }
 
           // 通知を取得（テーブルが存在しない場合は空配列）
@@ -352,11 +323,38 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
 
     // 10日前からカウントダウンを表示
     if (daysUntilInspection <= 10 && daysUntilInspection >= 0) {
+      // memoから日付範囲情報を抽出
+      const memo = nextInspection.memo || ''
+      const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+      let displayMemo = memo
+      let displayDate = inspectionDate
+      let dateRangeText = ''
+      
+      if (dateRangeMatch) {
+        const [, startDateStr, endDateStr] = dateRangeMatch
+        const startDate = new Date(startDateStr + 'T00:00:00')
+        const endDate = new Date(endDateStr + 'T00:00:00')
+        
+        // 日付範囲情報をメモから除去
+        displayMemo = memo.replace(/日付範囲: \d{4}-\d{2}-\d{2} ~ \d{4}-\d{2}-\d{2}\n?/, '').trim()
+        
+        // 開始日を表示用の日付として使用
+        displayDate = startDate
+        
+        // 日付範囲テキストを生成
+        if (startDate.getTime() === endDate.getTime()) {
+          dateRangeText = ''
+        } else {
+          dateRangeText = `${startDate.toLocaleDateString('ja-JP')} ~ ${endDate.toLocaleDateString('ja-JP')}`
+        }
+      }
+      
       return {
         daysLeft: daysUntilInspection,
-        inspectionDate: nextInspection.scheduledDate,
+        inspectionDate: displayDate,
         vehiclePlateNumber: nextInspection.vehiclePlateNumber,
-        memo: nextInspection.memo
+        memo: displayMemo,
+        dateRange: dateRangeText
       }
     }
 
@@ -520,11 +518,22 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                     {countdown.daysLeft === 0 ? '当日' : `あと${countdown.daysLeft}日`}
                   </div>
                   <div className="text-sm opacity-75">
-                    {countdown.inspectionDate.toLocaleDateString('ja-JP', { 
-                      month: 'long', 
-                      day: 'numeric',
-                      weekday: 'short'
-                    })}
+                    {countdown.dateRange ? (
+                      <div>
+                        <div>{countdown.inspectionDate.toLocaleDateString('ja-JP', { 
+                          month: 'long', 
+                          day: 'numeric',
+                          weekday: 'short'
+                        })}〜</div>
+                        <div className="text-xs">{countdown.dateRange}</div>
+                      </div>
+                    ) : (
+                      countdown.inspectionDate.toLocaleDateString('ja-JP', { 
+                        month: 'long', 
+                        day: 'numeric',
+                        weekday: 'short'
+                      })
+                    )}
                   </div>
                 </div>
               </div>
@@ -538,6 +547,11 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                 {countdown.memo && (
                   <div className="text-xs opacity-75 mt-2">
                     備考: {countdown.memo}
+                  </div>
+                )}
+                {countdown.dateRange && (
+                  <div className="text-xs opacity-75 mt-1">
+                    期間: {countdown.dateRange}
                   </div>
                 )}
               </div>
@@ -614,39 +628,6 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
           )}
         </div>
 
-        {/* 点検予定 */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 flex items-center">
-            <Wrench className="h-5 w-5 mr-2 text-orange-600" />
-            <span>点検予定</span>
-          </h2>
-          {upcomingInspections.length > 0 ? (
-            <div className="space-y-3">
-              {upcomingInspections.map(inspection => (
-                <div key={inspection.id} className="border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium">{inspection.vehicleNumber}</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      inspection.status === 'urgent' ? 'bg-red-100 text-red-800' :
-                      inspection.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
-                      {inspection.status === 'urgent' ? '緊急' :
-                       inspection.status === 'warning' ? '警告' : '正常' }
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">{inspection.type}</p>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">予定日</span>
-                    <span className="font-medium">{inspection.date.toLocaleDateString('ja-JP')}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-8">近日の点検予定はありません</p>
-          )}
-        </div>
       </div>
 
 
@@ -689,7 +670,6 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const renderVehicleInfo = () => (
     <DriverVehicleInfo
       assignedVehicle={assignedVehicle!}
-      upcomingInspections={upcomingInspections}
     />
   )
 
@@ -699,6 +679,11 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     const handleDepartureTimeSubmit = async () => {
       if (!driverInfo) return
 
+      // 選択された車両を取得（全車両リストまたは担当車両から）
+      const selectedVehicle = selectedVehicleId 
+        ? (allVehicles.length > 0 ? allVehicles.find(v => v.id === selectedVehicleId) : assignedVehicle)
+        : null
+
       try {
         // 既存の出庫時間があるかチェック
         const existingTime = await DepartureTimeService.getByDriverAndDate(driverInfo.id, selectedDate)
@@ -707,8 +692,8 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
           // 更新
           await DepartureTimeService.update(existingTime.id, {
             departureTime: selectedTime,
-            vehicleId: assignedVehicle?.id,
-            vehiclePlateNumber: assignedVehicle?.plateNumber
+            vehicleId: selectedVehicle?.id,
+            vehiclePlateNumber: selectedVehicle?.plateNumber
           })
         } else {
           // 新規作成
@@ -716,8 +701,8 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
             driverId: driverInfo.id,
             driverName: driverInfo.name,
             employeeId: driverInfo.employeeId,
-            vehicleId: assignedVehicle?.id,
-            vehiclePlateNumber: assignedVehicle?.plateNumber,
+            vehicleId: selectedVehicle?.id,
+            vehiclePlateNumber: selectedVehicle?.plateNumber,
             departureDate: selectedDate,
             departureTime: selectedTime
           })
@@ -787,13 +772,37 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
               </select>
             </div>
 
-            {/* 担当車両表示 */}
-            {assignedVehicle && (
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-sm text-gray-600">担当車両</p>
-                <p className="font-medium text-gray-900">{assignedVehicle.plateNumber} ({assignedVehicle.model})</p>
-              </div>
-            )}
+            {/* 車両選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                使用車両を選択
+              </label>
+              {allVehicles.length > 0 ? (
+                <select
+                  value={selectedVehicleId || ''}
+                  onChange={(e) => setSelectedVehicleId(e.target.value ? Number(e.target.value) : undefined)}
+                  className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base"
+                >
+                  <option value="">車両を選択してください</option>
+                  {allVehicles.map(vehicle => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.plateNumber} ({vehicle.model}) - {vehicle.team}
+                      {vehicle.id === assignedVehicle?.id ? ' [担当車両]' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : assignedVehicle ? (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-600">担当車両</p>
+                  <p className="font-medium text-gray-900">{assignedVehicle.plateNumber} ({assignedVehicle.model})</p>
+                  <input type="hidden" value={assignedVehicle.id} />
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">担当車両が設定されていません</p>
+                </div>
+              )}
+            </div>
 
             {/* 登録ボタン */}
             <button
