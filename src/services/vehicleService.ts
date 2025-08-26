@@ -39,20 +39,38 @@ export class VehicleService {
   }
 
   static async getById(id: number): Promise<Vehicle | null> {
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('*')
-      .eq('id', id)
-      .single()
+    try {
+      console.log('VehicleService.getById: Fetching vehicle with id:', id)
+      
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('id', id)
+        .single()
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null
+      console.log('VehicleService.getById: Query result:', { data: !!data, error })
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          console.log('VehicleService.getById: Vehicle not found (PGRST116)')
+          return null
+        }
+        console.error('VehicleService.getById: Supabase error:', error)
+        throw new Error(`Failed to fetch vehicle: ${error.message}`)
       }
-      throw new Error(`Failed to fetch vehicle: ${error.message}`)
-    }
 
-    return this.mapToVehicle(data)
+      const vehicle = this.mapToVehicle(data)
+      console.log('VehicleService.getById: Successfully mapped vehicle:', vehicle.plateNumber)
+      return vehicle
+    } catch (err) {
+      console.error('VehicleService.getById: Unexpected error:', err)
+      
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        throw new Error('ネットワーク接続エラー: 車両情報を取得できません。')
+      }
+      
+      throw err
+    }
   }
 
   static async create(vehicle: Omit<Vehicle, 'id'>): Promise<Vehicle> {
@@ -321,41 +339,63 @@ export class VehicleService {
   static async delete(id: number): Promise<void> {
     console.log('VehicleService.delete called:', { id })
     
-    // 削除前に車両情報を取得し、ドライバーとの同期を実行
-    const vehicleToDelete = await this.getById(id)
-    if (!vehicleToDelete) {
-      throw new Error('Vehicle not found')
-    }
-    
-    console.log('VehicleService.delete vehicle info:', vehicleToDelete)
-    
-    // 削除対象の車両にドライバーが割り当てられている場合、ドライバーの車両割り当てを解除
-    if (vehicleToDelete.driver) {
-      try {
-        const { DriverService } = await import('./driverService')
-        const driver = await DriverService.getByName(vehicleToDelete.driver)
-        if (driver && driver.assignedVehicle === vehicleToDelete.plateNumber) {
-          console.log('VehicleService.delete: Removing vehicle assignment from driver:', driver.name)
-          await DriverService.update(driver.id, { assignedVehicle: undefined }, true)
+    try {
+      // 削除前に車両情報を取得し、ドライバーとの同期を実行
+      const vehicleToDelete = await this.getById(id)
+      if (!vehicleToDelete) {
+        console.log('VehicleService.delete: Vehicle not found, checking if it exists in database')
+        
+        // 直接データベースで存在確認
+        const { data: existsCheck } = await supabase
+          .from('vehicles')
+          .select('id')
+          .eq('id', id)
+          .single()
+        
+        if (!existsCheck) {
+          throw new Error('指定された車両が見つかりません。既に削除されている可能性があります。')
         }
-      } catch (syncError) {
-        console.error('VehicleService.delete: Driver sync failed:', syncError)
-        // 削除処理は継続するが、エラーを警告
-        console.warn('車両を削除しますが、ドライバーの車両割り当て解除に失敗しました')
       }
-    }
     
-    // 車両を削除
-    const { error } = await supabase
-      .from('vehicles')
-      .delete()
-      .eq('id', id)
+      console.log('VehicleService.delete vehicle info:', vehicleToDelete)
+      
+      // 削除対象の車両にドライバーが割り当てられている場合、ドライバーの車両割り当てを解除
+      if (vehicleToDelete && vehicleToDelete.driver) {
+        try {
+          const { DriverService } = await import('./driverService')
+          const driver = await DriverService.getByName(vehicleToDelete.driver)
+          if (driver && driver.assignedVehicle === vehicleToDelete.plateNumber) {
+            console.log('VehicleService.delete: Removing vehicle assignment from driver:', driver.name)
+            await DriverService.update(driver.id, { assignedVehicle: undefined }, true)
+          }
+        } catch (syncError) {
+          console.error('VehicleService.delete: Driver sync failed:', syncError)
+          // 削除処理は継続するが、エラーを警告
+          console.warn('車両を削除しますが、ドライバーの車両割り当て解除に失敗しました')
+        }
+      }
+      
+      // 車両を削除
+      const { error } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('id', id)
 
-    if (error) {
-      throw new Error(`Failed to delete vehicle: ${error.message}`)
+      if (error) {
+        console.error('VehicleService.delete: Delete error:', error)
+        throw new Error(`車両の削除に失敗しました: ${error.message}`)
+      }
+      
+      console.log('VehicleService.delete: Vehicle deleted successfully')
+    } catch (err) {
+      console.error('VehicleService.delete: Unexpected error:', err)
+      
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        throw new Error('ネットワーク接続エラー: 車両を削除できません。インターネット接続を確認してください。')
+      }
+      
+      throw err
     }
-    
-    console.log('VehicleService.delete: Vehicle deleted successfully')
   }
 
   static async getByTeam(team: string): Promise<Vehicle[]> {
