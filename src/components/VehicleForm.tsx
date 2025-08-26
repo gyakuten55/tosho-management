@@ -56,7 +56,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
         craneAnnualInspectionDate: vehicle.craneAnnualInspectionDate ? format(vehicle.craneAnnualInspectionDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         garage: vehicle.garage,
         notes: vehicle.notes || '',
-        hasCrane: vehicle.model.includes('クレーン')
+        hasCrane: vehicle.model.includes('クレーン') || !!vehicle.craneAnnualInspectionDate
       })
     }
   }, [vehicle])
