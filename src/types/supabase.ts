@@ -882,6 +882,7 @@ export type Database = {
           garage: string
           id: number
           inspection_date: string
+          crane_annual_inspection_date: string | null
           model: string
           notes: string | null
           plate_number: string
@@ -896,6 +897,7 @@ export type Database = {
           garage: string
           id?: number
           inspection_date: string
+          crane_annual_inspection_date?: string | null
           model: string
           notes?: string | null
           plate_number: string
@@ -910,6 +912,7 @@ export type Database = {
           garage?: string
           id?: number
           inspection_date?: string
+          crane_annual_inspection_date?: string | null
           model?: string
           notes?: string | null
           plate_number?: string
