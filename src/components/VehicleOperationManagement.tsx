@@ -510,8 +510,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         
         await DriverNotificationService.create({
           driverId: driverInfo.id,
-          driverName: driverInfo.name,
-          employeeId: driverInfo.employeeId,
           type: 'inspection_reserved',
           title: '点検予約完了のお知らせ',
           message: customMessage,
