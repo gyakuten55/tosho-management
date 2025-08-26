@@ -8,16 +8,34 @@ type VehicleUpdate = Database['public']['Tables']['vehicles']['Update']
 
 export class VehicleService {
   static async getAll(): Promise<Vehicle[]> {
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('*')
-      .order('id')
+    try {
+      console.log('VehicleService.getAll: Starting vehicles fetch')
+      
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .order('id')
 
-    if (error) {
-      throw new Error(`Failed to fetch vehicles: ${error.message}`)
+      console.log('VehicleService.getAll: Query result:', { data: data?.length, error })
+
+      if (error) {
+        console.error('VehicleService.getAll: Supabase error:', error)
+        throw new Error(`Failed to fetch vehicles: ${error.message}`)
+      }
+
+      const vehicles = data.map(this.mapToVehicle)
+      console.log('VehicleService.getAll: Mapped vehicles count:', vehicles.length)
+      
+      return vehicles
+    } catch (err) {
+      console.error('VehicleService.getAll: Unexpected error:', err)
+      
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        throw new Error('ネットワーク接続エラー: Supabaseサーバーに接続できません。インターネット接続を確認してください。')
+      }
+      
+      throw err
     }
-
-    return data.map(this.mapToVehicle)
   }
 
   static async getById(id: number): Promise<Vehicle | null> {
