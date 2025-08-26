@@ -290,7 +290,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       // 各種点検日をチェック（点検日から自動計算された3ヶ月点検を使用）
       const inspectionDates = getAllInspectionDates(
         vehicle.inspectionDate,
-        vehicle.model.includes('クレーン')
+        vehicle.craneAnnualInspectionDate
       )
 
       inspectionDates.forEach(inspection => {
