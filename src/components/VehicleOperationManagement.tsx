@@ -1303,7 +1303,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   return vehicles.filter(vehicle => {
                     const inspections = getAllInspectionDates(
                       vehicle.inspectionDate,
-                      vehicle.model.includes('クレーン')
+                      vehicle.craneAnnualInspectionDate
                     ).map(item => item.date)
                     
                     return inspections.some(inspectionDate => {
@@ -1329,7 +1329,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   // 今後3ヶ月分の点検から、予約完了済みでない車両のみを抽出
                   const inspections = getAllInspectionDates(
                     vehicle.inspectionDate,
-                    vehicle.model.includes('クレーン')
+                    vehicle.craneAnnualInspectionDate
                   )
                   
                   const upcomingInspections = inspections.filter(inspection => {
@@ -1354,7 +1354,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   // この車両の3ヶ月分の点検日を取得（予約完了していないもののみ）
                   const inspections = getAllInspectionDates(
                     vehicle.inspectionDate,
-                    vehicle.model.includes('クレーン')
+                    vehicle.craneAnnualInspectionDate
                   )
                   
                   const upcomingInspections = inspections.filter(inspection => {
