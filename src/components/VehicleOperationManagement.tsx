@@ -43,7 +43,7 @@ import {
   DailyVehicleSwap,
   InspectionReservation
 } from '@/types'
-import { getAllInspectionDates, getNextInspectionDate } from '@/utils/inspectionUtils'
+import { getAllInspectionDates, getNextInspectionDate, getNextAnnualInspectionDate } from '@/utils/inspectionUtils'
 
 import { VehicleService } from '@/services/vehicleService'
 import { DriverService } from '@/services/driverService'
@@ -233,6 +233,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   const [inspectionReservationStartDate, setInspectionReservationStartDate] = useState('')
   const [inspectionReservationEndDate, setInspectionReservationEndDate] = useState('')
   const [inspectionMemo, setInspectionMemo] = useState('')
+  const [inspectionType, setInspectionType] = useState<'regular' | 'crane_annual'>('regular')
 
   // ヘルパー関数を先に定義
   const getUnassignedVehiclesForDate = useCallback((date: Date) => {
@@ -473,7 +474,11 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       return
     }
     
-    const inspectionDeadline = getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+    // 点検種別に応じて期限を計算
+    const inspectionDeadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
+      ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+      : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+    
     if (endDate > inspectionDeadline) {
       alert('終了日は点検期限を超えることはできません')
       return
@@ -493,10 +498,10 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         driverInfo?.name,
         reservationDate,
         inspectionDeadline,
-        // 日付範囲情報をmemoに追加
-        isSameDay(startDate, endDate) 
+        // 日付範囲情報と点検種別をmemoに追加
+        `点検種別: ${inspectionType === 'crane_annual' ? 'クレーン年次点検' : '定期点検'}\n${isSameDay(startDate, endDate) 
           ? inspectionMemo
-          : `日付範囲: ${format(startDate, 'yyyy-MM-dd')} ~ ${format(endDate, 'yyyy-MM-dd')}${inspectionMemo ? `\n${inspectionMemo}` : ''}`
+          : `日付範囲: ${format(startDate, 'yyyy-MM-dd')} ~ ${format(endDate, 'yyyy-MM-dd')}${inspectionMemo ? `\n${inspectionMemo}` : ''}`}`
       )
 
       // 担当ドライバーに通知を送信（日付範囲対応）
@@ -506,12 +511,13 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
           : `${startDate.toLocaleDateString('ja-JP')} ~ ${endDate.toLocaleDateString('ja-JP')}`
         
         const memoText = inspectionMemo?.trim() ? `\n備考: ${inspectionMemo}` : ''
-        const customMessage = `担当車両 ${selectedInspectionVehicle.plateNumber} の点検が ${dateRangeMessage} で予約されました。${memoText}`
+        const inspectionTypeName = inspectionType === 'crane_annual' ? 'クレーン年次点検' : '定期点検'
+        const customMessage = `担当車両 ${selectedInspectionVehicle.plateNumber} の${inspectionTypeName}が ${dateRangeMessage} で予約されました。${memoText}`
         
         await DriverNotificationService.create({
           driverId: driverInfo.id,
           type: 'inspection_reserved',
-          title: '点検予約完了のお知らせ',
+          title: `${inspectionTypeName}予約完了のお知らせ`,
           message: customMessage,
           priority: 'medium',
           isRead: false,
@@ -1402,6 +1408,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                       setInspectionReservationStartDate('')
                       setInspectionReservationEndDate('')
                       setInspectionMemo('')
+                  setInspectionType('regular')
                     }}
                   >
                     <div className="flex items-center justify-between">
@@ -2694,6 +2701,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   setInspectionReservationStartDate('')
                   setInspectionReservationEndDate('')
                   setInspectionMemo('')
+                  setInspectionType('regular')
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
@@ -2712,14 +2720,55 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                     <div className="text-sm text-gray-600">担当: {selectedInspectionVehicle.driver || '未割当'}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium text-red-600">点検期限</div>
+                    <div className="text-sm font-medium text-red-600">{inspectionType === 'crane_annual' ? 'クレーン年次' : '定期'}点検期限</div>
                     <div className="text-sm text-red-700">
                       {(() => {
-                        const nextInspection = getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
-                        return format(nextInspection, 'yyyy年MM月dd日', { locale: ja })
+                        const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
+                          ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+                          : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+                        return format(deadline, 'yyyy年MM月dd日', { locale: ja })
                       })()}
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* 点検種別選択 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  点検種別 <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 gap-3">
+                  <label className="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="inspectionType"
+                      value="regular"
+                      checked={inspectionType === 'regular'}
+                      onChange={(e) => setInspectionType(e.target.value as 'regular' | 'crane_annual')}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    />
+                    <div className="ml-3 flex-1">
+                      <div className="text-sm font-medium text-gray-900">定期点検（3ヶ月間隔）</div>
+                      <div className="text-sm text-gray-600">通常の3ヶ月ごとの定期点検</div>
+                    </div>
+                  </label>
+                  {selectedInspectionVehicle.craneAnnualInspectionDate && (
+                    <label className="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="inspectionType"
+                        value="crane_annual"
+                        checked={inspectionType === 'crane_annual'}
+                        onChange={(e) => setInspectionType(e.target.value as 'regular' | 'crane_annual')}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <div className="ml-3 flex-1">
+                        <div className="text-sm font-medium text-gray-900">クレーン年次点検（1年間隔）</div>
+                        <div className="text-sm text-gray-600">年1回のクレーン年次点検</div>
+                      </div>
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -2739,7 +2788,12 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                       value={inspectionReservationStartDate}
                       onChange={(e) => setInspectionReservationStartDate(e.target.value)}
                       min={format(new Date(), 'yyyy-MM-dd')}
-                      max={format(getNextInspectionDate(selectedInspectionVehicle.inspectionDate), 'yyyy-MM-dd')}
+                      max={(() => {
+                        const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
+                          ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+                          : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+                        return format(deadline, 'yyyy-MM-dd')
+                      })()}
                     />
                   </div>
                   <div>
@@ -2752,7 +2806,12 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                       value={inspectionReservationEndDate}
                       onChange={(e) => setInspectionReservationEndDate(e.target.value)}
                       min={inspectionReservationStartDate || format(new Date(), 'yyyy-MM-dd')}
-                      max={format(getNextInspectionDate(selectedInspectionVehicle.inspectionDate), 'yyyy-MM-dd')}
+                      max={(() => {
+                        const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
+                          ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+                          : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+                        return format(deadline, 'yyyy-MM-dd')
+                      })()}
                     />
                   </div>
                 </div>
@@ -2760,7 +2819,12 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   点検期限内の日付範囲で点検を予約します
                 </p>
                 <p className="text-xs text-red-600 mt-1">
-                  ※ 期限: {format(getNextInspectionDate(selectedInspectionVehicle.inspectionDate), 'yyyy年MM月dd日', { locale: ja })}まで
+                  ※ 期限: {(() => {
+                    const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
+                      ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+                      : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+                    return format(deadline, 'yyyy年MM月dd日', { locale: ja })
+                  })()}まで
                 </p>
               </div>
 
@@ -2781,10 +2845,11 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               {/* 点検種類表示 */}
               <div className="bg-gray-50 p-3 rounded-lg">
                 <div className="text-sm text-gray-600">
-                  <div className="font-medium mb-1">点検内容</div>
-                  <div>• 定期点検（3ヶ月間隔）</div>
-                  {selectedInspectionVehicle.model.includes('クレーン') && (
-                    <div>• クレーン年次点検も含む</div>
+                  <div className="font-medium mb-1">予約する点検内容</div>
+                  {inspectionType === 'regular' ? (
+                    <div>• 定期点検（3ヶ月間隔）</div>
+                  ) : (
+                    <div>• クレーン年次点検（1年間隔）</div>
                   )}
                   <div className="text-xs text-red-600 mt-2">
                     この期限内に実施する必要があります
@@ -2801,6 +2866,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   setInspectionReservationStartDate('')
                   setInspectionReservationEndDate('')
                   setInspectionMemo('')
+                  setInspectionType('regular')
                 }}
                 className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
               >
