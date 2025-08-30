@@ -42,6 +42,7 @@ interface DailyInfo {
   nightShiftCount: number
   teamVacationCount: number  // 自分のチームの休暇者数
   teamVacationLimit: number  // 自分のチームの休暇上限
+  totalVacationLimit: number  // 全チームの休暇上限合計
 }
 
 export default function DriverVacationCalendar({ 
@@ -56,7 +57,7 @@ export default function DriverVacationCalendar({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
-  const [requestType, setRequestType] = useState<'day_off' | 'night_shift'>('day_off')
+  const [requestType, setRequestType] = useState<'day_off'>('day_off')
   const [showDayModal, setShowDayModal] = useState(false)
   const [dayModalData, setDayModalData] = useState<{
     date: Date
@@ -128,6 +129,10 @@ export default function DriverVacationCalendar({
       const teamVacationCount = dayVacations.filter(v => v.isOff && v.team === currentUser.team).length
       const teamVacationLimit = getVacationLimitForTeamAndDate(currentUser.team, date)
       
+      // 全チームの上限合計を計算
+      const totalVacationLimit = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+        .reduce((sum, team) => sum + getVacationLimitForTeamAndDate(team, date), 0)
+      
       // 申請可能かチェック
       const daysDifference = differenceInDays(date, today)
       const canRequest = daysDifference >= 10 && isCurrentMonth // 10日以上先なら申請可能
@@ -147,7 +152,8 @@ export default function DriverVacationCalendar({
         totalOffCount,
         nightShiftCount,
         teamVacationCount,
-        teamVacationLimit
+        teamVacationLimit,
+        totalVacationLimit
       }
     })
   }
@@ -201,16 +207,31 @@ export default function DriverVacationCalendar({
   const handleDateClick = (dayInfo: DailyInfo) => {
     if (!dayInfo.isCurrentMonth) return
     
+    console.log('DriverVacationCalendar - handleDateClick:', {
+      date: dayInfo.date,
+      totalVacations: dayInfo.vacations.length,
+      allDriversCount: allDrivers.length
+    })
+    
     // 日付クリック時：その日の出勤・休暇状況を表示
+    // 休暇者のみを正しくフィルタリング（workStatus === 'day_off'）
+    const actualVacationDrivers = dayInfo.vacations.filter(v => v.workStatus === 'day_off')
+    
+    // 出勤者の計算：休暇を取っていない全ドライバー
     const workingDrivers = allDrivers.filter(driver => {
-      const hasVacation = dayInfo.vacations.some(v => v.driverId === driver.id)
+      const hasVacation = actualVacationDrivers.some(v => v.driverId === driver.id)
       return !hasVacation
+    })
+    
+    console.log('DriverVacationCalendar - filtered data:', {
+      actualVacationDrivers: actualVacationDrivers.length,
+      workingDrivers: workingDrivers.length
     })
     
     setDayModalData({
       date: dayInfo.date,
       workingDrivers,
-      vacationDrivers: dayInfo.vacations
+      vacationDrivers: actualVacationDrivers
     })
     setShowDayModal(true)
   }
@@ -244,9 +265,9 @@ export default function DriverVacationCalendar({
       team: currentUser.team,
       employeeId: currentUser.employeeId,
       date: selectedDate,
-      workStatus: requestType === 'day_off' ? 'day_off' : 'night_shift',
-      isOff: requestType === 'day_off',
-      type: requestType,
+      workStatus: 'day_off',
+      isOff: true,
+      type: 'day_off',
       reason: '',
       status: 'approved',
       isExternalDriver: currentUser.employeeId.startsWith('E')
@@ -416,12 +437,12 @@ export default function DriverVacationCalendar({
                       </div>
                       
                       <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        dayInfo.teamVacationCount >= dayInfo.teamVacationLimit ? 
+                        dayInfo.totalOffCount >= dayInfo.totalVacationLimit ? 
                           'bg-red-100 text-red-800' : 
-                          dayInfo.teamVacationCount > 0 ? 'bg-yellow-100 text-yellow-800' : 
+                          dayInfo.totalOffCount > 0 ? 'bg-yellow-100 text-yellow-800' : 
                           'bg-green-100 text-green-800'
                       }`}>
-                        {dayInfo.teamVacationCount}/{dayInfo.teamVacationLimit}
+                        {dayInfo.totalOffCount}/{dayInfo.totalVacationLimit}
                       </div>
                     </div>
                     
@@ -438,7 +459,7 @@ export default function DriverVacationCalendar({
                               getStatusColor(dayInfo.vacationRequest.workStatus)
                             } hover:opacity-80`}
                           >
-                            {dayInfo.vacationRequest.workStatus === 'day_off' ? '📋 自分: 休暇中' : '🌙 自分: 夜勤'}
+                            📋 自分: 休暇中
                             {dayInfo.canDelete && <span className="ml-2 text-xs">×</span>}
                           </button>
                         ) : dayInfo.canRequest ? (
@@ -544,7 +565,7 @@ export default function DriverVacationCalendar({
                     {isCurrentMonth && (
                       <div className="mb-1 sm:mb-2">
                         <div className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded border bg-gray-100 text-gray-700 border-gray-200">
-                          {dayInfo.teamVacationCount}/{dayInfo.teamVacationLimit}
+                          {dayInfo.totalOffCount}/{dayInfo.totalVacationLimit}
                         </div>
                       </div>
                     )}
@@ -558,8 +579,7 @@ export default function DriverVacationCalendar({
                                handleVacationRequest(dayInfo)
                              }}>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs">{dayInfo.vacationRequest.workStatus === 'day_off' ? '休暇' : 
-                                   dayInfo.vacationRequest.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
+                            <span className="text-xs">休暇</span>
                             {dayInfo.canDelete && (
                               <X className="h-3 w-3 text-gray-600 hover:text-red-600" />
                             )}
@@ -581,10 +601,6 @@ export default function DriverVacationCalendar({
             <div className="flex items-center space-x-2">
               <div className="w-3 h-3 bg-red-100 border border-red-200 rounded flex-shrink-0"></div>
               <span>休暇取得済み</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-blue-100 border border-blue-200 rounded flex-shrink-0"></div>
-              <span>夜勤勤務</span>
             </div>
             <div className="flex items-center space-x-2">
               <Plus className="h-3 w-3 text-green-600 flex-shrink-0" />
@@ -637,48 +653,31 @@ export default function DriverVacationCalendar({
                   </div>
                 </div>
 
-                {/* 休暇・夜勤者リスト */}
+                {/* 休暇者リスト */}
                 <div>
                   <h4 className="text-sm sm:text-base font-medium text-red-700 mb-3 flex items-center">
                     <X className="h-4 w-4 mr-1" />
-                    休暇・夜勤者 ({dayModalData.vacationDrivers.length}人)
+                    休暇者 ({dayModalData.vacationDrivers.length}人)
                   </h4>
                   <div className="space-y-2 max-h-48 sm:max-h-60 overflow-y-auto">
                     {dayModalData.vacationDrivers.length > 0 ? (
                       dayModalData.vacationDrivers.map(vacation => (
-                        <div key={vacation.id} className={`border rounded-lg p-2 sm:p-3 ${
-                          vacation.workStatus === 'day_off' ? 'bg-red-50 border-red-200' : 
-                          vacation.workStatus === 'night_shift' ? 'bg-blue-50 border-blue-200' : 
-                          'bg-gray-50 border-gray-200'
-                        }`}>
+                        <div key={vacation.id} className="border rounded-lg p-2 sm:p-3 bg-red-50 border-red-200">
                           <div className="flex items-center justify-between">
-                            <div className={`font-medium text-sm sm:text-base ${
-                              vacation.workStatus === 'day_off' ? 'text-red-900' : 
-                              vacation.workStatus === 'night_shift' ? 'text-blue-900' : 
-                              'text-gray-900'
-                            }`}>
+                            <div className="font-medium text-sm sm:text-base text-red-900">
                               {vacation.driverName}
                             </div>
-                            <div className={`text-xs px-2 py-1 rounded font-medium ${
-                              vacation.workStatus === 'day_off' ? 'bg-red-100 text-red-800' : 
-                              vacation.workStatus === 'night_shift' ? 'bg-blue-100 text-blue-800' : 
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {vacation.workStatus === 'day_off' ? '休暇' : 
-                               vacation.workStatus === 'night_shift' ? '夜勤' : '出勤'}
+                            <div className="text-xs px-2 py-1 rounded font-medium bg-red-100 text-red-800">
+                              休暇
                             </div>
                           </div>
-                          <div className={`text-xs sm:text-sm mt-1 ${
-                            vacation.workStatus === 'day_off' ? 'text-red-700' : 
-                            vacation.workStatus === 'night_shift' ? 'text-blue-700' : 
-                            'text-gray-700'
-                          }`}>
+                          <div className="text-xs sm:text-sm mt-1 text-red-700">
                             {vacation.team} - {vacation.employeeId}
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="text-xs sm:text-sm text-gray-500 text-center py-4">休暇・夜勤者がいません</div>
+                      <div className="text-xs sm:text-sm text-gray-500 text-center py-4">休暇者がいません</div>
                     )}
                   </div>
                 </div>
@@ -721,29 +720,11 @@ export default function DriverVacationCalendar({
 
               <div className="mb-6">
                 <p className="text-xs sm:text-sm text-gray-600 mb-3">申請種類:</p>
-                <div className="space-y-3">
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 touch-manipulation">
-                    <input
-                      type="radio"
-                      name="requestType"
-                      value="day_off"
-                      checked={requestType === 'day_off'}
-                      onChange={(e) => setRequestType(e.target.value as 'day_off' | 'night_shift')}
-                      className="mr-3 h-4 w-4"
-                    />
-                    <span className="text-sm sm:text-base">📋 休暇</span>
-                  </label>
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 touch-manipulation">
-                    <input
-                      type="radio"
-                      name="requestType"
-                      value="night_shift"
-                      checked={requestType === 'night_shift'}
-                      onChange={(e) => setRequestType(e.target.value as 'day_off' | 'night_shift')}
-                      className="mr-3 h-4 w-4"
-                    />
-                    <span className="text-sm sm:text-base">🌙 夜勤</span>
-                  </label>
+                <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
+                  <div className="flex items-center">
+                    <span className="text-lg mr-3">📋</span>
+                    <span className="text-base font-medium text-blue-900">休暇申請</span>
+                  </div>
                 </div>
               </div>
 

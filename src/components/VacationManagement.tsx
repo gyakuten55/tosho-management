@@ -14,7 +14,6 @@ import {
   UserCheck,
   Smartphone,
   X,
-  Trash2,
   ArrowUp,
   ArrowDown
 } from 'lucide-react'
@@ -85,6 +84,11 @@ export default function VacationManagement({
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
   const [statsMonth, setStatsMonth] = useState(new Date()) // 統計タブ用の月選択state
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all') // モーダル内のチームフィルター
+
+  // デバッグ: selectedWorkStatusの変更を追跡
+  useEffect(() => {
+    console.log('VacationManagement - selectedWorkStatus changed:', selectedWorkStatus)
+  }, [selectedWorkStatus])
 
   useEffect(() => {
     loadVacationData()
@@ -627,6 +631,7 @@ export default function VacationManagement({
 
   // セルクリック時の処理
   const handleDateClick = (date: Date) => {
+    console.log('VacationManagement - handleDateClick: resetting form state')
     // その日のすべてのドライバーがデフォルト出勤状態になるようにする
     ensureAllDriversHaveWorkStatus(date)
     
@@ -634,6 +639,7 @@ export default function VacationManagement({
     setShowVacationForm(true)
     setSelectedDriverId('')
     setSelectedWorkStatus('day_off')
+    console.log('VacationManagement - handleDateClick: selectedWorkStatus reset to day_off')
   }
 
 
@@ -672,6 +678,12 @@ export default function VacationManagement({
 
   const handleVacationSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    console.log('VacationManagement - handleVacationSubmit: form submitted with values:', {
+      selectedDate,
+      selectedDriverId,
+      selectedWorkStatus
+    })
     
     if (!selectedDate || !selectedDriverId) {
       alert('日付とドライバーを選択してください。')
@@ -736,6 +748,8 @@ export default function VacationManagement({
         requestDate: new Date(),
         isExternalDriver: driver.employeeId.startsWith('E')
       }
+      
+      console.log('VacationManagement - Saving vacation request with data:', requestData)
 
       let savedRequest: VacationRequest
       if (existingRequest) {
@@ -756,10 +770,12 @@ export default function VacationManagement({
         : [...vacationRequests, savedRequest]
       calculateVacationStats(updatedRequests)
       
+      console.log('VacationManagement - Vacation request saved successfully, resetting form')
       setShowVacationForm(false)
       setSelectedDate(null)
       setSelectedDriverId('')
       setSelectedWorkStatus('day_off')
+      console.log('VacationManagement - Form reset: selectedWorkStatus set to day_off')
     } catch (err) {
       console.error('Failed to save vacation request:', err)
       alert('休暇申請の保存に失敗しました')
@@ -1474,6 +1490,10 @@ export default function VacationManagement({
                 <h3 className="text-lg font-semibold text-gray-900">
                   {format(selectedDate, 'yyyy年MM月dd日', { locale: ja })} の勤務状態管理
                 </h3>
+                {/* デバッグ表示 */}
+                <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  DEBUG: {selectedWorkStatus}
+                </div>
                 <button
                   onClick={() => setShowVacationForm(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -1629,13 +1649,6 @@ export default function VacationManagement({
                             })()}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleVacationDelete(workStatus.id)}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-100 p-2 rounded-lg transition-colors"
-                          title="削除"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
                       </div>
                     ))}
                   </div>
@@ -1652,7 +1665,10 @@ export default function VacationManagement({
                     </label>
                     <select
                       value={selectedWorkStatus}
-                      onChange={(e) => setSelectedWorkStatus(e.target.value as 'working' | 'day_off' | 'night_shift')}
+                      onChange={(e) => {
+                        console.log('VacationManagement - Select onChange:', e.target.value)
+                        setSelectedWorkStatus(e.target.value as 'working' | 'day_off' | 'night_shift')
+                      }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       required
                     >

@@ -656,7 +656,6 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
 
   const renderVacationRequest = () => (
     <DriverVacationCalendar
-      key={`calendar-${allVacationRequests.length}-${vacationRequests.length}`}
       currentUser={driverInfo}
       existingRequests={vacationRequests}
       monthlyStats={monthlyVacationStats}
