@@ -84,6 +84,7 @@ export default function VacationManagement({
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
   const [statsMonth, setStatsMonth] = useState(new Date()) // 統計タブ用の月選択state
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all') // モーダル内のチームフィルター
+  const [quickUpdateLoading, setQuickUpdateLoading] = useState<Set<number>>(new Set()) // クイック更新中のドライバーID
 
   // デバッグ: selectedWorkStatusの変更を追跡
   useEffect(() => {
@@ -400,7 +401,7 @@ export default function VacationManagement({
     if (drivers.length > 0) {
       recalculateAllStats()
       cleanupOldVacationData()
-      initializeDefaultWorkStatus()
+      // initializeDefaultWorkStatus() // 重複回避のためコメントアウト
     }
   }, [drivers, vacationRequests, vacationSettings, setVacationStats, setVacationRequests])
 
@@ -633,7 +634,7 @@ export default function VacationManagement({
   const handleDateClick = (date: Date) => {
     console.log('VacationManagement - handleDateClick: resetting form state')
     // その日のすべてのドライバーがデフォルト出勤状態になるようにする
-    ensureAllDriversHaveWorkStatus(date)
+    // ensureAllDriversHaveWorkStatus(date) // 重複回避のためコメントアウト
     
     setSelectedDate(date)
     setShowVacationForm(true)
@@ -779,6 +780,96 @@ export default function VacationManagement({
     } catch (err) {
       console.error('Failed to save vacation request:', err)
       alert('休暇申請の保存に失敗しました')
+    }
+  }
+
+  // クイック勤務状態更新処理（ドライバー名の横のボタン用）
+  const handleQuickStatusUpdate = async (driverId: number, workStatus: 'working' | 'day_off' | 'night_shift') => {
+    if (!selectedDate) return
+
+    // ローディング状態を開始
+    setQuickUpdateLoading(prev => new Set(prev).add(driverId))
+
+    try {
+      const driver = drivers.find(d => d.id === driverId)
+      if (!driver) {
+        alert('ドライバーが見つかりません。')
+        return
+      }
+
+      // 既存の勤務状態設定があるかチェック（仮想レコード、実レコード問わず）
+      const existingRequest = vacationRequests.find(req =>
+        req.driverId === driver.id && 
+        isSameDay(req.date, selectedDate)
+        // IDの条件を削除して、仮想レコードも含めて重複チェック
+      )
+
+      // 仮想レコード（負のID）がある場合は削除
+      if (existingRequest && existingRequest.id < 0) {
+        setVacationRequests(vacationRequests.filter(req => req.id !== existingRequest.id))
+      }
+
+      // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
+      if (workStatus === 'day_off') {
+        const existingVacations = getExistingVacations()
+        const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
+        
+        // 新しい統一設定から上限を取得
+        const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
+        
+        // 上限チェック（0人制限の場合は即座に拒否、それ以外は既存数で判定）
+        if (vacationLimit === 0) {
+          alert(`この日は休暇登録が禁止されています。（${driver.team}の上限: 0人）`)
+          return
+        } else if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
+          alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
+          return
+        }
+      }
+
+      const requestData = {
+        driverId: driver.id,
+        driverName: driver.name,
+        team: driver.team,
+        employeeId: driver.employeeId,
+        date: selectedDate,
+        workStatus: workStatus,
+        isOff: workStatus === 'day_off',
+        type: workStatus,
+        reason: 'クイック登録',
+        status: 'approved' as const,
+        requestDate: new Date(),
+        isExternalDriver: driver.employeeId.startsWith('E')
+      }
+
+      let savedRequest: VacationRequest
+      if (existingRequest && existingRequest.id > 0) {
+        // 既存の設定を更新（データベースに保存済みの場合のみ）
+        savedRequest = await VacationService.update(existingRequest.id, requestData)
+        setVacationRequests(vacationRequests.map(req => 
+          req.id === existingRequest.id ? savedRequest : req
+        ))
+      } else {
+        // 新規追加（仮想レコードは削除済みなので、常に新規作成）
+        savedRequest = await VacationService.create(requestData)
+        setVacationRequests([...vacationRequests, savedRequest])
+      }
+      
+      // 統計を更新
+      const updatedRequests = existingRequest 
+        ? vacationRequests.map(req => req.id === existingRequest.id ? savedRequest : req)
+        : [...vacationRequests, savedRequest]
+      calculateVacationStats(updatedRequests)
+    } catch (err) {
+      console.error('Failed to save vacation request:', err)
+      alert('勤務状態の保存に失敗しました')
+    } finally {
+      // ローディング状態を終了
+      setQuickUpdateLoading(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(driverId)
+        return newSet
+      })
     }
   }
 
@@ -1654,6 +1745,108 @@ export default function VacationManagement({
                   </div>
         </div>
       )}
+
+              {/* クイック勤務状態設定 */}
+              <div>
+                <h4 className="text-md font-semibold text-gray-900 mb-3">全ドライバー勤務状態設定</h4>
+                <p className="text-sm text-gray-600 mb-3">各ドライバーの横のボタンをクリックして勤務状態を設定</p>
+                
+                {drivers.length === 0 ? (
+                  <div className="text-sm text-red-600 bg-red-50 p-4 rounded-lg border border-red-200">
+                    <p className="font-medium">⚠️ ドライバーが登録されていません</p>
+                    <p className="mt-1">勤務状態を設定するには、まず「ドライバー管理」画面でドライバーを登録してください。</p>
+                  </div>
+                ) : (
+                  /* チーム別表示 */
+                  <div>
+                    {['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー'].map(team => {
+                  const teamDrivers = drivers.filter(d => d.team === team)
+                  if (teamDrivers.length === 0) return null
+                  
+                  return (
+                    <div key={team} className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 mb-2 border-b border-gray-200 pb-1">
+                        {team} ({teamDrivers.length}人)
+                      </h5>
+                      <div className="space-y-2">
+                        {teamDrivers.map(driver => {
+                          // 現在のドライバーの勤務状態を取得
+                          const currentStatus = vacationRequests.find(req => 
+                            req.driverId === driver.id && 
+                            isSameDay(req.date, selectedDate) &&
+                            req.id > 0 // DBに保存済み
+                          )
+                          
+                          return (
+                            <div key={driver.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <p className="font-medium text-gray-900">{driver.name}</p>
+                                <p className="text-sm text-gray-600">
+                                  {driver.employeeId}
+                                  {currentStatus && (
+                                    <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                                      currentStatus.workStatus === 'day_off' 
+                                        ? 'bg-red-100 text-red-800'
+                                        : currentStatus.workStatus === 'night_shift'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : 'bg-green-100 text-green-800'
+                                    }`}>
+                                      現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
+                                             currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                {quickUpdateLoading.has(driver.id) ? (
+                                  <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
+                                    更新中...
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
+                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                        currentStatus?.workStatus === 'working' 
+                                          ? 'bg-green-600 text-white font-medium'
+                                          : 'bg-green-100 hover:bg-green-200 text-green-800'
+                                      }`}
+                                    >
+                                      出勤
+                                    </button>
+                                    <button
+                                      onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
+                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                        currentStatus?.workStatus === 'day_off' 
+                                          ? 'bg-red-600 text-white font-medium'
+                                          : 'bg-red-100 hover:bg-red-200 text-red-800'
+                                      }`}
+                                    >
+                                      休暇
+                                    </button>
+                                    <button
+                                      onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
+                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                        currentStatus?.workStatus === 'night_shift' 
+                                          ? 'bg-blue-600 text-white font-medium'
+                                          : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
+                                      }`}
+                                    >
+                                      夜勤
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+                  </div>
+                )}
+              </div>
 
               {/* 新規登録フォーム */}
               <div>
