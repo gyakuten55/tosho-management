@@ -136,21 +136,49 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         
         inspectionReservations.forEach(reservation => {
           if (reservation.status === 'scheduled') {
-            const bookingKey = `${reservation.vehicleId}_${reservation.deadlineDate.toISOString().split('T')[0]}`
+            // memoから日付範囲情報を抽出
+            const memo = reservation.memo || ''
+            const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
             
-            // 重複チェック
-            if (bookingsMap[bookingKey]) {
-              duplicateKeys.push(bookingKey)
-              console.warn(`Duplicate booking key detected: ${bookingKey}`)
-            }
-            
-            bookingsMap[bookingKey] = {
+            const bookingData = {
               isReservationCompleted: true,
               memo: reservation.memo || '',
               hasCraneInspection: false, // 必要に応じて車両情報から判定
               reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
               vehicleId: reservation.vehicleId,
               inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+            }
+            
+            if (dateRangeMatch) {
+              // 期間予約の場合：期間内の全日付にキーを作成
+              const startDateStr = dateRangeMatch[1]
+              const endDateStr = dateRangeMatch[2]
+              const startDate = new Date(startDateStr + 'T00:00:00')
+              const endDate = new Date(endDateStr + 'T00:00:00')
+              const dates = eachDayOfInterval({ start: startDate, end: endDate })
+              
+              dates.forEach(date => {
+                const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}`
+                
+                // 重複チェック
+                if (bookingsMap[dateKey]) {
+                  duplicateKeys.push(dateKey)
+                  console.warn(`Duplicate booking key detected: ${dateKey}`)
+                }
+                
+                bookingsMap[dateKey] = bookingData
+              })
+            } else {
+              // 単日予約の場合：従来通り
+              const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}`
+              
+              // 重複チェック
+              if (bookingsMap[bookingKey]) {
+                duplicateKeys.push(bookingKey)
+                console.warn(`Duplicate booking key detected: ${bookingKey}`)
+              }
+              
+              bookingsMap[bookingKey] = bookingData
             }
           }
         })
@@ -376,17 +404,22 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   // 未稼働車両の統計を計算
   const getInoperativeVehicleStats = () => {
     const today = new Date()
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    
     const inoperativeVehicles = vehicles.filter(vehicle => {
-      const isInInoperativePeriod = vehicleInoperativePeriods.some(period => 
-        period.vehicleId === vehicle.id &&
-        period.status === 'active' &&
-        new Date(period.startDate) <= today &&
-        new Date(period.endDate) >= today
-      )
+      const isInInoperativePeriod = vehicleInoperativePeriods.some(period => {
+        if (period.vehicleId !== vehicle.id || period.status !== 'active') {
+          return false
+        }
+        
+        // 日付のみを比較（時刻を無視）
+        const startDate = new Date(period.startDate.getFullYear(), period.startDate.getMonth(), period.startDate.getDate())
+        const endDate = new Date(period.endDate.getFullYear(), period.endDate.getMonth(), period.endDate.getDate())
+        
+        return todayDate >= startDate && todayDate <= endDate
+      })
       
-      const isInInspection = vehicle.status === 'inspection' || vehicle.status === 'repair'
-      
-      return isInInoperativePeriod || isInInspection
+      return isInInoperativePeriod
     })
 
     return {
@@ -532,14 +565,35 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       
       updatedReservations.forEach(reservation => {
         if (reservation.status === 'scheduled') {
-          const bookingKey = `${reservation.vehicleId}_${reservation.deadlineDate.toISOString().split('T')[0]}`
-          bookingsMap[bookingKey] = {
+          // memoから日付範囲情報を抽出
+          const memo = reservation.memo || ''
+          const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+          
+          const bookingData = {
             isReservationCompleted: true,
             memo: reservation.memo || '',
             hasCraneInspection: false,
             reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
             vehicleId: reservation.vehicleId,
             inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+          }
+          
+          if (dateRangeMatch) {
+            // 期間予約の場合：期間内の全日付にキーを作成
+            const startDateStr = dateRangeMatch[1]
+            const endDateStr = dateRangeMatch[2]
+            const startDate = new Date(startDateStr + 'T00:00:00')
+            const endDate = new Date(endDateStr + 'T00:00:00')
+            const dates = eachDayOfInterval({ start: startDate, end: endDate })
+            
+            dates.forEach(date => {
+              const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}`
+              bookingsMap[dateKey] = bookingData
+            })
+          } else {
+            // 単日予約の場合：従来通り
+            const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}`
+            bookingsMap[bookingKey] = bookingData
           }
         }
       })
@@ -617,14 +671,35 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       
       updatedReservations.forEach(reservation => {
         if (reservation.status === 'scheduled') {
-          const bookingKey = `${reservation.vehicleId}_${reservation.deadlineDate.toISOString().split('T')[0]}`
-          bookingsMap[bookingKey] = {
+          // memoから日付範囲情報を抽出
+          const memo = reservation.memo || ''
+          const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+          
+          const bookingData = {
             isReservationCompleted: true,
             memo: reservation.memo || '',
             hasCraneInspection: false,
             reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
             vehicleId: reservation.vehicleId,
             inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+          }
+          
+          if (dateRangeMatch) {
+            // 期間予約の場合：期間内の全日付にキーを作成
+            const startDateStr = dateRangeMatch[1]
+            const endDateStr = dateRangeMatch[2]
+            const startDate = new Date(startDateStr + 'T00:00:00')
+            const endDate = new Date(endDateStr + 'T00:00:00')
+            const dates = eachDayOfInterval({ start: startDate, end: endDate })
+            
+            dates.forEach(date => {
+              const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}`
+              bookingsMap[dateKey] = bookingData
+            })
+          } else {
+            // 単日予約の場合：従来通り
+            const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}`
+            bookingsMap[bookingKey] = bookingData
           }
         }
       })
@@ -705,14 +780,20 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
 
   // 車両稼働状況を計算
-  const calculateVehicleOperationStatus = (vehicle: Vehicle, date: Date): VehicleOperationStatus => {
+  const calculateVehicleOperationStatus = useCallback((vehicle: Vehicle, date: Date): VehicleOperationStatus => {
     // 1. 稼働不可期間チェック（最優先）
-    const inoperativePeriod = vehicleInoperativePeriods.find(period => 
-      period.vehicleId === vehicle.id &&
-      period.status === 'active' &&
-      date >= period.startDate && 
-      date <= period.endDate
-    )
+    const inoperativePeriod = vehicleInoperativePeriods.find(period => {
+      if (period.vehicleId !== vehicle.id || period.status !== 'active') {
+        return false
+      }
+      
+      // 日付のみを比較（時刻を無視）
+      const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+      const startDate = new Date(period.startDate.getFullYear(), period.startDate.getMonth(), period.startDate.getDate())
+      const endDate = new Date(period.endDate.getFullYear(), period.endDate.getMonth(), period.endDate.getDate())
+      
+      return targetDate >= startDate && targetDate <= endDate
+    })
 
     if (inoperativePeriod) {
       return {
@@ -729,13 +810,10 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     }
 
     // 2. 点検予約日チェック（車両ステータスより優先）
-    const inspectionReservations = Object.values(inspectionBookings).filter(booking => 
-      booking.vehicleId === vehicle.id && 
-      booking.reservationDate && 
-      isSameDay(new Date(booking.reservationDate), date)
-    )
+    const bookingKey = `${vehicle.id}_${format(date, 'yyyy-MM-dd')}`
+    const booking = inspectionBookings[bookingKey]
     
-    if (inspectionReservations.length > 0) {
+    if (booking && booking.isReservationCompleted) {
       return {
         vehicleId: vehicle.id,
         plateNumber: vehicle.plateNumber,
@@ -746,30 +824,8 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       }
     }
 
-    // 3. 車両自体の状態チェック
-    if (vehicle.status === 'inspection') {
-      return {
-        vehicleId: vehicle.id,
-        plateNumber: vehicle.plateNumber,
-        date,
-        status: 'inactive_inspection',
-        reason: '定期点検中',
-        assignedDriverName: vehicle.driver
-      }
-    }
 
-    if (vehicle.status === 'repair') {
-      return {
-        vehicleId: vehicle.id,
-        plateNumber: vehicle.plateNumber,
-        date,
-        status: 'inactive_repair',
-        reason: '修理中',
-        assignedDriverName: vehicle.driver
-      }
-    }
-
-    // 4. 割り当て変更チェック
+    // 3. 割り当て変更チェック
     const assignmentChange = vehicleAssignmentChanges.find(change => 
       change.vehicleId === vehicle.id &&
       isSameDay(change.date, date) &&
@@ -791,7 +847,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       }
     }
 
-    // 5. ドライバー休暇チェック
+    // 4. ドライバー休暇チェック
     if (vehicle.driver) {
       const assignedDriver = drivers.find(d => d.name === vehicle.driver)
       if (assignedDriver) {
@@ -826,13 +882,13 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       assignedDriverName: vehicle.driver || '未割当',
       reason: '稼働中'
     }
-  }
+  }, [vehicleInoperativePeriods, inspectionBookings, vehicleAssignmentChanges, vacationRequests, drivers])
 
 
 
 
   // カレンダーの日付情報を生成（6週間分の完全なカレンダーグリッド）
-  const generateCalendarDays = (): VehicleOperationCalendarDay[] => {
+  const generateCalendarDays = useMemo((): VehicleOperationCalendarDay[] => {
     const monthStart = startOfMonth(calendarDate)
     const monthEnd = endOfMonth(calendarDate)
     
@@ -902,7 +958,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         totalInspectionCount: allInspectionVehicles.length
       }
     })
-  }
+  }, [calendarDate, vehicles, vehicleAssignmentChanges, inspectionBookings, calculateVehicleOperationStatus, getInspectionVehiclesForDate])
 
   // セルクリック時の処理
   const handleDateClick = (date: Date) => {
@@ -1034,14 +1090,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
       const savedPeriod = await VehicleInoperativePeriodService.create(newInoperativePeriod)
 
-      // 2. 車両ステータスを更新
-      const newStatus = 
-        inoperativeType === 'repair' ? 'repair' :
-        inoperativeType === 'maintenance' ? 'maintenance_due' :
-        inoperativeType === 'breakdown' ? 'breakdown' : 'repair'
-
-      await VehicleService.update(selectedVehicle.id, { status: newStatus })
-
       // 3. 担当ドライバーに通知を送信
       if (originalDriver) {
         await DriverNotificationService.createVehicleInoperativeNotification(
@@ -1059,13 +1107,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
       // 4. ローカル状態を更新
       setVehicleInoperativePeriods(prev => [...prev, savedPeriod])
-
-      // 車両リストのステータスも更新
-      setVehicles(prev => prev.map(vehicle => 
-        vehicle.id === selectedVehicle.id 
-          ? { ...vehicle, status: newStatus }
-          : vehicle
-      ))
 
       // モーダルを閉じてフォームをリセット
       setShowInoperativeModal(false)
@@ -1200,7 +1241,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
   // カレンダービューのレンダリング
   const renderCalendarView = () => {
-    const calendarDays = generateCalendarDays()
+    const calendarDays = generateCalendarDays
     const inoperativeStats = getInoperativeVehicleStats()
 
     return (
@@ -1349,8 +1390,11 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                     if (!isInThreeMonths) return false
                     
                     // この特定の点検期限に対して予約完了していないかチェック
-                    const bookingKey = `${vehicle.id}_${format(date, 'yyyy-MM-dd')}`
-                    const isReserved = inspectionBookings[bookingKey]?.isReservationCompleted
+                    const isReserved = Object.values(inspectionBookings).some(booking => 
+                      booking.vehicleId === vehicle.id &&
+                      booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
+                      booking.isReservationCompleted
+                    )
                     return !isReserved
                   })
                   
@@ -1374,8 +1418,11 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                     if (!isInThreeMonths) return false
                     
                     // この特定の点検期限に対して予約完了していないかチェック
-                    const bookingKey = `${vehicle.id}_${format(date, 'yyyy-MM-dd')}`
-                    const isReserved = inspectionBookings[bookingKey]?.isReservationCompleted
+                    const isReserved = Object.values(inspectionBookings).some(booking => 
+                      booking.vehicleId === vehicle.id &&
+                      booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
+                      booking.isReservationCompleted
+                    )
                     return !isReserved
                   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                   
@@ -1973,19 +2020,30 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
   // 点検予約リスト表示
   const renderReservationList = () => {
-    const reservationList = Object.entries(inspectionBookings)
+    // 重複を除去するためにユニークキーでグループ化
+    const uniqueReservations = new Map()
+    
+    Object.entries(inspectionBookings)
       .filter(([_, booking]) => booking.isReservationCompleted)
-      .map(([key, booking]) => {
-        const vehicle = vehicles.find(v => v.id === booking.vehicleId)
-        return {
-          key,
-          booking,
-          vehicle,
-          reservationDate: booking.reservationDate ? new Date(booking.reservationDate) : null,
-          inspectionDeadline: new Date(booking.inspectionDeadline)
+      .forEach(([key, booking]) => {
+        // 車両ID + 予約日 + 期限日の組み合わせでユニークキーを作成
+        const uniqueKey = `${booking.vehicleId}_${booking.reservationDate}_${booking.inspectionDeadline}`
+        
+        if (!uniqueReservations.has(uniqueKey)) {
+          const vehicle = vehicles.find(v => v.id === booking.vehicleId)
+          if (vehicle) {
+            uniqueReservations.set(uniqueKey, {
+              key,
+              booking,
+              vehicle,
+              reservationDate: booking.reservationDate ? new Date(booking.reservationDate) : null,
+              inspectionDeadline: new Date(booking.inspectionDeadline)
+            })
+          }
         }
       })
-      .filter(item => item.vehicle !== undefined) // 車両が見つからない予約を除外
+    
+    const reservationList = Array.from(uniqueReservations.values())
       .sort((a, b) => {
         if (a.reservationDate && b.reservationDate) {
           return a.reservationDate.getTime() - b.reservationDate.getTime()
@@ -1993,10 +2051,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         return 0
       })
 
-    // デバッグログを追加
-    console.log(`Rendering reservation list: ${reservationList.length} valid reservations`)
-    console.log('InspectionBookings state:', inspectionBookings)
-    console.log('Vehicles data:', vehicles.map(v => ({ id: v.id, plateNumber: v.plateNumber })))
 
     return (
       <div className="space-y-6">
