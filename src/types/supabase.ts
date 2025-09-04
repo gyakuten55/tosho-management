@@ -923,6 +923,45 @@ export type Database = {
         }
         Relationships: []
       }
+      temporary_assignments: {
+        Row: {
+          id: number
+          driver_id: number
+          driver_name: string
+          vehicle_id: number
+          plate_number: string
+          start_date: string
+          end_date: string
+          created_at: string
+          created_by: string
+          original_driver_name: string | null
+        }
+        Insert: {
+          id?: number
+          driver_id: number
+          driver_name: string
+          vehicle_id: number
+          plate_number: string
+          start_date: string
+          end_date: string
+          created_at?: string
+          created_by?: string
+          original_driver_name?: string | null
+        }
+        Update: {
+          id?: number
+          driver_id?: number
+          driver_name?: string
+          vehicle_id?: number
+          plate_number?: string
+          start_date?: string
+          end_date?: string
+          created_at?: string
+          created_by?: string
+          original_driver_name?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -397,6 +397,19 @@ export interface VehicleAssignmentChange {
   endDate?: Date  // 一時的変更の場合の終了日
 }
 
+export interface TemporaryAssignment {
+  id: number
+  driverId: number
+  driverName: string
+  vehicleId: number
+  plateNumber: string
+  startDate: Date
+  endDate: Date
+  createdAt: Date
+  createdBy?: string  // 管理者名
+  originalDriverName?: string  // 元の担当ドライバー名（復元用）
+}
+
 export interface DriverVehicleNotification {
   id: number
   driverId: number
