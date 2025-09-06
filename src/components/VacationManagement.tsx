@@ -88,6 +88,75 @@ export default function VacationManagement({
   const [quickUpdateLoading, setQuickUpdateLoading] = useState<Set<number>>(new Set()) // クイック更新中のドライバーID
   const [quickTeamFilter, setQuickTeamFilter] = useState<string>('all') // クイック設定セクション用のチームフィルター
   const [quickSortDirection, setQuickSortDirection] = useState<'asc' | 'desc'>('asc') // 勤務状態のソート方向（asc: 休暇→夜勤→出勤, desc: 出勤→夜勤→休暇）
+  const [specialNotes, setSpecialNotes] = useState<Map<number, { enabled: boolean; note: string }>>(new Map()) // ドライバーIDごとの特記事項管理
+
+  // 特記事項をデータベースに自動保存する関数
+  const saveSpecialNoteToDatabase = async (driverId: number, note: string, enabled: boolean) => {
+    if (!selectedDate) return
+
+    try {
+      // 既存の勤務状態レコードを探す
+      const existingRequest = vacationRequests.find(req =>
+        req.driverId === driverId && 
+        isSameDay(req.date, selectedDate) &&
+        req.id > 0 // DBに保存済み
+      )
+
+      if (existingRequest) {
+        // 既存レコードがある場合は特記事項を更新
+        const updatedRequestData = {
+          ...existingRequest,
+          hasSpecialNote: enabled,
+          specialNote: enabled ? note : undefined
+        }
+
+        const savedRequest = await VacationService.update(existingRequest.id, updatedRequestData)
+        setVacationRequests(vacationRequests.map(req => 
+          req.id === existingRequest.id ? savedRequest : req
+        ))
+      }
+    } catch (error) {
+      console.error('特記事項の保存に失敗しました:', error)
+    }
+  }
+
+  // デバウンス用のタイマー管理
+  const [debounceTimers, setDebounceTimers] = useState<Map<number, NodeJS.Timeout>>(new Map())
+
+  // 特記事項管理用ヘルパー関数
+  const updateSpecialNote = (driverId: number, enabled: boolean, note: string = '') => {
+    setSpecialNotes(prev => {
+      const newMap = new Map(prev)
+      newMap.set(driverId, { enabled, note })
+      return newMap
+    })
+
+    // 既存のタイマーをクリア
+    const existingTimer = debounceTimers.get(driverId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    // 新しいタイマーを設定（500ms後に自動保存）
+    const newTimer = setTimeout(() => {
+      saveSpecialNoteToDatabase(driverId, note, enabled)
+      setDebounceTimers(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(driverId)
+        return newMap
+      })
+    }, 500)
+
+    setDebounceTimers(prev => {
+      const newMap = new Map(prev)
+      newMap.set(driverId, newTimer)
+      return newMap
+    })
+  }
+
+  const getSpecialNote = (driverId: number) => {
+    return specialNotes.get(driverId) || { enabled: false, note: '' }
+  }
 
   // エスケープキーでモーダルを閉じる
   useEscapeKey(() => {
@@ -104,6 +173,31 @@ export default function VacationManagement({
   useEffect(() => {
     loadVacationData()
   }, [])
+
+  // 既存のvacationRequestsから特記事項をspecialNotesに読み込む（選択日が変更された時も含む）
+  useEffect(() => {
+    if (!selectedDate) return
+
+    setSpecialNotes(prevSpecialNotes => {
+      const newSpecialNotes = new Map(prevSpecialNotes)
+      
+      // 選択された日付の特記事項を読み込み
+      vacationRequests.forEach(request => {
+        if (isSameDay(request.date, selectedDate)) {
+          if (request.hasSpecialNote && request.specialNote) {
+            // データベースに保存済みの特記事項がある場合、既存のUI状態を優先しつつ更新
+            const existingState = newSpecialNotes.get(request.driverId)
+            newSpecialNotes.set(request.driverId, {
+              enabled: existingState?.enabled ?? true, // 既存の状態があればそれを優先
+              note: existingState?.note || request.specialNote // UI側の入力を優先、なければDBの値
+            })
+          }
+        }
+      })
+      
+      return newSpecialNotes
+    })
+  }, [vacationRequests, selectedDate])
 
   // Props経由で設定が変更された場合の反映
   useEffect(() => {
@@ -895,6 +989,16 @@ export default function VacationManagement({
         }
       }
 
+      // 特記事項の情報を取得（既存の設定 or 現在のUI状態）
+      const currentSpecialNote = getSpecialNote(driver.id)
+      const existingSpecialNote = existingRequest?.hasSpecialNote && existingRequest?.specialNote ? {
+        enabled: true,
+        note: existingRequest.specialNote
+      } : { enabled: false, note: '' }
+      
+      // UI状態を優先し、なければ既存データを使用
+      const finalSpecialNote = currentSpecialNote.enabled || currentSpecialNote.note ? currentSpecialNote : existingSpecialNote
+      
       const requestData = {
         driverId: driver.id,
         driverName: driver.name,
@@ -907,7 +1011,9 @@ export default function VacationManagement({
         reason: 'クイック登録',
         status: 'approved' as const,
         requestDate: new Date(),
-        isExternalDriver: driver.employeeId.startsWith('E')
+        isExternalDriver: driver.employeeId.startsWith('E'),
+        hasSpecialNote: finalSpecialNote.enabled,
+        specialNote: finalSpecialNote.enabled ? finalSpecialNote.note : undefined
       }
 
       let savedRequest: VacationRequest
@@ -1820,65 +1926,105 @@ export default function VacationManagement({
                           )
                           
                           return (
-                            <div key={driver.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                              <div>
-                                <p className="font-medium text-gray-900">{driver.name}</p>
-                                <p className="text-sm text-gray-600">
-                                  {driver.employeeId}
-                                  {currentStatus && (
-                                    <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
-                                      currentStatus.workStatus === 'day_off' 
-                                        ? 'bg-red-100 text-red-800'
-                                        : currentStatus.workStatus === 'night_shift'
-                                        ? 'bg-blue-100 text-blue-800'
-                                        : 'bg-green-100 text-green-800'
-                                    }`}>
-                                      現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
-                                             currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
-                                    </span>
-                                  )}
-                                </p>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                {quickUpdateLoading.has(driver.id) ? (
-                                  <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
-                                    更新中...
+                            <div key={driver.id} className={`p-3 rounded-lg border ${
+                              getSpecialNote(driver.id).enabled 
+                                ? 'bg-yellow-50 border-yellow-200' 
+                                : 'bg-gray-50 border-gray-200'
+                            }`}>
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <p className="font-medium text-gray-900">{driver.name}</p>
+                                    {(currentStatus?.hasSpecialNote || getSpecialNote(driver.id).enabled) && (
+                                      <span className="text-yellow-600" title={currentStatus?.specialNote || getSpecialNote(driver.id).note}>
+                                        📝
+                                      </span>
+                                    )}
                                   </div>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
-                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                        currentStatus?.workStatus === 'working' 
-                                          ? 'bg-green-600 text-white font-medium'
-                                          : 'bg-green-100 hover:bg-green-200 text-green-800'
-                                      }`}
-                                    >
-                                      出勤
-                                    </button>
-                                    <button
-                                      onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
-                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                        currentStatus?.workStatus === 'day_off' 
-                                          ? 'bg-red-600 text-white font-medium'
-                                          : 'bg-red-100 hover:bg-red-200 text-red-800'
-                                      }`}
-                                    >
-                                      休暇
-                                    </button>
-                                    <button
-                                      onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
-                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                        currentStatus?.workStatus === 'night_shift' 
-                                          ? 'bg-blue-600 text-white font-medium'
-                                          : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
-                                      }`}
-                                    >
-                                      夜勤
-                                    </button>
-                                  </>
-                                )}
+                                  <p className="text-sm text-gray-600">
+                                    {driver.employeeId}
+                                    {currentStatus && (
+                                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                                        currentStatus.workStatus === 'day_off' 
+                                          ? 'bg-red-100 text-red-800'
+                                          : currentStatus.workStatus === 'night_shift'
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : 'bg-green-100 text-green-800'
+                                      }`}>
+                                        現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
+                                               currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
+                                      </span>
+                                    )}
+                                  </p>
+                                  {currentStatus?.specialNote && (
+                                    <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">
+                                      特記: {currentStatus.specialNote}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <div className="flex items-center space-x-1">
+                                    <label className="flex items-center space-x-1 text-xs">
+                                      <input
+                                        type="checkbox"
+                                        checked={getSpecialNote(driver.id).enabled}
+                                        onChange={(e) => updateSpecialNote(driver.id, e.target.checked, getSpecialNote(driver.id).note)}
+                                        className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                                      />
+                                      <span className="text-gray-700">特記</span>
+                                    </label>
+                                  </div>
+                                  {quickUpdateLoading.has(driver.id) ? (
+                                    <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
+                                      更新中...
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
+                                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                          currentStatus?.workStatus === 'working' 
+                                            ? 'bg-green-600 text-white font-medium'
+                                            : 'bg-green-100 hover:bg-green-200 text-green-800'
+                                        }`}
+                                      >
+                                        出勤
+                                      </button>
+                                      <button
+                                        onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
+                                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                          currentStatus?.workStatus === 'day_off' 
+                                            ? 'bg-red-600 text-white font-medium'
+                                            : 'bg-red-100 hover:bg-red-200 text-red-800'
+                                        }`}
+                                      >
+                                        休暇
+                                      </button>
+                                      <button
+                                        onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
+                                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                          currentStatus?.workStatus === 'night_shift' 
+                                            ? 'bg-blue-600 text-white font-medium'
+                                            : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
+                                        }`}
+                                      >
+                                        夜勤
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
+                              {getSpecialNote(driver.id).enabled && (
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                  <textarea
+                                    value={getSpecialNote(driver.id).note}
+                                    onChange={(e) => updateSpecialNote(driver.id, true, e.target.value)}
+                                    placeholder="特記事項を入力してください..."
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
+                                    rows={2}
+                                  />
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -1901,65 +2047,105 @@ export default function VacationManagement({
                               )
                               
                               return (
-                                <div key={driver.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                  <div>
-                                    <p className="font-medium text-gray-900">{driver.name}</p>
-                                    <p className="text-sm text-gray-600">
-                                      {driver.employeeId}
-                                      {currentStatus && (
-                                        <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
-                                          currentStatus.workStatus === 'day_off' 
-                                            ? 'bg-red-100 text-red-800'
-                                            : currentStatus.workStatus === 'night_shift'
-                                            ? 'bg-blue-100 text-blue-800'
-                                            : 'bg-green-100 text-green-800'
-                                        }`}>
-                                          現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
-                                                 currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
-                                        </span>
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    {quickUpdateLoading.has(driver.id) ? (
-                                      <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
-                                        更新中...
+                                <div key={driver.id} className={`p-3 rounded-lg border ${
+                                  getSpecialNote(driver.id).enabled 
+                                    ? 'bg-yellow-50 border-yellow-200' 
+                                    : 'bg-gray-50 border-gray-200'
+                                }`}>
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="flex items-center space-x-2">
+                                        <p className="font-medium text-gray-900">{driver.name}</p>
+                                        {(currentStatus?.hasSpecialNote || getSpecialNote(driver.id).enabled) && (
+                                          <span className="text-yellow-600" title={currentStatus?.specialNote || getSpecialNote(driver.id).note}>
+                                            📝
+                                          </span>
+                                        )}
                                       </div>
-                                    ) : (
-                                      <>
-                                        <button
-                                          onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
-                                          className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                            currentStatus?.workStatus === 'working' 
-                                              ? 'bg-green-600 text-white font-medium'
-                                              : 'bg-green-100 hover:bg-green-200 text-green-800'
-                                          }`}
-                                        >
-                                          出勤
-                                        </button>
-                                        <button
-                                          onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
-                                          className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                            currentStatus?.workStatus === 'day_off' 
-                                              ? 'bg-red-600 text-white font-medium'
-                                              : 'bg-red-100 hover:bg-red-200 text-red-800'
-                                          }`}
-                                        >
-                                          休暇
-                                        </button>
-                                        <button
-                                          onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
-                                          className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                            currentStatus?.workStatus === 'night_shift' 
-                                              ? 'bg-blue-600 text-white font-medium'
-                                              : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
-                                          }`}
-                                        >
-                                          夜勤
-                                        </button>
-                                      </>
-                                    )}
+                                      <p className="text-sm text-gray-600">
+                                        {driver.employeeId}
+                                        {currentStatus && (
+                                          <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                                            currentStatus.workStatus === 'day_off' 
+                                              ? 'bg-red-100 text-red-800'
+                                              : currentStatus.workStatus === 'night_shift'
+                                              ? 'bg-blue-100 text-blue-800'
+                                              : 'bg-green-100 text-green-800'
+                                          }`}>
+                                            現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
+                                                   currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
+                                          </span>
+                                        )}
+                                      </p>
+                                      {currentStatus?.specialNote && (
+                                        <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">
+                                          特記: {currentStatus.specialNote}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="flex items-center space-x-1">
+                                        <label className="flex items-center space-x-1 text-xs">
+                                          <input
+                                            type="checkbox"
+                                            checked={getSpecialNote(driver.id).enabled}
+                                            onChange={(e) => updateSpecialNote(driver.id, e.target.checked, getSpecialNote(driver.id).note)}
+                                            className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                                          />
+                                          <span className="text-gray-700">特記</span>
+                                        </label>
+                                      </div>
+                                      {quickUpdateLoading.has(driver.id) ? (
+                                        <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
+                                          更新中...
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <button
+                                            onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
+                                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                              currentStatus?.workStatus === 'working' 
+                                                ? 'bg-green-600 text-white font-medium'
+                                                : 'bg-green-100 hover:bg-green-200 text-green-800'
+                                            }`}
+                                          >
+                                            出勤
+                                          </button>
+                                          <button
+                                            onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
+                                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                              currentStatus?.workStatus === 'day_off' 
+                                                ? 'bg-red-600 text-white font-medium'
+                                                : 'bg-red-100 hover:bg-red-200 text-red-800'
+                                            }`}
+                                          >
+                                            休暇
+                                          </button>
+                                          <button
+                                            onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
+                                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                              currentStatus?.workStatus === 'night_shift' 
+                                                ? 'bg-blue-600 text-white font-medium'
+                                                : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
+                                            }`}
+                                          >
+                                            夜勤
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
+                                  {getSpecialNote(driver.id).enabled && (
+                                    <div className="mt-3 pt-3 border-t border-gray-200">
+                                      <textarea
+                                        value={getSpecialNote(driver.id).note}
+                                        onChange={(e) => updateSpecialNote(driver.id, true, e.target.value)}
+                                        placeholder="特記事項を入力してください..."
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               )
                             })}

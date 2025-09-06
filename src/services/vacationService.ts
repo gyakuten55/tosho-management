@@ -51,7 +51,9 @@ export class VacationService {
       reason: vacationRequest.reason || null,
       status: vacationRequest.status,
       request_date: vacationRequest.requestDate.toISOString(),
-      is_external_driver: vacationRequest.isExternalDriver
+      is_external_driver: vacationRequest.isExternalDriver,
+      has_special_note: vacationRequest.hasSpecialNote || false,
+      special_note: vacationRequest.specialNote || null
     }
 
     const { data, error } = await supabase
@@ -87,6 +89,12 @@ export class VacationService {
     }
     if (updates.isExternalDriver !== undefined) {
       requestData.is_external_driver = updates.isExternalDriver
+    }
+    if (updates.hasSpecialNote !== undefined) {
+      requestData.has_special_note = updates.hasSpecialNote
+    }
+    if (updates.specialNote !== undefined) {
+      requestData.special_note = updates.specialNote || null
     }
 
     const { data, error } = await supabase
@@ -228,7 +236,9 @@ export class VacationService {
       reason: row.reason || '',
       status: row.status as VacationRequest['status'],
       requestDate: new Date(row.request_date),
-      isExternalDriver: row.is_external_driver
+      isExternalDriver: row.is_external_driver,
+      hasSpecialNote: row.has_special_note || false,
+      specialNote: row.special_note || ''
     }
   }
 }

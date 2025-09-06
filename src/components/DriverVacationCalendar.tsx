@@ -121,8 +121,8 @@ export default function DriverVacationCalendar({
       const isWeekend = date.getDay() === 0 || date.getDay() === 6
       const today = new Date()
       
-      // 既存の休暇申請を検索（現在のユーザー）
-      const vacationRequest = existingRequests.find(req => 
+      // 既存の休暇申請を検索（現在のユーザー）- allVacationRequestsから取得して特記事項を含める
+      const vacationRequest = allVacationRequests.find(req => 
         req.driverId === currentUser.id && isSameDay(req.date, date)
       )
       
@@ -443,6 +443,14 @@ export default function DriverVacationCalendar({
                         <div className="text-sm text-gray-600">
                           {weekdayName}曜日
                           {isCurrentDate && <span className="ml-2 text-blue-600 font-medium">今日</span>}
+                          {dayInfo.vacationRequest?.hasSpecialNote && (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                管理者からの特記事項あり
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       
@@ -467,9 +475,19 @@ export default function DriverVacationCalendar({
                             }}
                             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                               getStatusColor(dayInfo.vacationRequest.workStatus)
-                            } hover:opacity-80`}
+                            } hover:opacity-80 ${
+                              dayInfo.vacationRequest.hasSpecialNote 
+                                ? 'ring-2 ring-yellow-400 ring-offset-1' 
+                                : ''
+                            }`}
                           >
+                            {dayInfo.vacationRequest.hasSpecialNote && (
+                              <AlertCircle className="h-3 w-3 mr-1 inline" />
+                            )}
                             📋 自分: 休暇中
+                            {dayInfo.vacationRequest.hasSpecialNote && (
+                              <span className="ml-1 text-xs font-bold">(要確認)</span>
+                            )}
                             {dayInfo.canDelete && <span className="ml-2 text-xs">×</span>}
                           </button>
                         ) : dayInfo.canRequest ? (
@@ -502,6 +520,24 @@ export default function DriverVacationCalendar({
                               夜勤: {dayInfo.nightShiftCount}人
                             </span>
                           )}
+                        </div>
+                      )}
+                      
+                      {/* 特記事項の内容表示 */}
+                      {dayInfo.vacationRequest?.hasSpecialNote && dayInfo.vacationRequest.specialNote && (
+                        <div className="mt-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-400 rounded-r-lg shadow-sm">
+                          <div className="flex items-center space-x-2 mb-3">
+                            <AlertCircle className="h-4 w-4 text-yellow-600" />
+                            <span className="text-sm font-semibold text-yellow-800">管理者からの重要な特記事項</span>
+                          </div>
+                          <div className="bg-white p-3 rounded-md border border-yellow-200">
+                            <p className="text-sm text-gray-800 font-medium leading-relaxed">
+                              {dayInfo.vacationRequest.specialNote}
+                            </p>
+                          </div>
+                          <div className="mt-2 text-xs text-yellow-700 font-medium">
+                            ※ 必ずご確認ください
+                          </div>
                         </div>
                       )}
                     </div>
@@ -550,13 +586,25 @@ export default function DriverVacationCalendar({
                   >
                     {/* 日付 */}
                     <div className="flex items-center justify-between mb-1 sm:mb-2">
-                      <span className={`text-xs sm:text-sm font-medium ${
-                        isCurrentDate ? 'text-blue-600' : 
-                        !isCurrentMonth ? 'text-gray-400' :
-                        'text-gray-900'
-                      }`}>
-                        {format(dayInfo.date, 'd')}
-                      </span>
+                      <div className="flex items-center space-x-1">
+                        <span className={`text-xs sm:text-sm font-medium ${
+                          isCurrentDate ? 'text-blue-600' : 
+                          !isCurrentMonth ? 'text-gray-400' :
+                          'text-gray-900'
+                        }`}>
+                          {format(dayInfo.date, 'd')}
+                        </span>
+                        {isCurrentMonth && dayInfo.vacationRequest?.hasSpecialNote && (
+                          <div className="mt-1">
+                            <span 
+                              className="inline-flex items-center justify-center w-5 h-5 bg-yellow-400 text-yellow-900 rounded-full text-xs font-bold cursor-pointer shadow-sm border border-yellow-500 animate-pulse"
+                              title={`管理者からの特記事項: ${dayInfo.vacationRequest.specialNote}`}
+                            >
+                              !
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       
                       {dayInfo.canRequest && dayInfo.isCurrentMonth && (
                         <button
@@ -672,10 +720,21 @@ export default function DriverVacationCalendar({
                   <div className="space-y-2 max-h-48 sm:max-h-60 overflow-y-auto">
                     {dayModalData.vacationDrivers.length > 0 ? (
                       dayModalData.vacationDrivers.map(vacation => (
-                        <div key={vacation.id} className="border rounded-lg p-2 sm:p-3 bg-red-50 border-red-200">
+                        <div key={vacation.id} className={`border rounded-lg p-2 sm:p-3 ${
+                          vacation.hasSpecialNote 
+                            ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-300' 
+                            : 'bg-red-50 border-red-200'
+                        }`}>
                           <div className="flex items-center justify-between">
-                            <div className="font-medium text-sm sm:text-base text-red-900">
+                            <div className="font-medium text-sm sm:text-base text-red-900 flex items-center">
                               {vacation.driverName}
+                              {vacation.hasSpecialNote && (
+                                <div className="ml-2">
+                                  <span className="inline-flex items-center justify-center w-4 h-4 bg-yellow-400 text-yellow-900 rounded-full text-xs font-bold">
+                                    !
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             <div className="text-xs px-2 py-1 rounded font-medium bg-red-100 text-red-800">
                               休暇
@@ -684,6 +743,17 @@ export default function DriverVacationCalendar({
                           <div className="text-xs sm:text-sm mt-1 text-red-700">
                             {vacation.team} - {vacation.employeeId}
                           </div>
+                          {vacation.hasSpecialNote && vacation.specialNote && (
+                            <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+                              <div className="flex items-center space-x-1 mb-1">
+                                <AlertCircle className="h-3 w-3 text-yellow-600" />
+                                <span className="font-medium text-yellow-800">特記事項</span>
+                              </div>
+                              <div className="text-yellow-900 leading-relaxed">
+                                {vacation.specialNote}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     ) : (

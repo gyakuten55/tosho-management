@@ -84,6 +84,8 @@ export interface VacationRequest {
   status: 'approved'  // 承認機能なしなので常に承認済み
   requestDate: Date  // 申請日
   isExternalDriver: boolean  // 外部ドライバーかどうか
+  hasSpecialNote?: boolean  // 特記事項があるかどうか
+  specialNote?: string  // 特記事項の内容
 }
 
 export interface MonthlyVacationStats {
