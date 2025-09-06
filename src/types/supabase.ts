@@ -592,11 +592,13 @@ export type Database = {
           driver_id: number
           driver_name: string
           employee_id: string
+          has_special_note: boolean | null
           id: number
           is_external_driver: boolean
           is_off: boolean
           reason: string | null
           request_date: string
+          special_note: string | null
           status: string
           team: string
           type: string
@@ -609,11 +611,13 @@ export type Database = {
           driver_id: number
           driver_name: string
           employee_id: string
+          has_special_note?: boolean | null
           id?: number
           is_external_driver?: boolean
           is_off?: boolean
           reason?: string | null
           request_date: string
+          special_note?: string | null
           status?: string
           team: string
           type: string
@@ -626,11 +630,13 @@ export type Database = {
           driver_id?: number
           driver_name?: string
           employee_id?: string
+          has_special_note?: boolean | null
           id?: number
           is_external_driver?: boolean
           is_off?: boolean
           reason?: string | null
           request_date?: string
+          special_note?: string | null
           status?: string
           team?: string
           type?: string
