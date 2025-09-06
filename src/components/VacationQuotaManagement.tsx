@@ -15,6 +15,7 @@ import {
   Clock
 } from 'lucide-react'
 import { VacationQuota, Driver } from '@/types'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface VacationQuotaManagementProps {
   vacationQuotas: VacationQuota[]
@@ -36,6 +37,13 @@ export default function VacationQuotaManagement({
     carryOverDays: 0
   })
   const [showAddForm, setShowAddForm] = useState(false)
+
+  // エスケープキーでモーダルを閉じる
+  useEscapeKey(() => {
+    if (showAddForm) {
+      setShowAddForm(false)
+    }
+  }, showAddForm)
 
   // 統計情報を計算
   const stats = {

@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Calendar, Users, AlertTriangle, X, Car, User
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, getDay } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { VacationRequest, VacationSettings, Driver, Vehicle } from '@/types'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface VacationCalendarViewProps {
   vacationRequests: VacationRequest[]
@@ -23,6 +24,13 @@ export default function VacationCalendarView({
   const [selectedTeam, setSelectedTeam] = useState('all')
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
+
+  // エスケープキーでモーダルを閉じる
+  useEscapeKey(() => {
+    if (showDetailModal) {
+      setShowDetailModal(false)
+    }
+  }, showDetailModal)
 
   // 現在の月の日付一覧を取得
   const monthStart = startOfMonth(currentDate)

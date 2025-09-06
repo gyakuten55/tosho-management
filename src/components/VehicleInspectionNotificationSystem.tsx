@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Vehicle, Driver, DriverNotification } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface VehicleInspectionNotificationSystemProps {
   vehicles: Vehicle[]
@@ -45,6 +46,13 @@ export default function VehicleInspectionNotificationSystem({
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
+
+  // エスケープキーでモーダルを閉じる
+  useEscapeKey(() => {
+    if (showSettings) {
+      setShowSettings(false)
+    }
+  }, showSettings)
 
   // 点検アラートの生成
   const generateInspectionAlerts = useCallback(() => {

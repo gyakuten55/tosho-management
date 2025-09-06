@@ -58,6 +58,7 @@ import {
   VehicleAssignmentChangeService,
   VehicleInoperativePeriodService 
 } from '@/services/vehicleOperationService'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 
 interface VehicleOperationManagementProps {}
@@ -106,6 +107,23 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   const [tempAssignDriverId, setTempAssignDriverId] = useState<number | null>(null)
 
   // Load data on component mount
+  // エスケープキーでモーダルを閉じる（優先順位順）
+  useEscapeKey(() => {
+    if (showInspectionReservationModal) {
+      setShowInspectionReservationModal(false)
+    } else if (showEditInoperativeModal) {
+      setShowEditInoperativeModal(false)
+    } else if (showTempAssignModal) {
+      setShowTempAssignModal(false)
+    } else if (showVehicleSwapModal) {
+      setShowVehicleSwapModal(false)
+    } else if (showInoperativeModal) {
+      setShowInoperativeModal(false)
+    } else if (showAssignmentModal) {
+      setShowAssignmentModal(false)
+    }
+  }, showInspectionReservationModal || showEditInoperativeModal || showTempAssignModal || showVehicleSwapModal || showInoperativeModal || showAssignmentModal)
+
   useEffect(() => {
     const loadData = async () => {
       try {

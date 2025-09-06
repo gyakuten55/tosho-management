@@ -18,6 +18,7 @@ import { Driver, VacationRequest, MonthlyVacationStats, VacationSettings } from 
 import { formatDateForDB } from '@/utils/dateUtils'
 import { VacationService } from '@/services/vacationService'
 import { DriverService } from '@/services/driverService'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface DriverVacationCalendarProps {
   currentUser: Driver | null
@@ -65,6 +66,15 @@ export default function DriverVacationCalendar({
     vacationDrivers: VacationRequest[]
   } | null>(null)
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
+
+  // エスケープキーでモーダルを閉じる
+  useEscapeKey(() => {
+    if (showDayModal) {
+      setShowDayModal(false)
+    } else if (showRequestModal) {
+      setShowRequestModal(false)
+    }
+  }, showDayModal || showRequestModal)
 
   // チーム別・日付別の休暇上限を取得
   const getVacationLimitForTeamAndDate = (team: string, date: Date) => {
