@@ -14,10 +14,11 @@ import {
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, isSameMonth, differenceInDays, getDay } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { Driver, VacationRequest, MonthlyVacationStats, VacationSettings } from '@/types'
+import { Driver, VacationRequest, MonthlyVacationStats, VacationSettings, Holiday } from '@/types'
 import { formatDateForDB } from '@/utils/dateUtils'
 import { VacationService } from '@/services/vacationService'
 import { DriverService } from '@/services/driverService'
+import { HolidayService } from '@/services/holidayService'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface DriverVacationCalendarProps {
@@ -66,6 +67,7 @@ export default function DriverVacationCalendar({
     vacationDrivers: VacationRequest[]
   } | null>(null)
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
+  const [holidays, setHolidays] = useState<Holiday[]>([])
 
   // エスケープキーでモーダルを閉じる
   useEscapeKey(() => {
@@ -105,6 +107,37 @@ export default function DriverVacationCalendar({
     }
     loadAllDrivers()
   }, [])
+
+  // 祝日データをロード
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const year = currentDate.getFullYear()
+        const yearHolidays = await HolidayService.getByYear(year)
+        setHolidays(yearHolidays)
+      } catch (error) {
+        console.error('Failed to load holidays:', error)
+        setHolidays([])
+      }
+    }
+    
+    loadHolidays()
+  }, [currentDate])
+
+  // 祝日チェック関数
+  const isHoliday = (date: Date) => {
+    return holidays.some(holiday => 
+      format(date, 'yyyy-MM-dd') === format(holiday.date, 'yyyy-MM-dd')
+    )
+  }
+
+  // 祝日名取得関数
+  const getHolidayName = (date: Date) => {
+    const holiday = holidays.find(holiday => 
+      format(date, 'yyyy-MM-dd') === format(holiday.date, 'yyyy-MM-dd')
+    )
+    return holiday ? holiday.name : null
+  }
 
   // カレンダーの日付情報を生成
   const generateCalendarDays = (): DailyInfo[] => {
@@ -433,12 +466,20 @@ export default function DriverVacationCalendar({
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
-                        <div className={`text-2xl font-bold ${
-                          isCurrentDate ? 'text-blue-600' : 
-                          dayOfWeek === 0 ? 'text-red-600' : 
-                          dayOfWeek === 6 ? 'text-blue-600' : 'text-gray-900'
-                        }`}>
-                          {format(dayInfo.date, 'd')}
+                        <div className="flex items-center space-x-2">
+                          <div className={`text-2xl font-bold ${
+                            isCurrentDate ? 'text-blue-600' : 
+                            dayOfWeek === 0 ? 'text-red-600' : 
+                            dayOfWeek === 6 ? 'text-blue-600' : 'text-gray-900'
+                          }`}>
+                            {format(dayInfo.date, 'd')}
+                          </div>
+                          {/* 祝日名を日付の横に表示 */}
+                          {isHoliday(dayInfo.date) && (
+                            <span className="ml-2 text-sm text-red-600 font-medium">
+                              {getHolidayName(dayInfo.date)}
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm text-gray-600">
                           {weekdayName}曜日
@@ -594,6 +635,12 @@ export default function DriverVacationCalendar({
                         }`}>
                           {format(dayInfo.date, 'd')}
                         </span>
+                        {/* 祝日名を日付の横に表示 */}
+                        {isHoliday(dayInfo.date) && (
+                          <span className="ml-2 text-xs text-red-600 font-medium">
+                            {getHolidayName(dayInfo.date)}
+                          </span>
+                        )}
                         {isCurrentMonth && dayInfo.vacationRequest?.hasSpecialNote && (
                           <div className="mt-1">
                             <span 

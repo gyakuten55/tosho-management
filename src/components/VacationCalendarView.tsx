@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar, Users, AlertTriangle, X, Car, User } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, getDay } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { VacationRequest, VacationSettings, Driver, Vehicle } from '@/types'
+import { VacationRequest, VacationSettings, Driver, Vehicle, Holiday } from '@/types'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { HolidayService } from '@/services/holidayService'
 
 interface VacationCalendarViewProps {
   vacationRequests: VacationRequest[]
@@ -24,6 +25,29 @@ export default function VacationCalendarView({
   const [selectedTeam, setSelectedTeam] = useState('all')
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+
+  useEffect(() => {
+    console.log('🎌 VacationCalendarView useEffect triggered - currentDate:', currentDate)
+    
+    const loadHolidays = async () => {
+      try {
+        const currentYear = currentDate.getFullYear()
+        console.log('🎌 Loading holidays for year:', currentYear)
+        
+        // データベースから祝日データを取得
+        const yearHolidays = await HolidayService.getByYear(currentYear)
+        console.log('🎌 Fetched holidays from database:', yearHolidays.length, yearHolidays)
+        
+        setHolidays(yearHolidays)
+      } catch (error) {
+        console.error('🎌 Failed to load holidays from database:', error)
+        setHolidays([])
+      }
+    }
+
+    loadHolidays()
+  }, [currentDate])
 
   // エスケープキーでモーダルを閉じる
   useEscapeKey(() => {
@@ -145,9 +169,25 @@ export default function VacationCalendarView({
 
   // 指定日が祝日かチェック
   const isHoliday = (date: Date) => {
-    return vacationSettings.holidayDates.some(holiday => 
+    return holidays.some(holiday => 
+      format(date, 'yyyy-MM-dd') === format(holiday.date, 'yyyy-MM-dd')
+    ) || vacationSettings.holidayDates.some(holiday => 
       format(date, 'yyyy-MM-dd') === format(holiday, 'yyyy-MM-dd')
     )
+  }
+
+  // 指定日の祝日名を取得
+  const getHolidayName = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    console.log('🎌 Checking holiday for date:', dateStr, 'Available holidays:', holidays.length)
+    
+    const holiday = holidays.find(holiday => 
+      format(holiday.date, 'yyyy-MM-dd') === dateStr
+    )
+    if (holiday) {
+      console.log(`🎌 Holiday found for ${dateStr}: ${holiday.name}`)
+    }
+    return holiday ? holiday.name : null
   }
 
   // 月を変更
@@ -277,6 +317,7 @@ export default function VacationCalendarView({
             const workStatus = getWorkStatusForDate(day)
             const isBlackout = isBlackoutDate(day)
             const isHol = isHoliday(day)
+            const holidayName = getHolidayName(day)
             const dayOfWeek = getDay(day)
 
             return (
@@ -292,7 +333,7 @@ export default function VacationCalendarView({
                 }`}
                 onClick={() => handleDateClick(day)}
               >
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-1">
                   <span className={`text-sm font-medium ${
                     isToday(day) ? 'text-blue-600' :
                     dayOfWeek === 0 ? 'text-red-600' :
@@ -300,12 +341,14 @@ export default function VacationCalendarView({
                     'text-gray-900'
                   }`}>
                     {format(day, 'd')}
+                    {holidayName && (
+                      <span className="ml-2 text-xs text-red-600 font-medium">
+                        {holidayName}
+                      </span>
+                    )}
                   </span>
                   {isBlackout && (
                     <AlertTriangle className="h-3 w-3 text-gray-500" />
-                  )}
-                  {isHol && (
-                    <div className="text-xs text-green-600">祝</div>
                   )}
                 </div>
 

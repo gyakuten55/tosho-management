@@ -19,11 +19,12 @@ import {
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { VacationRequest, MonthlyVacationStats, VacationSettings, VacationNotification, Driver, Vehicle } from '@/types'
+import { VacationRequest, MonthlyVacationStats, VacationSettings, VacationNotification, Driver, Vehicle, Holiday } from '@/types'
 import { VacationService } from '@/services/vacationService'
 import { DriverService } from '@/services/driverService'
 import { VacationSettingsService } from '@/services/vacationSettingsService'
 import { NotificationService } from '@/services/notificationService'
+import { HolidayService } from '@/services/holidayService'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface DailyVacationInfo {
@@ -89,6 +90,8 @@ export default function VacationManagement({
   const [quickTeamFilter, setQuickTeamFilter] = useState<string>('all') // クイック設定セクション用のチームフィルター
   const [quickSortDirection, setQuickSortDirection] = useState<'asc' | 'desc'>('asc') // 勤務状態のソート方向（asc: 休暇→夜勤→出勤, desc: 出勤→夜勤→休暇）
   const [specialNotes, setSpecialNotes] = useState<Map<number, { enabled: boolean; note: string }>>(new Map()) // ドライバーIDごとの特記事項管理
+  const [holidaySyncLoading, setHolidaySyncLoading] = useState(false) // 祝日同期ローディング状態
+  const [holidays, setHolidays] = useState<Holiday[]>([]) // 祝日データ
 
   // 特記事項をデータベースに自動保存する関数
   const saveSpecialNoteToDatabase = async (driverId: number, note: string, enabled: boolean) => {
@@ -597,6 +600,22 @@ export default function VacationManagement({
     }
   }, [statsMonth, currentView, drivers, vacationRequests, vacationSettings, vacationStats, setVacationStats])
 
+  // 祝日データをロード（カレンダーの月が変わった時）
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const year = calendarDate.getFullYear()
+        const yearHolidays = await HolidayService.getByYear(year)
+        setHolidays(yearHolidays)
+      } catch (error) {
+        console.error('Failed to load holidays:', error)
+        setHolidays([])
+      }
+    }
+    
+    loadHolidays()
+  }, [calendarDate])
+
   // 統計情報を計算（統計タブ用の月を使用）
   const currentMonth = format(currentView === 'stats' ? statsMonth : calendarDate, 'yyyy-MM')
   const currentStats = vacationStats.filter(stat => 
@@ -612,6 +631,20 @@ export default function VacationManagement({
       Math.round((currentStats.reduce((sum, stat) => sum + stat.totalOffDays, 0) / currentStats.length) * 10) / 10 : 0
   }
 
+  // 祝日チェック関数
+  const isHoliday = (date: Date) => {
+    return holidays.some(holiday => 
+      format(date, 'yyyy-MM-dd') === format(holiday.date, 'yyyy-MM-dd')
+    )
+  }
+
+  // 祝日名取得関数
+  const getHolidayName = (date: Date) => {
+    const holiday = holidays.find(holiday => 
+      format(date, 'yyyy-MM-dd') === format(holiday.date, 'yyyy-MM-dd')
+    )
+    return holiday ? holiday.name : null
+  }
 
   // 指定日の未設定ドライバーをデフォルト出勤に設定（非同期で実行）
   const ensureAllDriversHaveWorkStatus = useCallback((date: Date) => {
@@ -1278,6 +1311,36 @@ export default function VacationManagement({
     }
   }
 
+  // 祝日データ同期処理
+  const handleHolidaySync = async () => {
+    setHolidaySyncLoading(true)
+    try {
+      const currentYear = new Date().getFullYear()
+      const nextYear = currentYear + 1
+      const previousYear = currentYear - 1
+      
+      // 過去1年、今年、来年の祝日データを同期
+      const years = [previousYear, currentYear, nextYear]
+      
+      let totalAddedHolidays = 0
+      for (const year of years) {
+        const addedHolidays = await HolidayService.fetchAndUpdateJapaneseHolidays(year)
+        totalAddedHolidays += addedHolidays.length
+      }
+      
+      if (totalAddedHolidays > 0) {
+        alert(`祝日データを同期しました。新規追加: ${totalAddedHolidays}件`)
+      } else {
+        alert('祝日データは既に最新です。')
+      }
+    } catch (error) {
+      console.error('Holiday sync failed:', error)
+      alert('祝日データの同期に失敗しました。')
+    } finally {
+      setHolidaySyncLoading(false)
+    }
+  }
+
   const updateMonthlyStats = (driverId: number, date: Date, currentRequests: VacationRequest[]) => {
     const year = date.getFullYear()
     const month = date.getMonth() + 1
@@ -1403,8 +1466,14 @@ export default function VacationManagement({
                       'text-gray-900'
                     }`}>
                       {format(dayInfo.date, 'd')}
+                      {isHoliday(dayInfo.date) && (
+                        <span className="ml-2 text-xs text-red-600 font-medium">
+                          {getHolidayName(dayInfo.date)}
+                        </span>
+                      )}
                     </span>
                   </div>
+                  
 
                   {/* 勤務状態の表示（人数のみ） - 現在の月のみ表示 */}
                   {isCurrentMonth && (
@@ -1713,6 +1782,16 @@ export default function VacationManagement({
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">休暇管理システム</h1>
         <div className="flex items-center space-x-4">
+          <button
+            onClick={handleHolidaySync}
+            disabled={holidaySyncLoading}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Calendar className="h-4 w-4" />
+            <span className="text-sm">
+              {holidaySyncLoading ? '同期中...' : '祝日データ同期'}
+            </span>
+          </button>
           <div className="flex items-center space-x-2 bg-green-50 px-3 py-2 rounded-lg">
             <Smartphone className="h-4 w-4 text-green-600" />
             <span className="text-sm text-green-700">プッシュ通知対応</span>

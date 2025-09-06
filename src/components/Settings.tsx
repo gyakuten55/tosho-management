@@ -18,9 +18,8 @@ import {
   Timer,
   Search
 } from 'lucide-react'
-import { VacationSettings, Holiday, HolidayTeam } from '@/types'
+import { VacationSettings } from '@/types'
 import { VacationSettingsService } from '@/services/vacationSettingsService'
-import { HolidayService, HolidayTeamService } from '@/services/holidayService'
 
 interface SettingsProps {
   vacationSettings?: VacationSettings
@@ -33,10 +32,6 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [vacationSettings, setVacationSettings] = useState<VacationSettings | null>(null)
   const [loading, setLoading] = useState(true)
-  const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [holidayTeams, setHolidayTeams] = useState<HolidayTeam[]>([])
-  const [newHolidayName, setNewHolidayName] = useState('')
-  const [newHolidayDate, setNewHolidayDate] = useState('')
   
   // システム設定の状態
   const [systemSettings, setSystemSettings] = useState({
@@ -120,22 +115,8 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
 
   useEffect(() => {
     loadSettings()
-    loadHolidayData()
   }, [])
 
-  const loadHolidayData = async () => {
-    try {
-      const [holidaysData, teamsData] = await Promise.all([
-        HolidayService.getByYear(2025),
-        HolidayTeamService.getAll()
-      ])
-      
-      setHolidays(holidaysData)
-      setHolidayTeams(teamsData)
-    } catch (error) {
-      console.error('Failed to load holiday data:', error)
-    }
-  }
 
   // 基本設定変更時に特定日付のcustomLimitをリアルタイム更新
   useEffect(() => {
@@ -489,6 +470,7 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
 
           {/* 特定日付設定 */}
           {renderSpecificDateSettings()}
+
         </div>
       </div>
     )

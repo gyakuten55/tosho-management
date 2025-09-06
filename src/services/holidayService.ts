@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { Holiday, HolidayTeam } from '@/types'
+import { JapaneseHolidaysAPI } from '@/lib/japaneseHolidays'
 
 type HolidayRow = Database['public']['Tables']['holidays']['Row']
 type HolidayInsert = Database['public']['Tables']['holidays']['Insert']
@@ -103,6 +104,52 @@ export class HolidayService {
     }
 
     return data.length > 0
+  }
+
+  static async fetchAndUpdateJapaneseHolidays(year?: number): Promise<Holiday[]> {
+    try {
+      const japaneseHolidays = await JapaneseHolidaysAPI.fetchHolidays(year)
+      const addedHolidays: Holiday[] = []
+
+      for (const japaneseHoliday of japaneseHolidays) {
+        try {
+          const existingHoliday = await this.isHoliday(japaneseHoliday.date)
+          
+          if (!existingHoliday) {
+            const newHoliday = await this.create({
+              name: japaneseHoliday.name,
+              date: japaneseHoliday.date,
+              isNationalHoliday: japaneseHoliday.isNationalHoliday,
+              isRecurring: false
+            })
+            addedHolidays.push(newHoliday)
+          }
+        } catch (error) {
+          console.error(`Failed to add holiday ${japaneseHoliday.name} (${japaneseHoliday.date}):`, error)
+        }
+      }
+
+      return addedHolidays
+    } catch (error) {
+      console.error('Error fetching and updating Japanese holidays:', error)
+      throw error
+    }
+  }
+
+  static async syncHolidaysForCurrentYear(): Promise<Holiday[]> {
+    const currentYear = new Date().getFullYear()
+    return this.fetchAndUpdateJapaneseHolidays(currentYear)
+  }
+
+  static async syncHolidaysForYears(years: number[]): Promise<Holiday[]> {
+    const allHolidays: Holiday[] = []
+    
+    for (const year of years) {
+      const holidays = await this.fetchAndUpdateJapaneseHolidays(year)
+      allHolidays.push(...holidays)
+    }
+
+    return allHolidays
   }
 
   private static mapToHoliday(row: HolidayRow): Holiday {
