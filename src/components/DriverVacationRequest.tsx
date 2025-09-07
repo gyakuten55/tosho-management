@@ -62,7 +62,8 @@ export default function DriverVacationRequest({
       type: 'day_off',
       reason: '',
       status: 'approved',
-      isExternalDriver: currentUser.employeeId.startsWith('E')
+      isExternalDriver: currentUser.employeeId.startsWith('E'),
+      registeredBy: 'driver' as const
     }
 
     onRequestSubmit(newRequest)

@@ -587,7 +587,7 @@ export type Database = {
       }
       vacation_requests: {
         Row: {
-          created_at: string
+          created_at: string | null
           date: string
           driver_id: number
           driver_name: string
@@ -597,16 +597,17 @@ export type Database = {
           is_external_driver: boolean
           is_off: boolean
           reason: string | null
+          registered_by: string
           request_date: string
           special_note: string | null
           status: string
           team: string
           type: string
-          updated_at: string
+          updated_at: string | null
           work_status: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           date: string
           driver_id: number
           driver_name: string
@@ -616,16 +617,17 @@ export type Database = {
           is_external_driver?: boolean
           is_off?: boolean
           reason?: string | null
-          request_date: string
+          registered_by?: string
+          request_date?: string
           special_note?: string | null
           status?: string
           team: string
           type: string
-          updated_at?: string
+          updated_at?: string | null
           work_status: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           date?: string
           driver_id?: number
           driver_name?: string
@@ -635,12 +637,13 @@ export type Database = {
           is_external_driver?: boolean
           is_off?: boolean
           reason?: string | null
+          registered_by?: string
           request_date?: string
           special_note?: string | null
           status?: string
           team?: string
           type?: string
-          updated_at?: string
+          updated_at?: string | null
           work_status?: string
         }
         Relationships: [

@@ -492,7 +492,8 @@ export default function VacationManagement({
             reason: 'デフォルト出勤',
             status: 'approved',
             requestDate: new Date(),
-            isExternalDriver: driver.employeeId.startsWith('E')
+            isExternalDriver: driver.employeeId.startsWith('E'),
+            registeredBy: 'admin' as const
           })
         })
       }
@@ -666,7 +667,8 @@ export default function VacationManagement({
         reason: 'デフォルト出勤',
         status: 'approved',
         requestDate: new Date(),
-        isExternalDriver: driver.employeeId.startsWith('E')
+        isExternalDriver: driver.employeeId.startsWith('E'),
+        registeredBy: 'admin' as const
       }))
       
       // レンダリング外でstate更新を実行
@@ -884,7 +886,8 @@ export default function VacationManagement({
         reason: '', // 理由は不要
         status: 'approved' as const, // 承認機能なしなので即承認
         requestDate: new Date(),
-        isExternalDriver: driver.employeeId.startsWith('E')
+        isExternalDriver: driver.employeeId.startsWith('E'),
+        registeredBy: 'admin' as const
       }
       
       console.log('VacationManagement - Saving vacation request with data:', requestData)
@@ -973,6 +976,25 @@ export default function VacationManagement({
   const handleQuickStatusUpdate = async (driverId: number, workStatus: 'working' | 'day_off' | 'night_shift') => {
     if (!selectedDate) return
 
+    // 既存の勤務状態設定があるかチェック（ドライバー登録の確認用）
+    const existingDriverRequest = vacationRequests.find(req =>
+      req.driverId === driverId && 
+      isSameDay(req.date, selectedDate) &&
+      req.id > 0 // DBに保存済み
+    )
+
+    // ドライバーが登録した勤務状態を変更する場合は確認アラート
+    if (existingDriverRequest && existingDriverRequest.registeredBy === 'driver') {
+      const driverName = drivers.find(d => d.id === driverId)?.name || 'ドライバー'
+      const statusText = workStatus === 'day_off' ? '休暇' : workStatus === 'night_shift' ? '夜勤' : '出勤'
+      const currentStatusText = existingDriverRequest.workStatus === 'day_off' ? '休暇' : 
+                                existingDriverRequest.workStatus === 'night_shift' ? '夜勤' : '出勤'
+      
+      if (!confirm(`${driverName}が登録した「${currentStatusText}」を「${statusText}」に変更しますか？\n\nドライバーからの登録情報を上書きします。`)) {
+        return
+      }
+    }
+
     // ローディング状態を開始
     setQuickUpdateLoading(prev => new Set(prev).add(driverId))
 
@@ -1046,7 +1068,8 @@ export default function VacationManagement({
         requestDate: new Date(),
         isExternalDriver: driver.employeeId.startsWith('E'),
         hasSpecialNote: finalSpecialNote.enabled,
-        specialNote: finalSpecialNote.enabled ? finalSpecialNote.note : undefined
+        specialNote: finalSpecialNote.enabled ? finalSpecialNote.note : undefined,
+        registeredBy: 'admin' as const
       }
 
       let savedRequest: VacationRequest
@@ -1165,7 +1188,8 @@ export default function VacationManagement({
           reason: `祝日チーム${holidayTeam}一括設定`,
           status: 'approved' as const,
           requestDate: new Date(),
-          isExternalDriver: driver.employeeId.startsWith('E')
+          isExternalDriver: driver.employeeId.startsWith('E'),
+          registeredBy: 'admin' as const
         }
         
         const savedRequest = await VacationService.create(requestData)
@@ -1191,6 +1215,23 @@ export default function VacationManagement({
   // 全員一括設定処理
   const handleBulkWorkStatus = async (workStatus: 'working' | 'day_off', confirmMessage: string) => {
     if (!selectedDate) return
+    
+    // ドライバー登録の勤務状態があるかチェック
+    const driverRegisteredRequests = vacationRequests.filter(req =>
+      isSameDay(req.date, selectedDate) &&
+      req.registeredBy === 'driver' &&
+      req.id > 0 // DBに保存済み
+    )
+
+    // ドライバー登録がある場合の追加確認
+    if (driverRegisteredRequests.length > 0) {
+      const driverNames = driverRegisteredRequests.map(req => req.driverName).join('、')
+      const statusText = workStatus === 'day_off' ? '全員休暇' : '全員出勤'
+      
+      if (!confirm(`${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}には以下のドライバーが登録した勤務状態があります：\n\n${driverNames}\n\nドライバー登録情報を上書きして「${statusText}」を実行しますか？`)) {
+        return
+      }
+    }
     
     // 休暇設定の場合は上限チェック
     if (workStatus === 'day_off') {
@@ -1247,7 +1288,8 @@ export default function VacationManagement({
           reason: '全員一括設定',
           status: 'approved' as const,
           requestDate: new Date(),
-          isExternalDriver: driver.employeeId.startsWith('E')
+          isExternalDriver: driver.employeeId.startsWith('E'),
+          registeredBy: 'admin' as const
         }
         
         const savedRequest = await VacationService.create(requestData)
@@ -1292,7 +1334,8 @@ export default function VacationManagement({
         reason: '休暇削除により出勤に変更',
         status: 'approved' as const,
         requestDate: new Date(),
-        isExternalDriver: vacationToDelete.isExternalDriver
+        isExternalDriver: vacationToDelete.isExternalDriver,
+        registeredBy: 'admin' as const
       }
       
       const newWorkingRequest = await VacationService.create(workingRequest)
@@ -2018,15 +2061,23 @@ export default function VacationManagement({
                                   <p className="text-sm text-gray-600">
                                     {driver.employeeId}
                                     {currentStatus && (
-                                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
                                         currentStatus.workStatus === 'day_off' 
                                           ? 'bg-red-100 text-red-800'
                                           : currentStatus.workStatus === 'night_shift'
                                           ? 'bg-blue-100 text-blue-800'
                                           : 'bg-green-100 text-green-800'
                                       }`}>
-                                        現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
-                                               currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
+                                        <span>現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
+                                               currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
+                                        {currentStatus.registeredBy === 'driver' && (
+                                          <span 
+                                            className="inline-flex items-center text-xs" 
+                                            title="ドライバーが登録した勤務状態"
+                                          >
+                                            👤
+                                          </span>
+                                        )}
                                       </span>
                                     )}
                                   </p>
@@ -2139,15 +2190,23 @@ export default function VacationManagement({
                                       <p className="text-sm text-gray-600">
                                         {driver.employeeId}
                                         {currentStatus && (
-                                          <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                                          <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
                                             currentStatus.workStatus === 'day_off' 
                                               ? 'bg-red-100 text-red-800'
                                               : currentStatus.workStatus === 'night_shift'
                                               ? 'bg-blue-100 text-blue-800'
                                               : 'bg-green-100 text-green-800'
                                           }`}>
-                                            現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
-                                                   currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}
+                                            <span>現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
+                                                   currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
+                                            {currentStatus.registeredBy === 'driver' && (
+                                              <span 
+                                                className="inline-flex items-center text-xs" 
+                                                title="ドライバーが登録した勤務状態"
+                                              >
+                                                👤
+                                              </span>
+                                            )}
                                           </span>
                                         )}
                                       </p>

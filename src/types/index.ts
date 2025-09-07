@@ -86,6 +86,7 @@ export interface VacationRequest {
   isExternalDriver: boolean  // 配送センター外注かどうか
   hasSpecialNote?: boolean  // 特記事項があるかどうか
   specialNote?: string  // 特記事項の内容
+  registeredBy: 'driver' | 'admin'  // 登録者（ドライバーか管理者か）
 }
 
 export interface MonthlyVacationStats {

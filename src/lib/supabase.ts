@@ -14,4 +14,20 @@ if (!supabaseKey) {
 
 console.log('Initializing Supabase client:', { url: supabaseUrl, keyPresent: !!supabaseKey })
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey)
+// Create fresh client instance with cache-busting timestamp
+const timestamp = Date.now()
+export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+  global: {
+    headers: {
+      'cache-control': 'no-cache',
+      'pragma': 'no-cache',
+      'x-client-refresh': timestamp.toString()
+    }
+  },
+  db: {
+    schema: 'public'
+  },
+  auth: {
+    persistSession: false
+  }
+})

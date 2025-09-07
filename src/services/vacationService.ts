@@ -53,7 +53,8 @@ export class VacationService {
       request_date: vacationRequest.requestDate.toISOString(),
       is_external_driver: vacationRequest.isExternalDriver,
       has_special_note: vacationRequest.hasSpecialNote || false,
-      special_note: vacationRequest.specialNote || null
+      special_note: vacationRequest.specialNote || null,
+      registered_by: vacationRequest.registeredBy
     }
 
     const { data, error } = await supabase
@@ -95,6 +96,9 @@ export class VacationService {
     }
     if (updates.specialNote !== undefined) {
       requestData.special_note = updates.specialNote || null
+    }
+    if (updates.registeredBy !== undefined) {
+      requestData.registered_by = updates.registeredBy
     }
 
     const { data, error } = await supabase
@@ -238,7 +242,8 @@ export class VacationService {
       requestDate: new Date(row.request_date),
       isExternalDriver: row.is_external_driver,
       hasSpecialNote: row.has_special_note || false,
-      specialNote: row.special_note || ''
+      specialNote: row.special_note || '',
+      registeredBy: row.registered_by as VacationRequest['registeredBy'] || 'admin'
     }
   }
 }
