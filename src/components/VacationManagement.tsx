@@ -369,7 +369,7 @@ export default function VacationManagement({
         const month = parseInt(monthStr)
         
         drivers.forEach(driver => {
-          if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
+          if (driver.employeeId.startsWith('E')) return // 配送センター外注は統計に含めない
           
           // その月のドライバーの休暇数を計算
           const monthVacations = vacationRequests.filter(req => 
@@ -414,7 +414,7 @@ export default function VacationManagement({
       const monthStats: MonthlyVacationStats[] = []
       
       drivers.forEach(driver => {
-        if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
+        if (driver.employeeId.startsWith('E')) return // 配送センター外注は統計に含めない
         
         // その月のドライバーの休暇数を計算
         const monthVacations = vacationRequests.filter(req => 
@@ -567,7 +567,7 @@ export default function VacationManagement({
         const monthStats: MonthlyVacationStats[] = []
         
         drivers.forEach(driver => {
-          if (driver.employeeId.startsWith('E')) return // 外部ドライバーは統計に含めない
+          if (driver.employeeId.startsWith('E')) return // 配送センター外注は統計に含めない
           
           // その月のドライバーの休暇数を計算
           const monthVacations = vacationRequests.filter(req => 
@@ -1085,7 +1085,7 @@ export default function VacationManagement({
     if (!selectedDate) return
     
     const teamDrivers = drivers.filter(driver => 
-      (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
+      (driver.team === '配送センターチーム' || driver.team === '配送センター外注') &&
       (driver as any).holidayTeams &&
       (driver as any).holidayTeams.includes(`${holidayTeam}チーム`)
     )
@@ -1349,7 +1349,7 @@ export default function VacationManagement({
       stat.driverId === driverId && stat.year === year && stat.month === month
     )
 
-    // その月のドライバーの休暇数を計算（外部ドライバーは除外）
+    // その月のドライバーの休暇数を計算（配送センター外注は除外）
     const monthVacations = currentRequests.filter(req => 
       req.driverId === driverId && 
       req.date.getFullYear() === year && 
@@ -1487,38 +1487,33 @@ export default function VacationManagement({
                         })
 
                         // 各チームの上限を取得して表示
-                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム']
+                        const teams = ['配送センターチーム', '配送センター外注', '常駐チーム', 'Bチーム']
                         return teams.map(team => {
                           const currentCount = teamVacations[team] || 0
                           const limit = getVacationLimitForDate(dayInfo.date, team)
                           
-                          // そのチームに休暇者がいるか、または上限が設定されている場合のみ表示
-                          if (currentCount > 0 || limit > 0) {
-                            const isOverLimit = currentCount > limit
-                            return (
-                              <div key={team} className="text-xs">
-                                <span className={`font-medium ${
-                                  isOverLimit ? 'text-red-600' : 
-                                  currentCount === limit ? 'text-yellow-600' : 
-                                  'text-blue-600'
-                                }`}>
-                                  {team.replace('チーム', '')}: {currentCount}/{limit}
-                                </span>
-                              </div>
-                            )
-                          }
-                          return null
-                        }).filter(Boolean)
+                          // 全チームを常に表示
+                          const isOverLimit = currentCount > limit
+                          return (
+                            <div key={team} className="text-xs">
+                              <span className={`font-medium ${
+                                isOverLimit ? 'text-red-600' : 
+                                currentCount === limit ? 'text-yellow-600' : 
+                                'text-blue-600'
+                              }`}>
+                                {team.replace('チーム', '').replace('配送センター外注', 'センター外注')}: {currentCount}/{limit}
+                              </span>
+                            </div>
+                          )
+                        })
                       })()}
                       
                       {/* 夜勤者数 */}
-                      {dayInfo.nightShiftCount > 0 && (
-                        <div className="text-xs">
-                          <span className="font-medium text-blue-600">
-                            夜勤: {dayInfo.nightShiftCount}人
-                          </span>
-                        </div>
-                      )}
+                      <div className="text-xs">
+                        <span className="font-medium text-blue-600">
+                          夜勤: {dayInfo.nightShiftCount || 0}人
+                        </span>
+                      </div>
                       
                     </div>
                   )}
@@ -1571,7 +1566,7 @@ export default function VacationManagement({
               ドライバー別休暇統計
             </h3>
             <div className="text-sm text-gray-600">
-              ※ 外部ドライバーは統計に含まれません
+              ※ 配送センター外注は統計に含まれません
             </div>
         </div>
       </div>
@@ -1858,7 +1853,7 @@ export default function VacationManagement({
                   <div className="grid grid-cols-7 gap-2">
                     {['祝日Aチーム', '祝日Bチーム', '祝日Cチーム', '祝日Dチーム', '祝日Eチーム', '祝日Fチーム', '祝日Gチーム'].map((team) => {
                       const teamDrivers = drivers.filter(driver => 
-                        (driver.team === '配送センターチーム' || driver.team === '外部ドライバー') &&
+                        (driver.team === '配送センターチーム' || driver.team === '配送センター外注') &&
                         (driver as any).holidayTeams &&
                         (driver as any).holidayTeams.includes(team)
                       )
@@ -1937,7 +1932,7 @@ export default function VacationManagement({
                         <option value="配送センターチーム">配送センターチーム</option>
                         <option value="常駐チーム">常駐チーム</option>
                         <option value="Bチーム">Bチーム</option>
-                        <option value="外部ドライバー">外部ドライバー</option>
+                        <option value="配送センター外注">配送センター外注</option>
                       </select>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -1982,7 +1977,7 @@ export default function VacationManagement({
 
                       if (quickTeamFilter === 'all') {
                         // 全チーム表示の場合：チーム別に分けて表示
-                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '配送センター外注']
                         return teams.map(team => {
                           const teamDrivers = filteredDrivers.filter(d => d.team === team)
                           if (teamDrivers.length === 0) return null

@@ -232,7 +232,7 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
             </div>
 
             {/* 祝日チーム */}
-            {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') && driver.holidayTeams && driver.holidayTeams.length > 0 && (
+            {(driver.team === '配送センターチーム' || driver.team === '配送センター外注') && driver.holidayTeams && driver.holidayTeams.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-2">祝日チーム</h4>
                 <div className="flex flex-wrap gap-2">
@@ -292,7 +292,7 @@ export default function DriverDetail({ driver, vehicles, onEdit, onBack }: Drive
       </div>
 
       {/* 祝日チーム */}
-      {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') && (
+      {(driver.team === '配送センターチーム' || driver.team === '配送センター外注') && (
         <div className="card p-6">
           <div className="flex items-center space-x-3 mb-4">
             <div className="h-8 w-8 bg-red-100 rounded-lg flex items-center justify-center">

@@ -33,7 +33,7 @@ export interface Driver {
   birthDate?: Date
   notes?: string
   holidayTeams?: string[]  // 祝日チーム（複数選択可）
-  isExternal?: boolean  // 外部ドライバーフラグ（notesフィールドで管理）
+  isExternal?: boolean  // 配送センター外注フラグ（notesフィールドで管理）
 }
 
 export interface Holiday {
@@ -83,7 +83,7 @@ export interface VacationRequest {
   reason: string  // 理由（使用しないが互換性のため保持）
   status: 'approved'  // 承認機能なしなので常に承認済み
   requestDate: Date  // 申請日
-  isExternalDriver: boolean  // 外部ドライバーかどうか
+  isExternalDriver: boolean  // 配送センター外注かどうか
   hasSpecialNote?: boolean  // 特記事項があるかどうか
   specialNote?: string  // 特記事項の内容
 }
@@ -186,7 +186,7 @@ export interface DailyVacationInfo {
   }[]
   totalOffCount: number
   internalDriverOffCount: number  // 正社員の休暇数
-  externalDriverOffCount: number  // 外部ドライバーの休暇数
+  externalDriverOffCount: number  // 配送センター外注の休暇数
 }
 
 // 認証システムの型定義

@@ -99,7 +99,7 @@ export class VacationSettingsService {
 
   static async createDefault(): Promise<VacationSettings> {
     // 全チーム・全月・全曜日のデフォルト上限値を設定
-    const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+    const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '配送センター外注']
     const teamMonthlyWeekdayLimits: any = {}
     
     teams.forEach(team => {
@@ -121,7 +121,7 @@ export class VacationSettingsService {
             case 'Bチーム':
               defaultLimit = 1
               break
-            case '外部ドライバー':
+            case '配送センター外注':
               defaultLimit = 2
               break
             default:
@@ -143,7 +143,7 @@ export class VacationSettingsService {
         '配送センターチーム': 2,
         '常駐チーム': 1,
         'Bチーム': 1,
-        '外部ドライバー': 2
+        '配送センター外注': 2
       },
       globalMaxDriversOffPerDay: 5,
       monthlyWeekdayLimits: {},
@@ -160,7 +160,7 @@ export class VacationSettingsService {
     let teamMonthlyWeekdayLimits = row.team_monthly_weekday_limits as any || {}
     
     // データ整合性の確保: teamMonthlyWeekdayLimitsが空の場合は初期化
-    const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+    const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '配送センター外注']
     const hasValidData = teams.some(team => teamMonthlyWeekdayLimits[team])
     
     if (!hasValidData) {
@@ -182,9 +182,6 @@ export class VacationSettingsService {
               case 'Bチーム':
                 defaultLimit = 1
                 break
-              case '外部ドライバー':
-                defaultLimit = 2
-                break
             }
             teamMonthlyWeekdayLimits[team][month][weekday] = defaultLimit
           }
@@ -203,7 +200,7 @@ export class VacationSettingsService {
         '配送センターチーム': 2,
         '常駐チーム': 1,
         'Bチーム': 1,
-        '外部ドライバー': 2
+        '配送センター外注': 2
       },
       globalMaxDriversOffPerDay: settingsData.globalMaxDriversOffPerDay || 5,
       monthlyWeekdayLimits: settingsData.monthlyWeekdayLimits || {},

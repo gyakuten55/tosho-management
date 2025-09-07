@@ -1061,7 +1061,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       .map(v => v.driver)
     
     return drivers.filter(driver => {
-      // 外部ドライバーを除外
+      // 配送センター外注を除外
       if (driver.employeeId.startsWith('E')) {
         return false
       }

@@ -109,7 +109,7 @@ export default function VacationRequestForm({
       reason: '',
       status: 'approved',
       requestDate: editingRequest?.requestDate || new Date(),
-      isExternalDriver: selectedDriver.employeeId.startsWith('E') // 外部ドライバーの判定
+      isExternalDriver: selectedDriver.employeeId.startsWith('E') // 配送センター外注の判定
     }
 
     onSave(newRequest)

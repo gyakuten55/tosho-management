@@ -240,7 +240,7 @@ export default function DriverManagement({}: DriverManagementProps) {
               <option value="配送センターチーム">配送センターチーム</option>
               <option value="常駐チーム">常駐チーム</option>
               <option value="Bチーム">Bチーム</option>
-              <option value="外部ドライバー">外部ドライバー(使用禁止)</option>
+              <option value="配送センター外注">配送センター外注</option>
             </select>
             
             <select
@@ -315,7 +315,7 @@ export default function DriverManagement({}: DriverManagementProps) {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {(driver.team === '配送センターチーム' || driver.team === '外部ドライバー') ? (
+                    {(driver.team === '配送センターチーム' || driver.team === '配送センター外注') ? (
                       driver.holidayTeams && driver.holidayTeams.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {driver.holidayTeams.map((team: string) => (

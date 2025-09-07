@@ -510,7 +510,7 @@ export class DriverService {
       holidayTeams = []
     }
 
-    // notesフィールドから外部ドライバーフラグを抽出
+    // notesフィールドから配送センター外注フラグを抽出
     let isExternal = false
     let cleanNotes = row.notes || undefined
     if (row.notes && row.notes.startsWith('[EXTERNAL]')) {

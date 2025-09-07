@@ -286,7 +286,7 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
                 <option value="internal">正社員</option>
-                <option value="external">外部ドライバー</option>
+                <option value="external">配送センター外注</option>
               </select>
             </div>
 
@@ -398,15 +398,15 @@ export default function DriverForm({ driver, vehicles, existingDrivers, onSave, 
                 }`}
               >
                 <option value="配送センターチーム">配送センターチーム</option>
+                <option value="配送センター外注">配送センター外注</option>
                 <option value="常駐チーム">常駐チーム</option>
                 <option value="Bチーム">Bチーム</option>
-                <option value="外部ドライバー">外部ドライバー(使用禁止)</option>
               </select>
               {errors.team && <p className="text-red-500 text-sm mt-1">{errors.team}</p>}
             </div>
 
-            {/* 祝日チーム - 配送センターチーム・外部ドライバー選択時のみ表示 */}
-            {(formData.team === '配送センターチーム' || formData.team === '外部ドライバー') && (
+            {/* 祝日チーム - 配送センターチーム・配送センター外注選択時のみ表示 */}
+            {(formData.team === '配送センターチーム' || formData.team === '配送センター外注') && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <Calendar className="h-4 w-4 inline mr-1" />

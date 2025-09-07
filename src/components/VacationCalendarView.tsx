@@ -77,7 +77,7 @@ export default function VacationCalendarView({
       '配送センターチーム': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
       '常駐チーム': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
       'Bチーム': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
-      '外部ドライバー': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' }
+      '配送センター外注': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' }
     }
     return colors[team as keyof typeof colors] || { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200' }
   }
@@ -119,7 +119,6 @@ export default function VacationCalendarView({
     
     // 特定日付設定があるかチェック（チーム別）
     if (vacationSettings.specificDateLimits[dateString]?.[team] !== undefined) {
-      console.log(`Using specific limit for ${team} on ${dateString}:`, vacationSettings.specificDateLimits[dateString][team])
       return vacationSettings.specificDateLimits[dateString][team]
     }
     
@@ -127,7 +126,6 @@ export default function VacationCalendarView({
     const weekday = getDay(date)
     const month = date.getMonth() + 1
     const basicLimit = vacationSettings.teamMonthlyWeekdayLimits[team]?.[month]?.[weekday] || 0
-    console.log(`Using basic limit for ${team} on ${dateString} (month:${month}, weekday:${weekday}):`, basicLimit)
     return basicLimit
   }
 
@@ -141,7 +139,7 @@ export default function VacationCalendarView({
       '配送センターチーム': { off: 0, total: 0 },
       '常駐チーム': { off: 0, total: 0 },
       'Bチーム': { off: 0, total: 0 },
-      '外部ドライバー': { off: 0, total: 0 }
+      '配送センター外注': { off: 0, total: 0 }
     }
     
     // 各チームの休暇上限を計算（特定日付設定を考慮）
@@ -254,7 +252,7 @@ export default function VacationCalendarView({
             <option value="配送センターチーム">配送センターチーム</option>
             <option value="常駐チーム">常駐チーム</option>
             <option value="Bチーム">Bチーム</option>
-            <option value="外部ドライバー">外部ドライバー</option>
+            <option value="配送センター外注">配送センター外注</option>
           </select>
           <button
             onClick={() => setCurrentDate(new Date())}
@@ -283,7 +281,7 @@ export default function VacationCalendarView({
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-purple-100 border border-purple-200 rounded mr-2"></div>
-            <span>外部ドライバー</span>
+            <span>配送センター外注</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-gray-300 rounded mr-2"></div>
@@ -356,18 +354,40 @@ export default function VacationCalendarView({
                 <div className="space-y-1">
                   {(() => {
                     const teamStats = getTeamVacationStats(day)
-                    return Object.entries(teamStats).map(([team, stats]) => {
-                      const teamColor = getTeamColor(team)
-                      return (
-                        <div
-                          key={team}
-                          className={`text-xs px-2 py-1 rounded ${teamColor.bg} ${teamColor.text} ${teamColor.border} border font-medium flex items-center justify-between`}
-                        >
-                          <span>{team.replace('チーム', '')}</span>
-                          <span>{stats.off}/{stats.total}</span>
+                    const workStatus = getWorkStatusForDate(day)
+                    
+                    // 表示順序を固定
+                    const teamOrder = ['配送センターチーム', '配送センター外注', '常駐チーム', 'Bチーム']
+                    
+                    return (
+                      <>
+                        {teamOrder.map(team => {
+                          const stats = teamStats[team as keyof typeof teamStats] || { off: 0, total: 0 }
+                          const teamColor = getTeamColor(team)
+                          
+                          // デバッグ: 配送センター外注の情報を確認
+                          if (team === '配送センター外注') {
+                            console.log(`配送センター外注 stats:`, stats)
+                            console.log(`teamStats:`, teamStats)
+                          }
+                          
+                          return (
+                            <div
+                              key={team}
+                              className={`text-xs px-2 py-1 rounded ${teamColor.bg} ${teamColor.text} ${teamColor.border} border font-medium flex items-center justify-between`}
+                            >
+                              <span>{team.replace('チーム', '').replace('配送センター外注', 'センター外注')}</span>
+                              <span>{stats.off}/{stats.total}</span>
+                            </div>
+                          )
+                        })}
+                        {/* 夜勤人数表示 */}
+                        <div className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800 border border-gray-200 font-medium flex items-center justify-between">
+                          <span>夜勤</span>
+                          <span>{workStatus.nightShift.length}人</span>
                         </div>
-                      )
-                    })
+                      </>
+                    )
                   })()}
                 </div>
 

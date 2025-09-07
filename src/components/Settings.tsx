@@ -960,6 +960,38 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
         <div className="p-6">
           {activeTab === 'vacation' && renderVacationSettings()}
         </div>
+        
+        {/* 下部保存ボタン */}
+        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
+          <div className="flex items-center justify-end space-x-3">
+            {saveStatus === 'saving' && (
+              <div className="flex items-center text-yellow-600">
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                保存中...
+              </div>
+            )}
+            {saveStatus === 'saved' && (
+              <div className="flex items-center text-green-600">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                保存完了
+              </div>
+            )}
+            {saveStatus === 'error' && (
+              <div className="flex items-center text-red-600">
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                保存エラー
+              </div>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saveStatus === 'saving'}
+              className="btn-primary"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              保存
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

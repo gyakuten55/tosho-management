@@ -190,7 +190,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     try {
       // 休暇申請の場合のみ上限チェックを行う
       if (request.workStatus === 'day_off' && !request.isExternalDriver && vacationSettings && driverInfo) {
-        // その日の既存の休暇数をカウント（同じチーム、外部ドライバーを除く）
+        // その日の既存の休暇数をカウント（同じチーム、配送センター外注を除く）
         const existingVacations = allVacationRequests.filter(req => 
           isSameDay(req.date, request.date) && 
           req.workStatus === 'day_off' && 

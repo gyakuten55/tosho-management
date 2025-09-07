@@ -173,7 +173,7 @@ export default function DriverVacationCalendar({
       const teamVacationLimit = getVacationLimitForTeamAndDate(currentUser.team, date)
       
       // 全チームの上限合計を計算
-      const totalVacationLimit = ['配送センターチーム', '常駐チーム', 'Bチーム', '外部ドライバー']
+      const totalVacationLimit = ['配送センターチーム', '常駐チーム', 'Bチーム', '配送センター外注']
         .reduce((sum, team) => sum + getVacationLimitForTeamAndDate(team, date), 0)
       
       // 申請可能かチェック
