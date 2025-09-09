@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { VacationRequest } from '@/types'
-import { formatDateForDB } from '@/utils/dateUtils'
+import { formatDateForDB, parseDBDate, getCurrentDate } from '@/utils/dateUtils'
 
 type VacationRequestRow = Database['public']['Tables']['vacation_requests']['Row']
 type VacationRequestInsert = Database['public']['Tables']['vacation_requests']['Insert']
@@ -9,16 +9,84 @@ type VacationRequestUpdate = Database['public']['Tables']['vacation_requests']['
 
 export class VacationService {
   static async getAll(): Promise<VacationRequest[]> {
-    const { data, error } = await supabase
-      .from('vacation_requests')
-      .select('*')
-      .order('date', { ascending: false })
+    // 1000件制限の問題を修正：2回のクエリで全データを取得
+    console.log('VacationService.getAll - Retrieving all vacation data using chunked approach')
 
-    if (error) {
-      throw new Error(`Failed to fetch vacation requests: ${error.message}`)
+    try {
+      // まずデータ総数を取得
+      const { count, error: countError } = await supabase
+        .from('vacation_requests')
+        .select('*', { count: 'exact', head: true })
+        .gte('date', '2025-09-01')
+        .lte('date', '2025-09-30')
+
+      if (countError) {
+        throw new Error(`Failed to count vacation requests: ${countError.message}`)
+      }
+
+      console.log(`VacationService.getAll - Total records in range: ${count}`)
+
+      // データが1000件以下なら通常通り取得
+      if (!count || count <= 1000) {
+        const { data, error } = await supabase
+          .from('vacation_requests')
+          .select('*')
+          .gte('date', '2025-09-01')
+          .lte('date', '2025-09-30')
+          .order('date', { ascending: false })
+
+        if (error) {
+          throw new Error(`Failed to fetch vacation requests: ${error.message}`)
+        }
+
+        console.log(`VacationService.getAll - Retrieved ${data.length} records in single query`)
+        return data.map(this.mapToVacationRequest)
+      }
+
+      // データが1000件超の場合は2回に分けて取得
+      console.log('VacationService.getAll - Using chunked approach for >1000 records')
+      
+      // まず最新の1000件を取得して境界日付を確認
+      const { data: recentData, error: recentError } = await supabase
+        .from('vacation_requests')
+        .select('*')
+        .gte('date', '2025-09-01')
+        .lte('date', '2025-09-30')
+        .order('date', { ascending: false })
+        .limit(1000)
+
+      if (recentError) {
+        throw new Error(`Failed to fetch recent vacation requests: ${recentError.message}`)
+      }
+
+      // 境界日付を特定（最古のレコードの日付）
+      const boundaryDate = recentData[recentData.length - 1]?.date
+      console.log(`VacationService.getAll - Boundary date for chunked query: ${boundaryDate}`)
+
+      // 境界日付より前の古いデータを取得（重複を避けるため）
+      const { data: olderData, error: olderError } = await supabase
+        .from('vacation_requests')
+        .select('*')
+        .gte('date', '2025-09-01')
+        .lt('date', boundaryDate) // 境界日付より前のみ（重複回避）
+        .order('date', { ascending: true })
+
+      if (olderError) {
+        throw new Error(`Failed to fetch older vacation requests: ${olderError.message}`)
+      }
+
+      // 両方のデータを結合して日付順でソート
+      const allData = [...recentData, ...olderData]
+      allData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+      console.log(`VacationService.getAll - Retrieved ${allData.length} records via chunked approach`)
+      console.log(`VacationService.getAll - Date range: ${allData[allData.length - 1]?.date} to ${allData[0]?.date}`)
+
+      return allData.map(this.mapToVacationRequest)
+    } catch (error) {
+      console.error('VacationService.getAll - Unexpected error:', error)
+      throw error instanceof Error ? error : new Error('Unknown error occurred')
     }
-
-    return data.map(this.mapToVacationRequest)
   }
 
   static async getById(id: number): Promise<VacationRequest | null> {
@@ -57,17 +125,51 @@ export class VacationService {
       registered_by: vacationRequest.registeredBy
     }
 
-    const { data, error } = await supabase
-      .from('vacation_requests')
-      .insert(requestData)
-      .select()
-      .single()
+    console.log('VacationService.create - Saving to database:', {
+      original_date: vacationRequest.date,
+      formatted_date: formatDateForDB(vacationRequest.date),
+      requestData
+    })
 
-    if (error) {
-      throw new Error(`Failed to create vacation request: ${error.message}`)
+    try {
+      const { data, error } = await supabase
+        .from('vacation_requests')
+        .insert(requestData)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('VacationService.create - Database error details:', {
+          error,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          requestData
+        })
+        throw new Error(`Failed to create vacation request: ${error.message} (Code: ${error.code})`)
+      }
+
+      if (!data) {
+        console.error('VacationService.create - No data returned from insert')
+        throw new Error('No data returned from database insert')
+      }
+
+      console.log('VacationService.create - Saved successfully:', data)
+      const mapped = this.mapToVacationRequest(data)
+      console.log('VacationService.create - Mapped result:', {
+        id: mapped.id,
+        driverName: mapped.driverName,
+        date: mapped.date.toISOString(),
+        formattedDate: formatDateForDB(mapped.date),
+        workStatus: mapped.workStatus
+      })
+
+      return mapped
+    } catch (dbError) {
+      console.error('VacationService.create - Unexpected error:', dbError)
+      throw dbError
     }
-
-    return this.mapToVacationRequest(data)
   }
 
   static async update(id: number, updates: Partial<VacationRequest>): Promise<VacationRequest> {
@@ -101,21 +203,43 @@ export class VacationService {
       requestData.registered_by = updates.registeredBy
     }
 
-    const { data, error } = await supabase
-      .from('vacation_requests')
-      .update(requestData)
-      .eq('id', id)
-      .select()
+    console.log('VacationService.update - Updating record:', {
+      id,
+      updates,
+      requestData
+    })
 
-    if (error) {
-      throw new Error(`Failed to update vacation request: ${error.message}`)
+    try {
+      const { data, error } = await supabase
+        .from('vacation_requests')
+        .update(requestData)
+        .eq('id', id)
+        .select()
+
+      if (error) {
+        console.error('VacationService.update - Database error details:', {
+          error,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          id,
+          requestData
+        })
+        throw new Error(`Failed to update vacation request: ${error.message} (Code: ${error.code})`)
+      }
+
+      if (!data || data.length === 0) {
+        console.error('VacationService.update - No record found or updated:', { id, requestData })
+        throw new Error(`No vacation request found with id: ${id}`)
+      }
+
+      console.log('VacationService.update - Updated successfully:', data[0])
+      return this.mapToVacationRequest(data[0])
+    } catch (dbError) {
+      console.error('VacationService.update - Unexpected error:', dbError)
+      throw dbError
     }
-
-    if (!data || data.length === 0) {
-      throw new Error(`No vacation request found with id: ${id}`)
-    }
-
-    return this.mapToVacationRequest(data[0])
   }
 
   static async delete(id: number): Promise<void> {
@@ -233,7 +357,7 @@ export class VacationService {
       driverName: row.driver_name,
       team: row.team,
       employeeId: row.employee_id,
-      date: new Date(row.date),
+      date: parseDBDate(row.date),
       workStatus: row.work_status as VacationRequest['workStatus'],
       isOff: row.is_off,
       type: row.type as VacationRequest['type'],

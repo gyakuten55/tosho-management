@@ -19,9 +19,11 @@ const timestamp = Date.now()
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   global: {
     headers: {
-      'cache-control': 'no-cache',
+      'cache-control': 'no-cache, no-store, must-revalidate',
       'pragma': 'no-cache',
-      'x-client-refresh': timestamp.toString()
+      'expires': '0',
+      'x-client-refresh': timestamp.toString(),
+      'x-force-refresh': 'true'
     }
   },
   db: {
@@ -29,5 +31,11 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   },
   auth: {
     persistSession: false
+  },
+  // リアルタイム機能を無効化してキャッシュを回避
+  realtime: {
+    params: {
+      eventsPerSecond: -1
+    }
   }
 })

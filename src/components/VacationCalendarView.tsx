@@ -61,9 +61,48 @@ export default function VacationCalendarView({
   const monthEnd = endOfMonth(currentDate)
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
 
+  // より確実な日付計算のバックアップチェック
+  const monthStartLocal = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+  const startDayLocal = monthStartLocal.getDay()
+
   // 月の最初の日の曜日を取得（カレンダーの空白セル用）
   const startDay = getDay(monthStart)
-  const emptyDays = Array.from({ length: startDay }, (_, i) => i)
+  // より安全な値を使用（不一致がある場合はローカル計算を優先）
+  const finalStartDay = startDay !== startDayLocal ? startDayLocal : startDay
+  const emptyDays = Array.from({ length: finalStartDay }, (_, i) => i)
+  
+  // デバッグログ: カレンダーグリッド生成の詳細を記録
+  console.log('📅 Calendar Grid Debug Info:', {
+    currentDate: currentDate,
+    monthStart: monthStart,
+    monthStartLocal: monthStartLocal,
+    monthEnd: monthEnd,
+    startDay: startDay,
+    startDayLocal: startDayLocal,
+    finalStartDay: finalStartDay,
+    emptyDaysLength: emptyDays.length,
+    daysLength: days.length,
+    firstDay: days[0],
+    hostname: window.location.hostname,
+    href: window.location.href,
+    timezoneOffset: new Date().getTimezoneOffset(),
+    dateStringComparison: {
+      monthStartISO: monthStart.toISOString(),
+      monthStartLocalISO: monthStartLocal.toISOString(),
+      monthStartToString: monthStart.toString(),
+      monthStartLocalToString: monthStartLocal.toString()
+    }
+  })
+
+  // 不一致を検出した場合の警告
+  if (startDay !== startDayLocal) {
+    console.warn('⚠️  Date calculation mismatch detected! Using local calculation.', {
+      dateFnsResult: startDay,
+      nativeDateResult: startDayLocal,
+      finalUsedValue: finalStartDay,
+      difference: Math.abs(startDay - startDayLocal)
+    })
+  }
 
   // フィルタリングされた休暇申請
   const filteredRequests = vacationRequests.filter(request => {
@@ -306,12 +345,16 @@ export default function VacationCalendarView({
           ))}
 
           {/* 空白セル（月の最初の日より前） */}
-          {emptyDays.map((_, index) => (
-            <div key={`empty-${index}`} className="h-32 border-b border-r border-gray-200"></div>
-          ))}
+          {emptyDays.map((_, index) => {
+            console.log('📅 Rendering empty cell:', index)
+            return (
+              <div key={`empty-${index}`} className="h-32 border-b border-r border-gray-200"></div>
+            )
+          })}
 
           {/* 日付セル */}
           {days.map((day) => {
+            console.log('📅 Rendering day cell:', format(day, 'yyyy-MM-dd'), 'dayOfMonth:', format(day, 'd'))
             const workStatus = getWorkStatusForDate(day)
             const isBlackout = isBlackoutDate(day)
             const isHol = isHoliday(day)

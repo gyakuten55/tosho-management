@@ -26,6 +26,7 @@ import { VacationSettingsService } from '@/services/vacationSettingsService'
 import { NotificationService } from '@/services/notificationService'
 import { HolidayService } from '@/services/holidayService'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { formatDateForDB, getCurrentDate } from '@/utils/dateUtils'
 
 interface DailyVacationInfo {
   date: Date
@@ -79,12 +80,12 @@ export default function VacationManagement({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState('calendar')
-  const [calendarDate, setCalendarDate] = useState(new Date())
+  const [calendarDate, setCalendarDate] = useState(getCurrentDate())
   const [showVacationForm, setShowVacationForm] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedDriverId, setSelectedDriverId] = useState('')
   const [selectedWorkStatus, setSelectedWorkStatus] = useState<'working' | 'day_off' | 'night_shift'>('day_off')
-  const [statsMonth, setStatsMonth] = useState(new Date()) // 統計タブ用の月選択state
+  const [statsMonth, setStatsMonth] = useState(getCurrentDate()) // 統計タブ用の月選択state
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all') // モーダル内のチームフィルター
   const [quickUpdateLoading, setQuickUpdateLoading] = useState<Set<number>>(new Set()) // クイック更新中のドライバーID
   const [quickTeamFilter, setQuickTeamFilter] = useState<string>('all') // クイック設定セクション用のチームフィルター
@@ -241,16 +242,29 @@ export default function VacationManagement({
         NotificationService.getAll()
       ])
       
-      console.log('VacationManagement - loadVacationData:', {
-        settingsFromDB: settings,
-        specificDateLimits: settings.specificDateLimits,
-        teamMonthlyWeekdayLimits: Object.keys(settings.teamMonthlyWeekdayLimits || {}),
-        rawRequestsCount: requests.length
-      })
+      console.log('VacationManagement - loadVacationData - Total requests:', requests.length)
+      console.log('VacationManagement - First 5 requests:', requests.slice(0, 5).map(req => ({
+        id: req.id,
+        driverName: req.driverName,
+        date: req.date.toISOString(),
+        formattedDate: formatDateForDB(req.date),
+        workStatus: req.workStatus
+      })))
 
       // 重複データを排除 - 同じdriver_id + dateの組み合わせで最新のレコード（最大のid）のみ保持
+      const debugDate = process.env.NEXT_PUBLIC_DEBUG_DATE || formatDateForDB(getCurrentDate())
+      console.log('VacationManagement - Before deduplication:', {
+        totalRequests: requests.length,
+        debugDateRequests: requests.filter(req => formatDateForDB(req.date) === debugDate).map(req => ({
+          id: req.id,
+          driverName: req.driverName,
+          date: formatDateForDB(req.date),
+          workStatus: req.workStatus
+        }))
+      })
+      
       const uniqueRequests = requests.reduce((acc, current) => {
-        const key = `${current.driverId}|${current.date.toISOString().split('T')[0]}`
+        const key = `${current.driverId}|${formatDateForDB(current.date)}`
         const existing = acc.get(key)
         
         if (!existing || current.id > existing.id) {
@@ -261,9 +275,43 @@ export default function VacationManagement({
       
       const deduplicatedRequests = Array.from(uniqueRequests.values())
       
+      console.log('VacationManagement - After deduplication:', {
+        totalRequests: deduplicatedRequests.length,
+        debugDateRequests: deduplicatedRequests.filter(req => formatDateForDB(req.date) === debugDate).map(req => ({
+          id: req.id,
+          driverName: req.driverName,
+          date: formatDateForDB(req.date),
+          workStatus: req.workStatus
+        }))
+      })
+      
       if (deduplicatedRequests.length !== requests.length) {
         console.log(`重複データを排除しました: ${requests.length}件 → ${deduplicatedRequests.length}件`)
       }
+
+      // 今日の日付のデータを検証（環境変数を考慮）
+      const today = getCurrentDate()
+      const todayString = formatDateForDB(today)
+      const todayRequests = deduplicatedRequests.filter(req => formatDateForDB(req.date) === todayString)
+      
+      console.log('VacationManagement - Today validation:', {
+        today: todayString,
+        todayRequestsCount: todayRequests.length,
+        todayRequests: todayRequests.map(req => ({
+          id: req.id,
+          driverName: req.driverName,
+          workStatus: req.workStatus
+        }))
+      })
+
+      console.log('VacationManagement - Final deduplicated requests count:', deduplicatedRequests.length)
+      console.log('VacationManagement - Final deduplicated requests (first 5):', deduplicatedRequests.slice(0, 5).map(req => ({
+        id: req.id,
+        driverName: req.driverName,
+        date: req.date.toISOString(),
+        formattedDate: formatDateForDB(req.date),
+        workStatus: req.workStatus
+      })))
 
       setVacationRequests(deduplicatedRequests)
       setVacationSettings(settings)
@@ -329,26 +377,18 @@ export default function VacationManagement({
     const weekday = date.getDay() // 0-6（日曜日=0）
     const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
-    // デバッグ情報を追加
-    console.log('getVacationLimitForDate:', {
-      inputDate: date,
-      dateString,
-      team,
-      specificDateLimits: vacationSettings.specificDateLimits,
-      hasSpecificLimit: !!vacationSettings.specificDateLimits[dateString]?.[team],
-      utcDate: date.toISOString().split('T')[0],
-      localDate: dateString
-    })
+    // Debug log commented out to reduce noise
+    // console.log('getVacationLimitForDate:', { dateString, team })
 
     // 1. 特定日付設定（最優先）
     if (vacationSettings.specificDateLimits && vacationSettings.specificDateLimits[dateString]?.[team] !== undefined) {
-      console.log('Using specific date limit:', vacationSettings.specificDateLimits[dateString][team])
+      // console.log('Using specific date limit:', vacationSettings.specificDateLimits[dateString][team])
       return vacationSettings.specificDateLimits[dateString][team]
     }
 
     // 2. チーム別月別曜日設定
     if (vacationSettings.teamMonthlyWeekdayLimits?.[team]?.[month]?.[weekday] !== undefined) {
-      console.log('Using team monthly weekday limit:', vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday])
+      // console.log('Using team monthly weekday limit:', vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday])
       return vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday]
     }
 
@@ -364,12 +404,12 @@ export default function VacationManagement({
     return defaultLimit
   }
 
-  // 初期化時に月間統計を再計算と古いデータの削除、デフォルト出勤設定
+  // 初期化時に月間統計を再計算、デフォルト出勤設定
   useEffect(() => {
     const recalculateAllStats = () => {
       // 統計データを生成する年月を取得
       const allMonths = new Set<string>()
-      const today = new Date()
+      const today = getCurrentDate()
       
       // 現在の月を含む前後12ヶ月を追加（より広い範囲をカバー）
       for (let monthOffset = -12; monthOffset <= 12; monthOffset++) {
@@ -469,24 +509,6 @@ export default function VacationManagement({
       setVacationStats([...existingStats, ...monthStats])
     }
 
-    // 1年以上前の休暇データを自動削除（修正版）
-    const cleanupOldVacationData = () => {
-      const oneYearAgo = new Date()
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-      oneYearAgo.setHours(0, 0, 0, 0) // 時刻を00:00:00に設定
-      
-      const filteredRequests = vacationRequests.filter(request => {
-        const requestDateOnly = new Date(request.date)
-        requestDateOnly.setHours(0, 0, 0, 0) // 時刻を00:00:00に設定
-        return requestDateOnly >= oneYearAgo
-      })
-      
-      if (filteredRequests.length !== vacationRequests.length) {
-        const deletedCount = vacationRequests.length - filteredRequests.length
-        setVacationRequests(filteredRequests)
-        console.log(`古い休暇データを自動削除しました: ${deletedCount}件`)
-      }
-    }
 
     // 今日から1ヶ月間の全ドライバーをデフォルト出勤に設定
     // 仮想レコード生成を無効化 - 重複データ問題と同期問題を解決するため
@@ -494,7 +516,7 @@ export default function VacationManagement({
     const initializeDefaultWorkStatus = () => {
       if (drivers.length === 0) return
       
-      const today = new Date()
+      const today = getCurrentDate()
       const oneMonthLater = new Date()
       oneMonthLater.setMonth(oneMonthLater.getMonth() + 1)
       
@@ -538,7 +560,6 @@ export default function VacationManagement({
     
     if (drivers.length > 0) {
       recalculateAllStats()
-      // cleanupOldVacationData() // データが勝手に削除される問題を防ぐためコメントアウト
       // initializeDefaultWorkStatus() // 重複回避のためコメントアウト
     }
   }, [drivers, vacationSettings, setVacationStats]) // vacationRequestsとsetVacationRequestsを依存配列から削除
@@ -546,7 +567,7 @@ export default function VacationManagement({
   // 月25日に未達成ドライバーに通知
   useEffect(() => {
     const checkAndSendNotifications = () => {
-      const today = new Date()
+      const today = getCurrentDate()
       const currentDate = today.getDate()
       
       // 25日のチェック
@@ -850,7 +871,9 @@ export default function VacationManagement({
     console.log('VacationManagement - handleVacationSubmit: form submitted with values:', {
       selectedDate,
       selectedDriverId,
-      selectedWorkStatus
+      selectedWorkStatus,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      supabaseKeyExists: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     })
     
     if (!selectedDate || !selectedDriverId) {
@@ -922,17 +945,23 @@ export default function VacationManagement({
       }
       
       console.log('VacationManagement - Saving vacation request with data:', requestData)
+      console.log('VacationManagement - Database operation type:', existingRequest ? 'UPDATE' : 'CREATE')
+      console.log('VacationManagement - Existing request:', existingRequest)
 
       let savedRequest: VacationRequest
       if (existingRequest) {
         // 既存の設定を更新
+        console.log('VacationManagement - About to update existing request ID:', existingRequest.id)
         savedRequest = await VacationService.update(existingRequest.id, requestData)
+        console.log('VacationManagement - Update successful, result:', savedRequest)
         setVacationRequests(vacationRequests.map(req => 
           req.id === existingRequest.id ? savedRequest : req
         ))
       } else {
         // 新規追加
+        console.log('VacationManagement - About to create new request')
         savedRequest = await VacationService.create(requestData)
+        console.log('VacationManagement - Create successful, result:', savedRequest)
         setVacationRequests([...vacationRequests, savedRequest])
       }
       
@@ -949,8 +978,17 @@ export default function VacationManagement({
       setSelectedWorkStatus('day_off')
       console.log('VacationManagement - Form reset: selectedWorkStatus set to day_off')
     } catch (err) {
-      console.error('Failed to save vacation request:', err)
-      alert('休暇申請の保存に失敗しました')
+      console.error('VacationManagement - Failed to save vacation request:', err)
+      console.error('VacationManagement - Error details:', {
+        error: err,
+        requestData: {
+          driverId: selectedDriverId,
+          driverName: drivers.find(d => d.id === (typeof selectedDriverId === 'string' ? parseInt(selectedDriverId) : selectedDriverId))?.name,
+          date: selectedDate,
+          workStatus: selectedWorkStatus
+        }
+      })
+      alert(`休暇申請の保存に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`)
     }
   }
 
@@ -1513,7 +1551,7 @@ export default function VacationManagement({
               📌 日付をクリックして勤務状態設定
             </div>
             <button
-              onClick={() => setCalendarDate(new Date())}
+              onClick={() => setCalendarDate(getCurrentDate())}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               今月
@@ -1648,7 +1686,7 @@ export default function VacationManagement({
             </button>
           </div>
           <button
-            onClick={() => setStatsMonth(new Date())}
+            onClick={() => setStatsMonth(getCurrentDate())}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             今月
