@@ -949,28 +949,39 @@ export default function VacationManagement({
       )?.workStatus || 'working' // デフォルトは出勤
 
       // 勤務状態の優先順位を設定
-      const getStatusPriority = (status: string) => {
+      const getStatusPriority = (status: string, driverId: number) => {
+        // 特記事項の有無を確認
+        const hasSpecialNote = vacationRequests.find(req => 
+          req.driverId === driverId && 
+          isSameDay(req.date, selectedDate) &&
+          req.id > 0
+        )?.hasSpecialNote || false
+
         if (quickSortDirection === 'asc') {
-          // 昇順: 休暇→夜勤→出勤
-          switch (status) {
-            case 'day_off': return 1
-            case 'night_shift': return 2
-            case 'working': return 3
-            default: return 4
+          // 昇順: 休暇 → 休暇の特記 → 夜勤 → 出勤の特記 → 出勤
+          if (status === 'day_off') {
+            return hasSpecialNote ? 2 : 1  // 休暇の特記は2、休暇は1
+          } else if (status === 'night_shift') {
+            return 3  // 夜勤は3
+          } else if (status === 'working') {
+            return hasSpecialNote ? 4 : 5  // 出勤の特記は4、出勤は5
           }
+          return 6
         } else {
-          // 降順: 出勤→夜勤→休暇
-          switch (status) {
-            case 'working': return 1
-            case 'night_shift': return 2
-            case 'day_off': return 3
-            default: return 4
+          // 降順: 出勤 → 出勤の特記 → 夜勤 → 休暇の特記 → 休暇
+          if (status === 'working') {
+            return hasSpecialNote ? 2 : 1  // 出勤の特記は2、出勤は1
+          } else if (status === 'night_shift') {
+            return 3  // 夜勤は3
+          } else if (status === 'day_off') {
+            return hasSpecialNote ? 4 : 5  // 休暇の特記は4、休暇は5
           }
+          return 6
         }
       }
 
-      const priorityA = getStatusPriority(statusA)
-      const priorityB = getStatusPriority(statusB)
+      const priorityA = getStatusPriority(statusA, a.id)
+      const priorityB = getStatusPriority(statusB, b.id)
 
       // 勤務状態が同じ場合は名前でソート
       if (priorityA === priorityB) {
@@ -1996,7 +2007,7 @@ export default function VacationManagement({
                         onClick={() => setQuickSortDirection(quickSortDirection === 'asc' ? 'desc' : 'asc')}
                         className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors"
                       >
-                        <span>{quickSortDirection === 'asc' ? '休暇優先' : '出勤優先'}</span>
+                        <span>{quickSortDirection === 'asc' ? '昇順' : '降順'}</span>
                         {quickSortDirection === 'asc' ? (
                           <ArrowUp className="h-3 w-3" />
                         ) : (
