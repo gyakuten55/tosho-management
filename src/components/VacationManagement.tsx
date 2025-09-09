@@ -244,10 +244,28 @@ export default function VacationManagement({
       console.log('VacationManagement - loadVacationData:', {
         settingsFromDB: settings,
         specificDateLimits: settings.specificDateLimits,
-        teamMonthlyWeekdayLimits: Object.keys(settings.teamMonthlyWeekdayLimits || {})
+        teamMonthlyWeekdayLimits: Object.keys(settings.teamMonthlyWeekdayLimits || {}),
+        rawRequestsCount: requests.length
       })
 
-      setVacationRequests(requests)
+      // 重複データを排除 - 同じdriver_id + dateの組み合わせで最新のレコード（最大のid）のみ保持
+      const uniqueRequests = requests.reduce((acc, current) => {
+        const key = `${current.driverId}|${current.date.toISOString().split('T')[0]}`
+        const existing = acc.get(key)
+        
+        if (!existing || current.id > existing.id) {
+          acc.set(key, current)
+        }
+        return acc
+      }, new Map<string, VacationRequest>())
+      
+      const deduplicatedRequests = Array.from(uniqueRequests.values())
+      
+      if (deduplicatedRequests.length !== requests.length) {
+        console.log(`重複データを排除しました: ${requests.length}件 → ${deduplicatedRequests.length}件`)
+      }
+
+      setVacationRequests(deduplicatedRequests)
       setVacationSettings(settings)
       setDrivers(driversData)
       setVehicles(vehiclesData)
@@ -471,6 +489,8 @@ export default function VacationManagement({
     }
 
     // 今日から1ヶ月間の全ドライバーをデフォルト出勤に設定
+    // 仮想レコード生成を無効化 - 重複データ問題と同期問題を解決するため
+    /*
     const initializeDefaultWorkStatus = () => {
       if (drivers.length === 0) return
       
@@ -514,6 +534,7 @@ export default function VacationManagement({
         }, 0)
       }
     }
+    */
     
     if (drivers.length > 0) {
       recalculateAllStats()
@@ -657,6 +678,8 @@ export default function VacationManagement({
   }
 
   // 指定日の未設定ドライバーをデフォルト出勤に設定（非同期で実行）
+  // 仮想レコード生成を無効化 - 重複データ問題と同期問題を解決するため
+  /*
   const ensureAllDriversHaveWorkStatus = useCallback((date: Date) => {
     const existingRequests = vacationRequests.filter(req => isSameDay(req.date, date))
     const driversWithStatus = existingRequests.map(req => req.driverId)
@@ -686,6 +709,7 @@ export default function VacationManagement({
       }, 0)
     }
   }, [drivers, vacationRequests, setVacationRequests])
+  */
 
   // カレンダーの日付情報を生成（6週間分の完全なカレンダーグリッド）
   const generateCalendarDays = () => {
@@ -705,13 +729,8 @@ export default function VacationManagement({
       const driversWithStatus = dayRequests.map(req => req.driverId)
       const driversWithoutStatus = drivers.filter(driver => !driversWithStatus.includes(driver.id))
       
-      // デフォルト出勤ドライバーを仮想的に追加してカウント
-      const virtualWorkingDrivers = driversWithoutStatus.map(driver => ({
-        driverId: driver.id,
-        driverName: driver.name,
-        team: driver.team,
-        isExternalDriver: driver.employeeId.startsWith('E')
-      }))
+      // 仮想レコードを無効化 - 実データのみ表示
+      const virtualWorkingDrivers: any[] = []
       
       const dayVacations = dayRequests.filter(req => req.workStatus === 'day_off')
       const dayNightShifts = dayRequests.filter(req => req.workStatus === 'night_shift')
@@ -744,7 +763,7 @@ export default function VacationManagement({
         internalDriverOffCount: internalDriverVacations.length,
         externalDriverOffCount: externalDriverVacations.length,
         nightShiftCount: dayNightShifts.length,
-        workingCount: dayWorking.length + driversWithoutStatus.length
+        workingCount: dayWorking.length
       } as DailyVacationInfo
     })
   }
@@ -1028,12 +1047,16 @@ export default function VacationManagement({
         return
       }
 
-      // 既存の勤務状態設定があるかチェック（仮想レコード、実レコード問わず）
+      // 既存の勤務状態設定があるかチェック（正のIDを持つ実データのみ対象）
       const existingRequest = vacationRequests.find(req =>
         req.driverId === driver.id && 
-        isSameDay(req.date, selectedDate)
-        // IDの条件を削除して、仮想レコードも含めて重複チェック
+        isSameDay(req.date, selectedDate) &&
+        req.id > 0 // 実データベースレコードのみ
       )
+      
+      // 重複防止: データベースからも直接確認
+      const existingDbRequests = await VacationService.getByDate(selectedDate)
+      const existingDbRequest = existingDbRequests.find(req => req.driverId === driver.id)
 
       // 同じ勤務状態のボタンが押された場合は削除（解除）
       if (existingRequest && existingRequest.workStatus === workStatus && existingRequest.id > 0) {
@@ -1099,22 +1122,28 @@ export default function VacationManagement({
       }
 
       let savedRequest: VacationRequest
-      if (existingRequest && existingRequest.id > 0) {
-        // 既存の設定を更新（データベースに保存済みの場合のみ）
-        savedRequest = await VacationService.update(existingRequest.id, requestData)
+      const finalExistingRequest = existingRequest || existingDbRequest
+      
+      if (finalExistingRequest && finalExistingRequest.id > 0) {
+        // 既存の設定を更新
+        console.log(`更新: ドライバー ${driver.name}の${selectedDate.toDateString()}の勤務状態`)
+        savedRequest = await VacationService.update(finalExistingRequest.id, requestData)
         setVacationRequests(vacationRequests.map(req => 
-          req.id === existingRequest.id ? savedRequest : req
-        ))
+          req.id === finalExistingRequest.id ? savedRequest : req
+        ).filter(req => req.id !== finalExistingRequest.id).concat([savedRequest]))
       } else {
-        // 新規追加（仮想レコードは削除済みなので、常に新規作成）
+        // 新規追加
+        console.log(`新規作成: ドライバー ${driver.name}の${selectedDate.toDateString()}の勤務状態`)
         savedRequest = await VacationService.create(requestData)
-        setVacationRequests([...vacationRequests, savedRequest])
+        setVacationRequests([...vacationRequests.filter(req => 
+          !(req.driverId === driver.id && isSameDay(req.date, selectedDate))
+        ), savedRequest])
       }
       
       // 統計を更新
-      const updatedRequests = existingRequest 
-        ? vacationRequests.map(req => req.id === existingRequest.id ? savedRequest : req)
-        : [...vacationRequests, savedRequest]
+      const updatedRequests = vacationRequests.filter(req => 
+        !(req.driverId === driver.id && isSameDay(req.date, selectedDate))
+      ).concat([savedRequest])
       calculateVacationStats(updatedRequests)
     } catch (err) {
       console.error('Failed to save vacation request:', err)
