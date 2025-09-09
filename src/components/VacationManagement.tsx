@@ -856,7 +856,10 @@ export default function VacationManagement({
       // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
       if (selectedWorkStatus === 'day_off') {
         const existingVacations = getExistingVacations()
-        const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
+        // 同じチームの内部ドライバーのみをカウント
+        const existingTeamVacations = existingVacations.filter(v => 
+          !v.isExternalDriver && v.team === driver.team
+        )
         
         // 新しい統一設定から上限を取得
         const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
@@ -865,7 +868,7 @@ export default function VacationManagement({
         if (vacationLimit === 0) {
           alert(`この日は休暇登録が禁止されています。（${driver.team}の上限: 0人）`)
           return
-        } else if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
+        } else if (!driver.employeeId.startsWith('E') && existingTeamVacations.length >= vacationLimit) {
           alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
           return
         }
@@ -1026,7 +1029,10 @@ export default function VacationManagement({
       // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
       if (workStatus === 'day_off') {
         const existingVacations = getExistingVacations()
-        const existingInternalVacations = existingVacations.filter(v => !v.isExternalDriver)
+        // 同じチームの内部ドライバーのみをカウント
+        const existingTeamVacations = existingVacations.filter(v => 
+          !v.isExternalDriver && v.team === driver.team
+        )
         
         // 新しい統一設定から上限を取得
         const vacationLimit = getVacationLimitForDate(selectedDate, driver.team)
@@ -1035,7 +1041,7 @@ export default function VacationManagement({
         if (vacationLimit === 0) {
           alert(`この日は休暇登録が禁止されています。（${driver.team}の上限: 0人）`)
           return
-        } else if (!driver.employeeId.startsWith('E') && existingInternalVacations.length >= vacationLimit) {
+        } else if (!driver.employeeId.startsWith('E') && existingTeamVacations.length >= vacationLimit) {
           alert(`この日は既に${vacationLimit}人が休暇を取得しています。（${driver.team}の上限）`)
           return
         }
