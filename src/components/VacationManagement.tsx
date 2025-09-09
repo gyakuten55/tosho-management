@@ -451,14 +451,17 @@ export default function VacationManagement({
       setVacationStats([...existingStats, ...monthStats])
     }
 
-    // 1年以上前の休暇データを自動削除
+    // 1年以上前の休暇データを自動削除（修正版）
     const cleanupOldVacationData = () => {
       const oneYearAgo = new Date()
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+      oneYearAgo.setHours(0, 0, 0, 0) // 時刻を00:00:00に設定
       
-      const filteredRequests = vacationRequests.filter(request => 
-        request.date >= oneYearAgo
-      )
+      const filteredRequests = vacationRequests.filter(request => {
+        const requestDateOnly = new Date(request.date)
+        requestDateOnly.setHours(0, 0, 0, 0) // 時刻を00:00:00に設定
+        return requestDateOnly >= oneYearAgo
+      })
       
       if (filteredRequests.length !== vacationRequests.length) {
         const deletedCount = vacationRequests.length - filteredRequests.length
@@ -514,10 +517,10 @@ export default function VacationManagement({
     
     if (drivers.length > 0) {
       recalculateAllStats()
-      cleanupOldVacationData()
+      // cleanupOldVacationData() // データが勝手に削除される問題を防ぐためコメントアウト
       // initializeDefaultWorkStatus() // 重複回避のためコメントアウト
     }
-  }, [drivers, vacationRequests, vacationSettings, setVacationStats, setVacationRequests])
+  }, [drivers, vacationSettings, setVacationStats]) // vacationRequestsとsetVacationRequestsを依存配列から削除
 
   // 月25日に未達成ドライバーに通知
   useEffect(() => {
