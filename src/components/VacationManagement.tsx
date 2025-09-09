@@ -177,27 +177,36 @@ export default function VacationManagement({
     loadVacationData()
   }, [])
 
-  // 既存のvacationRequestsから特記事項をspecialNotesに読み込む（選択日が変更された時も含む）
+  // 既存のvacationRequestsから特記事項をspecialNotesに読み込む（選択日が変更された時のみ）
   useEffect(() => {
     if (!selectedDate) return
-
-    // 新しいMapを作成（前の日付のデータをクリア）
-    const newSpecialNotes = new Map<number, { enabled: boolean; note: string }>()
     
-    // 選択された日付の特記事項のみを読み込み
-    vacationRequests.forEach(request => {
-      if (isSameDay(request.date, selectedDate)) {
-        if (request.hasSpecialNote && request.specialNote) {
-          newSpecialNotes.set(request.driverId, {
-            enabled: true,
-            note: request.specialNote
-          })
+    setSpecialNotes(prevSpecialNotes => {
+      const newSpecialNotes = new Map<number, { enabled: boolean; note: string }>()
+      
+      // 選択された日付の特記事項のみを読み込み
+      vacationRequests.forEach(request => {
+        if (isSameDay(request.date, selectedDate)) {
+          // データベースに保存済みの特記事項があればセット
+          if (request.hasSpecialNote && request.specialNote) {
+            newSpecialNotes.set(request.driverId, {
+              enabled: true,
+              note: request.specialNote
+            })
+          }
+          // UI側で設定した特記事項も保持（データベース未保存でも維持）
+          else if (prevSpecialNotes.has(request.driverId)) {
+            const existing = prevSpecialNotes.get(request.driverId)
+            if (existing && existing.enabled) {
+              newSpecialNotes.set(request.driverId, existing)
+            }
+          }
         }
-      }
+      })
+      
+      return newSpecialNotes
     })
-    
-    setSpecialNotes(newSpecialNotes)
-  }, [vacationRequests, selectedDate])
+  }, [selectedDate])
 
   // Props経由で設定が変更された場合の反映
   useEffect(() => {
