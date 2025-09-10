@@ -269,6 +269,9 @@ export default function DepartureTimeManagement() {
                   車両番号
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  備考
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   登録日時
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -297,6 +300,11 @@ export default function DepartureTimeManagement() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {depTime.vehiclePlateNumber || '未割当'}
                     </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
+                      <div className="truncate" title={depTime.remarks || ''}>
+                        {depTime.remarks || '-'}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {depTime.createdAt.toLocaleString('ja-JP')}
                     </td>
@@ -315,7 +323,7 @@ export default function DepartureTimeManagement() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                     {selectedDate ? '選択した日付の出庫時間データがありません' : '出庫時間データがありません'}
                   </td>
                 </tr>

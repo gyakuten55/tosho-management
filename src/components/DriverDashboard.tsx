@@ -55,6 +55,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedTime, setSelectedTime] = useState<string>('08:00')
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | undefined>(undefined)
+  const [selectedRemarks, setSelectedRemarks] = useState<string>('')
 
   // データの初期化と定期更新
   useEffect(() => {
@@ -692,7 +693,8 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
           await DepartureTimeService.update(existingTime.id, {
             departureTime: selectedTime,
             vehicleId: selectedVehicle?.id,
-            vehiclePlateNumber: selectedVehicle?.plateNumber
+            vehiclePlateNumber: selectedVehicle?.plateNumber,
+            remarks: selectedRemarks.trim() || undefined
           })
         } else {
           // 新規作成
@@ -703,7 +705,8 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
             vehicleId: selectedVehicle?.id,
             vehiclePlateNumber: selectedVehicle?.plateNumber,
             departureDate: selectedDate,
-            departureTime: selectedTime
+            departureTime: selectedTime,
+            remarks: selectedRemarks.trim() || undefined
           })
         }
 
@@ -803,6 +806,20 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
               )}
             </div>
 
+            {/* 備考欄 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                備考
+              </label>
+              <textarea
+                value={selectedRemarks}
+                onChange={(e) => setSelectedRemarks(e.target.value)}
+                placeholder="備考があれば入力してください..."
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                rows={3}
+              />
+            </div>
+
             {/* 登録ボタン */}
             <button
               onClick={handleDepartureTimeSubmit}
@@ -838,6 +855,12 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                         </span>
                       )}
                     </div>
+                    {depTime.remarks && (
+                      <div className="mt-2 text-sm text-gray-600 bg-gray-100 rounded-lg p-2">
+                        <span className="font-medium">備考: </span>
+                        {depTime.remarks}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => handleDelete(depTime.id)}

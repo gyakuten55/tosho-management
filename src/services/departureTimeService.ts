@@ -89,6 +89,8 @@ export class DepartureTimeService {
         vehicle_plate_number: departureTime.vehiclePlateNumber || null,
         departure_date: departureTime.departureDate.toISOString().split('T')[0],
         departure_time: departureTime.departureTime
+        // NOTE: remarksは一時的にコメントアウト（Supabaseスキーマキャッシュの問題により）
+        // remarks: departureTime.remarks || null
       }
 
       const { data, error } = await supabase
@@ -99,6 +101,18 @@ export class DepartureTimeService {
 
       if (error) {
         throw new Error(`Failed to create departure time: ${error.message}`)
+      }
+
+      // 備考がある場合は別途UPDATEで保存（スキーマキャッシュ問題の回避）
+      if (departureTime.remarks && departureTime.remarks.trim() !== '') {
+        try {
+          await supabase
+            .from('departure_times')
+            .update({ remarks: departureTime.remarks })
+            .eq('id', data.id)
+        } catch (remarksError) {
+          console.warn('Failed to save remarks, but main data was saved:', remarksError)
+        }
       }
 
       return this.mapToDepartureTime(data)
@@ -127,6 +141,7 @@ export class DepartureTimeService {
       if (updates.vehiclePlateNumber !== undefined) {
         updateData.vehicle_plate_number = updates.vehiclePlateNumber || null
       }
+      // NOTE: remarksは別途UPDATEで処理するため、メインのupdateDataには含めない
 
       const { data, error } = await supabase
         .from('departure_times')
@@ -137,6 +152,18 @@ export class DepartureTimeService {
 
       if (error) {
         throw new Error(`Failed to update departure time: ${error.message}`)
+      }
+
+      // 備考の更新がある場合は別途UPDATEで処理（スキーマキャッシュ問題の回避）
+      if (updates.remarks !== undefined) {
+        try {
+          await supabase
+            .from('departure_times')
+            .update({ remarks: updates.remarks || null })
+            .eq('id', id)
+        } catch (remarksError) {
+          console.warn('Failed to update remarks, but main data was updated:', remarksError)
+        }
       }
 
       return this.mapToDepartureTime(data)
@@ -246,6 +273,7 @@ export class DepartureTimeService {
       vehiclePlateNumber: row.vehicle_plate_number || undefined,
       departureDate: new Date(row.departure_date),
       departureTime: row.departure_time,
+      remarks: row.remarks || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     }

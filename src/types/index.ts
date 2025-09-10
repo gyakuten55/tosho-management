@@ -574,6 +574,7 @@ export interface DepartureTime {
   vehiclePlateNumber?: string
   departureDate: Date
   departureTime: string // HH:mm形式
+  remarks?: string // 備考
   createdAt: Date
   updatedAt: Date
 }
