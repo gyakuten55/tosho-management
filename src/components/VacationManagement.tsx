@@ -90,7 +90,7 @@ export default function VacationManagement({
   const [quickUpdateLoading, setQuickUpdateLoading] = useState<Set<number>>(new Set()) // クイック更新中のドライバーID
   const [quickTeamFilter, setQuickTeamFilter] = useState<string>('all') // クイック設定セクション用のチームフィルター
   const [quickSortDirection, setQuickSortDirection] = useState<'asc' | 'desc'>('asc') // 勤務状態のソート方向（asc: 休暇→夜勤→出勤, desc: 出勤→夜勤→休暇）
-  const [specialNotes, setSpecialNotes] = useState<Map<number, { enabled: boolean; note: string }>>(new Map()) // ドライバーIDごとの特記事項管理
+  const [specialNotes, setSpecialNotes] = useState<Map<number, string>>(new Map()) // ドライバーIDごとの特記事項管理
   const [holidaySyncLoading, setHolidaySyncLoading] = useState(false) // 祝日同期ローディング状態
   const [holidays, setHolidays] = useState<Holiday[]>([]) // 祝日データ
 
@@ -128,10 +128,10 @@ export default function VacationManagement({
   const [debounceTimers, setDebounceTimers] = useState<Map<number, NodeJS.Timeout>>(new Map())
 
   // 特記事項管理用ヘルパー関数
-  const updateSpecialNote = (driverId: number, enabled: boolean, note: string = '') => {
+  const updateSpecialNote = (driverId: number, note: string = '') => {
     setSpecialNotes(prev => {
       const newMap = new Map(prev)
-      newMap.set(driverId, { enabled, note })
+      newMap.set(driverId, note)
       return newMap
     })
 
@@ -143,7 +143,7 @@ export default function VacationManagement({
 
     // 新しいタイマーを設定（500ms後に自動保存）
     const newTimer = setTimeout(() => {
-      saveSpecialNoteToDatabase(driverId, note, enabled)
+      saveSpecialNoteToDatabase(driverId, note, note.trim() !== '')
       setDebounceTimers(prev => {
         const newMap = new Map(prev)
         newMap.delete(driverId)
@@ -159,7 +159,7 @@ export default function VacationManagement({
   }
 
   const getSpecialNote = (driverId: number) => {
-    return specialNotes.get(driverId) || { enabled: false, note: '' }
+    return specialNotes.get(driverId) || ''
   }
 
   // エスケープキーでモーダルを閉じる
@@ -182,32 +182,28 @@ export default function VacationManagement({
   useEffect(() => {
     if (!selectedDate) return
     
-    setSpecialNotes(prevSpecialNotes => {
-      const newSpecialNotes = new Map<number, { enabled: boolean; note: string }>()
+    // 日付が変わった時は既存のデバウンスタイマーをクリア
+    debounceTimers.forEach((timer) => {
+      clearTimeout(timer)
+    })
+    setDebounceTimers(new Map())
+    
+    setSpecialNotes(() => {
+      const newSpecialNotes = new Map<number, string>()
       
-      // 選択された日付の特記事項のみを読み込み
+      // 選択された日付の特記事項のみを読み込み（データベース保存済みのもののみ）
       vacationRequests.forEach(request => {
         if (isSameDay(request.date, selectedDate)) {
           // データベースに保存済みの特記事項があればセット
           if (request.hasSpecialNote && request.specialNote) {
-            newSpecialNotes.set(request.driverId, {
-              enabled: true,
-              note: request.specialNote
-            })
-          }
-          // UI側で設定した特記事項も保持（データベース未保存でも維持）
-          else if (prevSpecialNotes.has(request.driverId)) {
-            const existing = prevSpecialNotes.get(request.driverId)
-            if (existing && existing.enabled) {
-              newSpecialNotes.set(request.driverId, existing)
-            }
+            newSpecialNotes.set(request.driverId, request.specialNote)
           }
         }
       })
       
       return newSpecialNotes
     })
-  }, [selectedDate])
+  }, [selectedDate, vacationRequests]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Props経由で設定が変更された場合の反映
   useEffect(() => {
@@ -1022,8 +1018,8 @@ export default function VacationManagement({
           return 6
         }
 
-        // 特記事項の有無を確認
-        const hasSpecialNote = hasRegistration.hasSpecialNote || false
+        // 特記事項の有無を確認（DB保存済みまたはUI側の状態）
+        const hasSpecialNote = hasRegistration.hasSpecialNote || getSpecialNote(driverId).trim() !== ''
 
         if (quickSortDirection === 'asc') {
           // 昇順: 休暇 → 休暇の特記 → 夜勤 → 出勤の特記 → 出勤
@@ -1141,13 +1137,11 @@ export default function VacationManagement({
 
       // 特記事項の情報を取得（既存の設定 or 現在のUI状態）
       const currentSpecialNote = getSpecialNote(driver.id)
-      const existingSpecialNote = existingRequest?.hasSpecialNote && existingRequest?.specialNote ? {
-        enabled: true,
-        note: existingRequest.specialNote
-      } : { enabled: false, note: '' }
+      const existingSpecialNote = existingRequest?.hasSpecialNote && existingRequest?.specialNote ? 
+        existingRequest.specialNote : ''
       
       // UI状態を優先し、なければ既存データを使用
-      const finalSpecialNote = currentSpecialNote.enabled || currentSpecialNote.note ? currentSpecialNote : existingSpecialNote
+      const finalSpecialNote = currentSpecialNote.trim() !== '' ? currentSpecialNote : existingSpecialNote
       
       const requestData = {
         driverId: driver.id,
@@ -1162,8 +1156,8 @@ export default function VacationManagement({
         status: 'approved' as const,
         requestDate: new Date(),
         isExternalDriver: driver.employeeId.startsWith('E'),
-        hasSpecialNote: finalSpecialNote.enabled,
-        specialNote: finalSpecialNote.enabled ? finalSpecialNote.note : undefined,
+        hasSpecialNote: finalSpecialNote.trim() !== '',
+        specialNote: finalSpecialNote.trim() !== '' ? finalSpecialNote : undefined,
         registeredBy: 'admin' as const
       }
 
@@ -2145,7 +2139,7 @@ export default function VacationManagement({
                           
                           return (
                             <div key={driver.id} className={`p-3 rounded-lg border ${
-                              getSpecialNote(driver.id).enabled 
+                              getSpecialNote(driver.id).trim() !== ''
                                 ? 'bg-yellow-50 border-yellow-200' 
                                 : 'bg-gray-50 border-gray-200'
                             }`}>
@@ -2153,8 +2147,8 @@ export default function VacationManagement({
                                 <div>
                                   <div className="flex items-center space-x-2">
                                     <p className="font-medium text-gray-900">{driver.name}</p>
-                                    {(currentStatus?.hasSpecialNote || getSpecialNote(driver.id).enabled) && (
-                                      <span className="text-yellow-600" title={currentStatus?.specialNote || getSpecialNote(driver.id).note}>
+                                    {(currentStatus?.hasSpecialNote || getSpecialNote(driver.id).trim() !== '') && (
+                                      <span className="text-yellow-600" title={currentStatus?.specialNote || getSpecialNote(driver.id)}>
                                         📝
                                       </span>
                                     )}
@@ -2189,17 +2183,6 @@ export default function VacationManagement({
                                   )}
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                  <div className="flex items-center space-x-1">
-                                    <label className="flex items-center space-x-1 text-xs">
-                                      <input
-                                        type="checkbox"
-                                        checked={getSpecialNote(driver.id).enabled}
-                                        onChange={(e) => updateSpecialNote(driver.id, e.target.checked, getSpecialNote(driver.id).note)}
-                                        className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
-                                      />
-                                      <span className="text-gray-700">特記</span>
-                                    </label>
-                                  </div>
                                   {quickUpdateLoading.has(driver.id) ? (
                                     <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
                                       更新中...
@@ -2240,17 +2223,15 @@ export default function VacationManagement({
                                   )}
                                 </div>
                               </div>
-                              {getSpecialNote(driver.id).enabled && (
-                                <div className="mt-3 pt-3 border-t border-gray-200">
-                                  <textarea
-                                    value={getSpecialNote(driver.id).note}
-                                    onChange={(e) => updateSpecialNote(driver.id, true, e.target.value)}
-                                    placeholder="特記事項を入力してください..."
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
-                                    rows={2}
-                                  />
-                                </div>
-                              )}
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <textarea
+                                  value={getSpecialNote(driver.id)}
+                                  onChange={(e) => updateSpecialNote(driver.id, e.target.value)}
+                                  placeholder="特記事項を入力してください..."
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
+                                  rows={2}
+                                />
+                              </div>
                             </div>
                           )
                         })}
@@ -2274,7 +2255,7 @@ export default function VacationManagement({
                               
                               return (
                                 <div key={driver.id} className={`p-3 rounded-lg border ${
-                                  getSpecialNote(driver.id).enabled 
+                                  getSpecialNote(driver.id).trim() !== ''
                                     ? 'bg-yellow-50 border-yellow-200' 
                                     : 'bg-gray-50 border-gray-200'
                                 }`}>
@@ -2282,8 +2263,8 @@ export default function VacationManagement({
                                     <div>
                                       <div className="flex items-center space-x-2">
                                         <p className="font-medium text-gray-900">{driver.name}</p>
-                                        {(currentStatus?.hasSpecialNote || getSpecialNote(driver.id).enabled) && (
-                                          <span className="text-yellow-600" title={currentStatus?.specialNote || getSpecialNote(driver.id).note}>
+                                        {(currentStatus?.hasSpecialNote || getSpecialNote(driver.id).trim() !== '') && (
+                                          <span className="text-yellow-600" title={currentStatus?.specialNote || getSpecialNote(driver.id)}>
                                             📝
                                           </span>
                                         )}
@@ -2318,17 +2299,6 @@ export default function VacationManagement({
                                       )}
                                     </div>
                                     <div className="flex items-center space-x-2">
-                                      <div className="flex items-center space-x-1">
-                                        <label className="flex items-center space-x-1 text-xs">
-                                          <input
-                                            type="checkbox"
-                                            checked={getSpecialNote(driver.id).enabled}
-                                            onChange={(e) => updateSpecialNote(driver.id, e.target.checked, getSpecialNote(driver.id).note)}
-                                            className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
-                                          />
-                                          <span className="text-gray-700">特記</span>
-                                        </label>
-                                      </div>
                                       {quickUpdateLoading.has(driver.id) ? (
                                         <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
                                           更新中...
@@ -2369,17 +2339,15 @@ export default function VacationManagement({
                                       )}
                                     </div>
                                   </div>
-                                  {getSpecialNote(driver.id).enabled && (
-                                    <div className="mt-3 pt-3 border-t border-gray-200">
-                                      <textarea
-                                        value={getSpecialNote(driver.id).note}
-                                        onChange={(e) => updateSpecialNote(driver.id, true, e.target.value)}
-                                        placeholder="特記事項を入力してください..."
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
-                                        rows={2}
-                                      />
-                                    </div>
-                                  )}
+                                  <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <textarea
+                                      value={getSpecialNote(driver.id)}
+                                      onChange={(e) => updateSpecialNote(driver.id, e.target.value)}
+                                      placeholder="特記事項を入力してください..."
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
+                                      rows={2}
+                                    />
+                                  </div>
                                 </div>
                               )
                             })}
