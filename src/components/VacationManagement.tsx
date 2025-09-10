@@ -1010,21 +1010,29 @@ export default function VacationManagement({
 
       // 勤務状態の優先順位を設定
       const getStatusPriority = (status: string, driverId: number) => {
-        // 特記事項の有無を確認
-        const hasSpecialNote = vacationRequests.find(req => 
+        // 未登録かどうかを確認
+        const hasRegistration = vacationRequests.find(req => 
           req.driverId === driverId && 
           isSameDay(req.date, selectedDate) &&
           req.id > 0
-        )?.hasSpecialNote || false
+        )
+
+        // 未登録の場合は一番下に
+        if (!hasRegistration) {
+          return 6
+        }
+
+        // 特記事項の有無を確認
+        const hasSpecialNote = hasRegistration.hasSpecialNote || false
 
         if (quickSortDirection === 'asc') {
           // 昇順: 休暇 → 休暇の特記 → 夜勤 → 出勤の特記 → 出勤
-          if (status === 'day_off') {
-            return hasSpecialNote ? 2 : 1  // 休暇の特記は2、休暇は1
+          if (status === 'working') {
+            return hasSpecialNote ? 4 : 5  // 出勤の特記は4、出勤は5
           } else if (status === 'night_shift') {
             return 3  // 夜勤は3
-          } else if (status === 'working') {
-            return hasSpecialNote ? 4 : 5  // 出勤の特記は4、出勤は5
+          } else if (status === 'day_off') {
+            return hasSpecialNote ? 2 : 1  // 休暇の特記は2、休暇は1
           }
           return 6
         } else {
@@ -1959,7 +1967,7 @@ export default function VacationManagement({
       {/* 休暇登録・削除フォームモーダル */}
       {showVacationForm && selectedDate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-7xl w-full max-h-[95vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
                     <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">
