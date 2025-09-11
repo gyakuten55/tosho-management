@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Clock, Download, Calendar, Search, Trash2, Edit3 } from 'lucide-react'
+import { addDays } from 'date-fns'
 import { DepartureTime } from '@/types'
 import { DepartureTimeService } from '@/services/departureTimeService'
 import Papa from 'papaparse'
@@ -9,7 +10,7 @@ import Papa from 'papaparse'
 export default function DepartureTimeManagement() {
   const [departureTimes, setDepartureTimes] = useState<DepartureTime[]>([])
   const [filteredDepartureTimes, setFilteredDepartureTimes] = useState<DepartureTime[]>([])
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(addDays(new Date(), 1))
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState<'date' | 'time' | 'driver'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')

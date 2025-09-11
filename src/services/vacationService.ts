@@ -13,12 +13,21 @@ export class VacationService {
     console.log('VacationService.getAll - Retrieving all vacation data using chunked approach')
 
     try {
+      // 動的に日付範囲を計算（過去3ヶ月から未来3ヶ月）
+      const today = getCurrentDate()
+      const startDate = new Date(today.getFullYear(), today.getMonth() - 3, 1)
+      const endDate = new Date(today.getFullYear(), today.getMonth() + 3 + 1, 0)
+      const startDateString = formatDateForDB(startDate)
+      const endDateString = formatDateForDB(endDate)
+      
+      console.log(`VacationService.getAll - Date range: ${startDateString} to ${endDateString}`)
+
       // まずデータ総数を取得
       const { count, error: countError } = await supabase
         .from('vacation_requests')
         .select('*', { count: 'exact', head: true })
-        .gte('date', '2025-09-01')
-        .lte('date', '2025-09-30')
+        .gte('date', startDateString)
+        .lte('date', endDateString)
 
       if (countError) {
         throw new Error(`Failed to count vacation requests: ${countError.message}`)
@@ -31,8 +40,8 @@ export class VacationService {
         const { data, error } = await supabase
           .from('vacation_requests')
           .select('*')
-          .gte('date', '2025-09-01')
-          .lte('date', '2025-09-30')
+          .gte('date', startDateString)
+          .lte('date', endDateString)
           .order('date', { ascending: false })
 
         if (error) {
@@ -50,8 +59,8 @@ export class VacationService {
       const { data: recentData, error: recentError } = await supabase
         .from('vacation_requests')
         .select('*')
-        .gte('date', '2025-09-01')
-        .lte('date', '2025-09-30')
+        .gte('date', startDateString)
+        .lte('date', endDateString)
         .order('date', { ascending: false })
         .limit(1000)
 
@@ -67,7 +76,7 @@ export class VacationService {
       const { data: olderData, error: olderError } = await supabase
         .from('vacation_requests')
         .select('*')
-        .gte('date', '2025-09-01')
+        .gte('date', startDateString)
         .lt('date', boundaryDate) // 境界日付より前のみ（重複回避）
         .order('date', { ascending: true })
 

@@ -94,7 +94,7 @@ export default function DriverVehicleInfo({
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Calendar className="h-4 w-4 text-gray-600" />
-              <span className="text-sm font-medium text-gray-600">点検日</span>
+              <span className="text-sm font-medium text-gray-600">車検起算日</span>
             </div>
             <p className="text-lg font-bold text-gray-900">
               {assignedVehicle.inspectionDate.toLocaleDateString('ja-JP')}
@@ -107,7 +107,7 @@ export default function DriverVehicleInfo({
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Wrench className="h-4 w-4 text-gray-600" />
-              <span className="text-sm font-medium text-gray-600">次回点検予定</span>
+              <span className="text-sm font-medium text-gray-600">次回車検予定</span>
             </div>
             <p className="text-lg font-bold text-gray-900">
               {getNextInspectionDate(assignedVehicle.inspectionDate).toLocaleDateString('ja-JP')}

@@ -305,7 +305,7 @@ export default function VehicleManagement({}: VehicleManagementProps) {
                   ドライバー・チーム
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  次回点検
+                  次回車検
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   車庫情報

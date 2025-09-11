@@ -31,7 +31,7 @@ import { DriverNotificationService } from '@/services/driverNotificationService'
 import { InspectionReservationService } from '@/services/inspectionReservationService'
 import { DepartureTimeService } from '@/services/departureTimeService'
 import { useAuth } from '@/contexts/AuthContext'
-import { isSameDay, differenceInDays } from 'date-fns'
+import { isSameDay, differenceInDays, addDays } from 'date-fns'
 
 interface DriverDashboardProps {
   onLogout: () => void
@@ -52,7 +52,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   const [allVacationRequests, setAllVacationRequests] = useState<VacationRequest[]>([])
   const [inspectionReservations, setInspectionReservations] = useState<InspectionReservation[]>([])
   const [departureTimes, setDepartureTimes] = useState<DepartureTime[]>([])
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(addDays(new Date(), 1))
   const [selectedTime, setSelectedTime] = useState<string>('08:00')
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | undefined>(undefined)
   const [selectedRemarks, setSelectedRemarks] = useState<string>('')

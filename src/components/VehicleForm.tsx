@@ -326,7 +326,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  点検日 <span className="text-red-500">*</span>
+                  車検起算日 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -335,7 +335,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
                   onChange={(e) => handleChange('inspectionDate', e.target.value)}
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  この日付を基準に3ヶ月ごとの点検日が自動計算されます（すべて同じ点検として扱われます）
+                  この日付を基準に3ヶ月ごとの車検日が自動計算されます（すべて同じ車検として扱われます）
                 </p>
               </div>
 
@@ -359,7 +359,7 @@ export default function VehicleForm({ vehicle, drivers = [], vehicles = [], onSa
 
               <div className="md:col-span-2">
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">点検日について</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">車検起算日について</h4>
                   <p className="text-sm text-blue-700">
                     • 通常点検: 3ヶ月ごとの定期点検として自動計算されます<br/>
                     • クレーン年次点検: クレーン車の場合、年次点検期限も別途管理されます
