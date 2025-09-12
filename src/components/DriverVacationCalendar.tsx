@@ -357,6 +357,19 @@ export default function DriverVacationCalendar({
     }
   }
 
+  const getStatusLabel = (workStatus: string) => {
+    switch (workStatus) {
+      case 'day_off':
+        return '休暇'
+      case 'night_shift':
+        return '夜勤'
+      case 'working':
+        return '出勤'
+      default:
+        return '未定'
+    }
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* ヘッダー */}
@@ -526,7 +539,7 @@ export default function DriverVacationCalendar({
                             {dayInfo.vacationRequest.hasSpecialNote && (
                               <AlertCircle className="h-3 w-3 mr-1 inline" />
                             )}
-                            📋 自分: 休暇中
+                            {getStatusIcon(dayInfo.vacationRequest.workStatus)} 自分: {getStatusLabel(dayInfo.vacationRequest.workStatus)}
                             {dayInfo.vacationRequest.hasSpecialNote && (
                               <span className="ml-1 text-xs font-bold">(要確認)</span>
                             )}
@@ -685,7 +698,7 @@ export default function DriverVacationCalendar({
                                handleVacationRequest(dayInfo)
                              }}>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs">休暇</span>
+                            <span className="text-xs">{getStatusLabel(dayInfo.vacationRequest.workStatus)}</span>
                             {dayInfo.canDelete && (
                               <X className="h-3 w-3 text-gray-600 hover:text-red-600" />
                             )}
