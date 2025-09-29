@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Calendar,
   Truck,
@@ -108,9 +108,11 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
   // Load data on component mount
   useEffect(() => {
-    const loadData = async () => {
+    const loadData = async (isInitial = true) => {
       try {
-        setLoading(true)
+        if (isInitial) {
+          setLoading(true)
+        }
         setError(null)
         
         const [vehiclesData, driversData, vacationData] = await Promise.all([
@@ -219,11 +221,22 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         console.error('Failed to load operation data:', err)
         setError('データの読み込みに失敗しました')
       } finally {
-        setLoading(false)
+        if (isInitial) {
+          setLoading(false)
+        }
       }
     }
     
-    loadData()
+    // 初回読み込み
+    loadData(true)
+
+    // 5秒間隔で更新（モーダルが開いていない時のみ）
+    const interval = setInterval(() => {
+      // Dynamic check for modals to avoid dependency array issues
+      loadData(false)
+    }, 5 * 1000) // 5秒間隔
+
+    return () => clearInterval(interval)
   }, [])
 
   // 稼働不可期間の期限チェック（定期実行）
@@ -645,9 +658,9 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   }
 
   // 車両乗り換え処理
-  const handleVehicleSwap = () => {
-    if (!swapDriverId || !swapOriginalVehicleId || !swapNewVehicleId || !swapReason) {
-      alert('すべての項目を入力してください')
+  const handleVehicleSwap = async () => {
+    if (!swapDriverId || !swapOriginalVehicleId || !swapNewVehicleId) {
+      alert('ドライバーと車両を選択してください')
       return
     }
 
@@ -655,7 +668,12 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     const originalVehicle = vehicles.find(v => v.id === swapOriginalVehicleId)
     const newVehicle = vehicles.find(v => v.id === swapNewVehicleId)
 
-    if (!driver || !originalVehicle || !newVehicle) return
+    if (!driver || !originalVehicle || !newVehicle) {
+      alert('選択されたドライバーまたは車両が見つかりません')
+      return
+    }
+
+    try {
 
     const newSwap: DailyVehicleSwap = {
       id: Date.now(),
@@ -666,11 +684,27 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       newVehicleId: swapNewVehicleId,
       newPlateNumber: newVehicle.plateNumber,
       swapTime: new Date(),
-      reason: swapReason,
+      reason: '車両乗り換え',
       status: 'active'
     }
 
-    setDailyVehicleSwaps(prev => [...prev, newSwap])
+      setDailyVehicleSwaps(prev => [...prev, newSwap])
+
+      // データベースで車両の担当者を更新
+      await VehicleService.update(swapOriginalVehicleId, { driver: undefined })
+      await VehicleService.update(swapNewVehicleId, { driver: driver.name })
+
+      // ドライバーの担当車両を更新
+      await DriverService.update(swapDriverId, { assignedVehicle: newVehicle.plateNumber })
+
+      // ローカル状態を更新
+      const updatedDrivers = drivers.map(d => {
+        if (d.id === swapDriverId) {
+          return { ...d, assignedVehicle: newVehicle.plateNumber }
+        }
+        return d
+      })
+      setDrivers(updatedDrivers)
     
     // 車両の割り当てを更新
     const updatedVehicles = vehicles.map(vehicle => {
@@ -683,16 +717,19 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       return vehicle
     })
     
-    setVehicles(updatedVehicles)
-    
-    // モーダルを閉じてリセット
-    setShowVehicleSwapModal(false)
-    setSwapDriverId(null)
-    setSwapOriginalVehicleId(null)
-    setSwapNewVehicleId(null)
-    setSwapReason('')
-    
-    alert(`${driver.name}の車両を${originalVehicle.plateNumber}から${newVehicle.plateNumber}に変更しました`)
+      setVehicles(updatedVehicles)
+
+      // モーダルを閉じてリセット
+      setShowVehicleSwapModal(false)
+      setSwapDriverId(null)
+      setSwapOriginalVehicleId(null)
+      setSwapNewVehicleId(null)
+
+      alert(`${driver.name}の車両を${originalVehicle.plateNumber}から${newVehicle.plateNumber}に変更しました`)
+    } catch (error) {
+      console.error('車両乗り換え処理でエラーが発生しました:', error)
+      alert('車両乗り換えの処理に失敗しました。もう一度お試しください。')
+    }
   }
 
   // 点検予約処理関数
@@ -1637,22 +1674,37 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   const today = new Date()
                   const nextMonth = addMonths(today, 1)
                   const monthAfterNext = addMonths(today, 2)
-                  
-                  return vehicles.filter(vehicle => {
+
+                  const inspectionVehicles = vehicles.filter(vehicle => {
+                    // 今後3ヶ月分の点検から、予約完了済みでない車両のみを抽出
                     const inspections = getAllInspectionDates(
                       vehicle.inspectionDate,
                       vehicle.craneAnnualInspectionDate
-                    ).map(item => item.date)
-                    
-                    return inspections.some(inspectionDate => {
-                      const date = new Date(inspectionDate)
-                      return (
+                    )
+
+                    const upcomingInspections = inspections.filter(inspection => {
+                      const date = new Date(inspection.date)
+                      const isInThreeMonths = (
                         (date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()) ||
                         (date.getMonth() === nextMonth.getMonth() && date.getFullYear() === nextMonth.getFullYear()) ||
                         (date.getMonth() === monthAfterNext.getMonth() && date.getFullYear() === monthAfterNext.getFullYear())
                       )
+
+                      if (!isInThreeMonths) return false
+
+                      // この特定の点検期限に対して予約完了していないかチェック
+                      const isReserved = Object.values(inspectionBookings).some(booking =>
+                        booking.vehicleId === vehicle.id &&
+                        booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
+                        booking.isReservationCompleted
+                      )
+                      return !isReserved
                     })
-                  }).length
+
+                    return upcomingInspections.length > 0
+                  })
+
+                  return inspectionVehicles.length
                 })()}台
               </span>
             </div>
@@ -1808,32 +1860,6 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
           </div>
 
           <div className="p-6">
-            {/* 凡例 */}
-            <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-orange-500 rounded"></div>
-                <span className="text-sm text-gray-700">休暇により未稼働</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
-                <span className="text-sm text-gray-700">点検中</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-red-500 rounded"></div>
-                <span className="text-sm text-gray-700">修理中</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-purple-500 rounded"></div>
-                <span className="text-sm text-gray-700">点検期限</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-green-500 rounded"></div>
-                <span className="text-sm text-gray-700">点検予約完了</span>
-              </div>
-              <div className="text-sm text-gray-600">
-                ※稼働中の車両は表示されません
-              </div>
-            </div>
 
             {/* 曜日ヘッダー */}
             <div className="grid grid-cols-7 border-b border-gray-200">
@@ -3289,13 +3315,32 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                 </label>
                 <select
                   value={swapDriverId || ''}
-                  onChange={(e) => setSwapDriverId(e.target.value ? parseInt(e.target.value) : null)}
+                  onChange={(e) => {
+                    const selectedDriverId = e.target.value ? parseInt(e.target.value) : null
+                    setSwapDriverId(selectedDriverId)
+
+                    // ドライバー選択時に現在の担当車両を自動設定
+                    if (selectedDriverId) {
+                      const selectedDriver = drivers.find(d => d.id === selectedDriverId)
+                      if (selectedDriver?.assignedVehicle) {
+                        const assignedVehicle = vehicles.find(v => v.plateNumber === selectedDriver.assignedVehicle)
+                        if (assignedVehicle) {
+                          setSwapOriginalVehicleId(assignedVehicle.id)
+                        }
+                      }
+                    } else {
+                      setSwapOriginalVehicleId(null)
+                    }
+
+                    // 新しい車両選択もリセット
+                    setSwapNewVehicleId(null)
+                  }}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">ドライバーを選択してください</option>
-                  {drivers.filter(d => !d.employeeId.startsWith('E')).map(driver => (
+                  {drivers.filter(d => !d.employeeId.startsWith('E') && d.assignedVehicle).map(driver => (
                     <option key={driver.id} value={driver.id}>
-                      {driver.name} ({driver.team})
+                      {driver.name} ({driver.team}) - 現在: {driver.assignedVehicle}
                     </option>
                   ))}
                 </select>
@@ -3327,34 +3372,20 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   value={swapNewVehicleId || ''}
                   onChange={(e) => setSwapNewVehicleId(e.target.value ? parseInt(e.target.value) : null)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!swapOriginalVehicleId}
                 >
                   <option value="">新しい車両を選択してください</option>
-                  {vehicles.filter(v => !v.driver || v.id === swapOriginalVehicleId).map(vehicle => (
+                  {vehicles.filter(v => {
+                    // 担当者のいない車両のみ表示（選択されたドライバーの現在の車両は除外）
+                    return !v.driver && v.id !== swapOriginalVehicleId
+                  }).map(vehicle => (
                     <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.plateNumber} {vehicle.driver ? `(現在: ${vehicle.driver})` : '(空車)'}
+                      {vehicle.plateNumber} - {vehicle.model} ({vehicle.garage})
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  乗り換え理由 *
-                </label>
-                <select
-                  value={swapReason}
-                  onChange={(e) => setSwapReason(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">理由を選択してください</option>
-                  <option value="車両故障">車両故障</option>
-                  <option value="点検・修理">点検・修理</option>
-                  <option value="ドライバー要望">ドライバー要望</option>
-                  <option value="効率向上">効率向上</option>
-                  <option value="緊急対応">緊急対応</option>
-                  <option value="その他">その他</option>
-                </select>
-              </div>
 
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-sm text-blue-700">
@@ -3373,7 +3404,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               </button>
               <button
                 onClick={handleVehicleSwap}
-                disabled={!swapDriverId || !swapOriginalVehicleId || !swapNewVehicleId || !swapReason}
+                disabled={!swapDriverId || !swapOriginalVehicleId || !swapNewVehicleId}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RotateCcw className="h-4 w-4" />

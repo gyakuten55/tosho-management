@@ -175,8 +175,18 @@ export default function VacationManagement({
   }, [selectedWorkStatus])
 
   useEffect(() => {
-    loadVacationData()
-  }, [])
+    // 初回読み込み
+    loadVacationData(true)
+
+    // 5秒間隔で更新（フォームやモーダルが開いていない時のみ）
+    const interval = setInterval(() => {
+      if (!showVacationForm) {
+        loadVacationData(false)
+      }
+    }, 5 * 1000) // 5秒間隔
+
+    return () => clearInterval(interval)
+  }, [showVacationForm])
 
   // 既存のvacationRequestsから特記事項をspecialNotesに読み込む（選択日が変更された時のみ）
   useEffect(() => {
@@ -223,9 +233,11 @@ export default function VacationManagement({
     }
   }, [vacationSettings])
 
-  const loadVacationData = async () => {
+  const loadVacationData = async (isInitial = true) => {
     try {
-      setLoading(true)
+      if (isInitial) {
+        setLoading(true)
+      }
       setError(null)
       
       // Load all required data in parallel
@@ -238,26 +250,30 @@ export default function VacationManagement({
         NotificationService.getAll()
       ])
       
-      console.log('VacationManagement - loadVacationData - Total requests:', requests.length)
-      console.log('VacationManagement - First 5 requests:', requests.slice(0, 5).map(req => ({
-        id: req.id,
-        driverName: req.driverName,
-        date: req.date.toISOString(),
-        formattedDate: formatDateForDB(req.date),
-        workStatus: req.workStatus
-      })))
+      if (isInitial) {
+        console.log('VacationManagement - loadVacationData - Total requests:', requests.length)
+        console.log('VacationManagement - First 5 requests:', requests.slice(0, 5).map(req => ({
+          id: req.id,
+          driverName: req.driverName,
+          date: req.date.toISOString(),
+          formattedDate: formatDateForDB(req.date),
+          workStatus: req.workStatus
+        })))
+      }
 
       // 重複データを排除 - 同じdriver_id + dateの組み合わせで最新のレコード（最大のid）のみ保持
       const debugDate = process.env.NEXT_PUBLIC_DEBUG_DATE || formatDateForDB(getCurrentDate())
-      console.log('VacationManagement - Before deduplication:', {
-        totalRequests: requests.length,
-        debugDateRequests: requests.filter(req => formatDateForDB(req.date) === debugDate).map(req => ({
-          id: req.id,
-          driverName: req.driverName,
-          date: formatDateForDB(req.date),
-          workStatus: req.workStatus
-        }))
-      })
+      if (isInitial) {
+        console.log('VacationManagement - Before deduplication:', {
+          totalRequests: requests.length,
+          debugDateRequests: requests.filter(req => formatDateForDB(req.date) === debugDate).map(req => ({
+            id: req.id,
+            driverName: req.driverName,
+            date: formatDateForDB(req.date),
+            workStatus: req.workStatus
+          }))
+        })
+      }
       
       const uniqueRequests = requests.reduce((acc, current) => {
         const key = `${current.driverId}|${formatDateForDB(current.date)}`
@@ -271,43 +287,47 @@ export default function VacationManagement({
       
       const deduplicatedRequests = Array.from(uniqueRequests.values())
       
-      console.log('VacationManagement - After deduplication:', {
-        totalRequests: deduplicatedRequests.length,
-        debugDateRequests: deduplicatedRequests.filter(req => formatDateForDB(req.date) === debugDate).map(req => ({
-          id: req.id,
-          driverName: req.driverName,
-          date: formatDateForDB(req.date),
-          workStatus: req.workStatus
-        }))
-      })
-      
-      if (deduplicatedRequests.length !== requests.length) {
-        console.log(`重複データを排除しました: ${requests.length}件 → ${deduplicatedRequests.length}件`)
+      if (isInitial) {
+        console.log('VacationManagement - After deduplication:', {
+          totalRequests: deduplicatedRequests.length,
+          debugDateRequests: deduplicatedRequests.filter(req => formatDateForDB(req.date) === debugDate).map(req => ({
+            id: req.id,
+            driverName: req.driverName,
+            date: formatDateForDB(req.date),
+            workStatus: req.workStatus
+          }))
+        })
+
+        if (deduplicatedRequests.length !== requests.length) {
+          console.log(`重複データを排除しました: ${requests.length}件 → ${deduplicatedRequests.length}件`)
+        }
       }
 
       // 今日の日付のデータを検証（環境変数を考慮）
       const today = getCurrentDate()
       const todayString = formatDateForDB(today)
       const todayRequests = deduplicatedRequests.filter(req => formatDateForDB(req.date) === todayString)
-      
-      console.log('VacationManagement - Today validation:', {
-        today: todayString,
-        todayRequestsCount: todayRequests.length,
-        todayRequests: todayRequests.map(req => ({
+
+      if (isInitial) {
+        console.log('VacationManagement - Today validation:', {
+          today: todayString,
+          todayRequestsCount: todayRequests.length,
+          todayRequests: todayRequests.map(req => ({
+            id: req.id,
+            driverName: req.driverName,
+            workStatus: req.workStatus
+          }))
+        })
+
+        console.log('VacationManagement - Final deduplicated requests count:', deduplicatedRequests.length)
+        console.log('VacationManagement - Final deduplicated requests (first 5):', deduplicatedRequests.slice(0, 5).map(req => ({
           id: req.id,
           driverName: req.driverName,
+          date: req.date.toISOString(),
+          formattedDate: formatDateForDB(req.date),
           workStatus: req.workStatus
-        }))
-      })
-
-      console.log('VacationManagement - Final deduplicated requests count:', deduplicatedRequests.length)
-      console.log('VacationManagement - Final deduplicated requests (first 5):', deduplicatedRequests.slice(0, 5).map(req => ({
-        id: req.id,
-        driverName: req.driverName,
-        date: req.date.toISOString(),
-        formattedDate: formatDateForDB(req.date),
-        workStatus: req.workStatus
-      })))
+        })))
+      }
 
       setVacationRequests(deduplicatedRequests)
       setVacationSettings(settings)
@@ -319,7 +339,9 @@ export default function VacationManagement({
       console.error('Failed to load vacation data:', err)
       setError('休暇データの読み込みに失敗しました')
     } finally {
-      setLoading(false)
+      if (isInitial) {
+        setLoading(false)
+      }
     }
   }
 
@@ -843,8 +865,8 @@ export default function VacationManagement({
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-lg text-red-600">{error}</div>
-        <button 
-          onClick={loadVacationData}
+        <button
+          onClick={() => loadVacationData(true)}
           className="ml-4 btn-primary"
         >
           再試行
@@ -1057,7 +1079,7 @@ export default function VacationManagement({
   }
 
   // クイック勤務状態更新処理（ドライバー名の横のボタン用）
-  const handleQuickStatusUpdate = async (driverId: number, workStatus: 'working' | 'day_off' | 'night_shift') => {
+  const handleQuickStatusUpdate = async (driverId: number, workStatus: 'day_off' | 'night_shift') => {
     if (!selectedDate) return
 
     // 既存の勤務状態設定があるかチェック（ドライバー登録の確認用）
@@ -1070,7 +1092,7 @@ export default function VacationManagement({
     // ドライバーが登録した勤務状態を変更する場合は確認アラート
     if (existingDriverRequest && existingDriverRequest.registeredBy === 'driver') {
       const driverName = drivers.find(d => d.id === driverId)?.name || 'ドライバー'
-      const statusText = workStatus === 'day_off' ? '休暇' : workStatus === 'night_shift' ? '夜勤' : '出勤'
+      const statusText = workStatus === 'day_off' ? '休暇' : '夜勤'
       const currentStatusText = existingDriverRequest.workStatus === 'day_off' ? '休暇' : 
                                 existingDriverRequest.workStatus === 'night_shift' ? '夜勤' : '出勤'
       
@@ -1925,10 +1947,6 @@ export default function VacationManagement({
               {holidaySyncLoading ? '同期中...' : '祝日データ同期'}
             </span>
           </button>
-          <div className="flex items-center space-x-2 bg-green-50 px-3 py-2 rounded-lg">
-            <Smartphone className="h-4 w-4 text-green-600" />
-            <span className="text-sm text-green-700">プッシュ通知対応</span>
-          </div>
         </div>
       </div>
 
@@ -1961,7 +1979,7 @@ export default function VacationManagement({
       {/* 休暇登録・削除フォームモーダル */}
       {showVacationForm && selectedDate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-7xl w-full max-h-[95vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-[90rem] w-full max-h-[95vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
                     <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -1980,10 +1998,10 @@ export default function VacationManagement({
               </div>
       </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-8 space-y-8">
               {/* 祝日チーム一括設定 */}
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-3">祝日チーム一括設定</h4>
+              <div className="bg-gray-50 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-200">祝日チーム一括設定</h4>
                 <div className="mb-4">
                   <p className="text-sm text-gray-600 mb-3">
                     祝日チーム（A〜G）単位で一括して出勤・休暇を設定できます
@@ -1997,25 +2015,18 @@ export default function VacationManagement({
                       )
                       
                       return (
-                        <div key={team} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                          <div className="text-center mb-2">
-                            <span className="font-bold text-lg text-gray-900">{team.replace('祝日', '').replace('チーム', '')}</span>
-                            <p className="text-xs text-gray-600">{teamDrivers.length}人</p>
+                        <div key={team} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow">
+                          <div className="text-center mb-3">
+                            <span className="font-bold text-xl text-gray-900">{team.replace('祝日', '').replace('チーム', '')}</span>
+                            <p className="text-sm text-gray-500 mt-1">{teamDrivers.length}人</p>
                           </div>
-                          <div className="space-y-1">
-                            <button
-                              onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'working')}
-                              className="w-full text-xs py-1 px-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                              disabled={teamDrivers.length === 0}
-                            >
-                              出勤
-                            </button>
+                          <div>
                             <button
                               onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'day_off')}
-                              className="w-full text-xs py-1 px-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                              className="w-full py-3 px-4 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={teamDrivers.length === 0}
                             >
-                              休暇
+                              休暇設定
                             </button>
                           </div>
                         </div>
@@ -2026,8 +2037,8 @@ export default function VacationManagement({
               </div>
 
               {/* 全員一括設定ボタン */}
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-3">全員一括設定</h4>
+              <div className="bg-gray-50 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-200">全員一括設定</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => handleBulkWorkStatus('day_off', `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}に全員を休暇に設定しますか？\n\n※ 既存の設定はすべて上書きされます。`)}
@@ -2038,12 +2049,12 @@ export default function VacationManagement({
                     <span>全員休暇</span>
                   </button>
                   <button
-                    onClick={() => handleBulkWorkStatus('working', `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}に全員を出勤に設定しますか？\n\n※ 既存の設定はすべて削除されます。`)}
-                    className="flex items-center justify-center space-x-2 py-3 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                    onClick={() => handleBulkWorkStatus('working', `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}の全員の勤務状態をリセット（出勤）しますか？\n\n※ 既存の設定はすべて削除されます。`)}
+                    className="flex items-center justify-center space-x-2 py-3 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
                     disabled={drivers.length === 0}
                   >
-                    <CheckCircle className="h-5 w-5" />
-                    <span>全員出勤</span>
+                    <CheckCircle className="h-5 w-5 text-white" />
+                    <span className="text-white">全員リセット</span>
                   </button>
                 </div>
                 {drivers.length === 0 && (
@@ -2055,9 +2066,9 @@ export default function VacationManagement({
 
 
               {/* クイック勤務状態設定 */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-md font-semibold text-gray-900">全ドライバー勤務状態設定</h4>
+              <div className="bg-gray-50 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                  <h4 className="text-lg font-semibold text-gray-900">全ドライバー勤務状態設定</h4>
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center space-x-2">
                       <label className="text-sm text-gray-700">チーム:</label>
@@ -2128,7 +2139,7 @@ export default function VacationManagement({
                               <h5 className="text-sm font-medium text-gray-700 mb-2 border-b border-gray-200 pb-1">
                                 {team} ({teamDrivers.length}人)
                               </h5>
-                              <div className="space-y-2">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {sortedTeamDrivers.map(driver => {
                           // 現在のドライバーの勤務状態を取得
                           const currentStatus = vacationRequests.find(req => 
@@ -2138,10 +2149,10 @@ export default function VacationManagement({
                           )
                           
                           return (
-                            <div key={driver.id} className={`p-3 rounded-lg border ${
+                            <div key={driver.id} className={`p-4 rounded-xl border shadow-sm transition-shadow hover:shadow-md ${
                               getSpecialNote(driver.id).trim() !== ''
-                                ? 'bg-yellow-50 border-yellow-200' 
-                                : 'bg-gray-50 border-gray-200'
+                                ? 'bg-yellow-50 border-yellow-200'
+                                : 'bg-white border-gray-200'
                             }`}>
                               <div className="flex items-center justify-between">
                                 <div>
@@ -2155,26 +2166,24 @@ export default function VacationManagement({
                                   </div>
                                   <p className="text-sm text-gray-600">
                                     {driver.employeeId}
-                                    {currentStatus && (
-                                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
-                                        currentStatus.workStatus === 'day_off' 
-                                          ? 'bg-red-100 text-red-800'
-                                          : currentStatus.workStatus === 'night_shift'
-                                          ? 'bg-blue-100 text-blue-800'
-                                          : 'bg-green-100 text-green-800'
-                                      }`}>
-                                        <span>現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
-                                               currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
-                                        {currentStatus.registeredBy === 'driver' && (
-                                          <span 
-                                            className="inline-flex items-center text-xs" 
-                                            title="ドライバーが登録した勤務状態"
-                                          >
-                                            👤
-                                          </span>
-                                        )}
-                                      </span>
-                                    )}
+                                    <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
+                                      currentStatus?.workStatus === 'day_off'
+                                        ? 'bg-red-100 text-red-800'
+                                        : currentStatus?.workStatus === 'night_shift'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : 'bg-green-100 text-green-800'
+                                    }`}>
+                                      <span>現在: {currentStatus?.workStatus === 'day_off' ? '休暇' :
+                                             currentStatus?.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
+                                      {currentStatus?.registeredBy === 'driver' && (
+                                        <span
+                                          className="inline-flex items-center text-xs"
+                                          title="ドライバーが登録した勤務状態"
+                                        >
+                                          👤
+                                        </span>
+                                      )}
+                                    </span>
                                   </p>
                                   {currentStatus?.specialNote && (
                                     <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">
@@ -2182,39 +2191,29 @@ export default function VacationManagement({
                                     </p>
                                   )}
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-3">
                                   {quickUpdateLoading.has(driver.id) ? (
-                                    <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
+                                    <div className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600 font-medium">
                                       更新中...
                                     </div>
                                   ) : (
                                     <>
                                       <button
-                                        onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
-                                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                          currentStatus?.workStatus === 'working' 
-                                            ? 'bg-green-600 text-white font-medium'
-                                            : 'bg-green-100 hover:bg-green-200 text-green-800'
-                                        }`}
-                                      >
-                                        出勤
-                                      </button>
-                                      <button
                                         onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
-                                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                          currentStatus?.workStatus === 'day_off' 
-                                            ? 'bg-red-600 text-white font-medium'
-                                            : 'bg-red-100 hover:bg-red-200 text-red-800'
+                                        className={`px-4 py-2 text-sm rounded-lg font-medium transition-all ${
+                                          currentStatus?.workStatus === 'day_off'
+                                            ? 'bg-red-600 text-white shadow-md'
+                                            : 'bg-red-100 hover:bg-red-200 text-red-800 hover:shadow-sm'
                                         }`}
                                       >
                                         休暇
                                       </button>
                                       <button
                                         onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
-                                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                          currentStatus?.workStatus === 'night_shift' 
-                                            ? 'bg-blue-600 text-white font-medium'
-                                            : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
+                                        className={`px-4 py-2 text-sm rounded-lg font-medium transition-all ${
+                                          currentStatus?.workStatus === 'night_shift'
+                                            ? 'bg-blue-600 text-white shadow-md'
+                                            : 'bg-blue-100 hover:bg-blue-200 text-blue-800 hover:shadow-sm'
                                         }`}
                                       >
                                         夜勤
@@ -2244,7 +2243,7 @@ export default function VacationManagement({
                         const sortedDrivers = sortDriversByWorkStatus(filteredDrivers, selectedDate)
                         
                         return (
-                          <div className="space-y-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {sortedDrivers.map(driver => {
                               // 現在のドライバーの勤務状態を取得
                               const currentStatus = vacationRequests.find(req => 
@@ -2254,10 +2253,10 @@ export default function VacationManagement({
                               )
                               
                               return (
-                                <div key={driver.id} className={`p-3 rounded-lg border ${
+                                <div key={driver.id} className={`p-4 rounded-xl border shadow-sm transition-shadow hover:shadow-md ${
                                   getSpecialNote(driver.id).trim() !== ''
-                                    ? 'bg-yellow-50 border-yellow-200' 
-                                    : 'bg-gray-50 border-gray-200'
+                                    ? 'bg-yellow-50 border-yellow-200'
+                                    : 'bg-white border-gray-200'
                                 }`}>
                                   <div className="flex items-center justify-between">
                                     <div>
@@ -2271,26 +2270,24 @@ export default function VacationManagement({
                                       </div>
                                       <p className="text-sm text-gray-600">
                                         {driver.employeeId}
-                                        {currentStatus && (
-                                          <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
-                                            currentStatus.workStatus === 'day_off' 
-                                              ? 'bg-red-100 text-red-800'
-                                              : currentStatus.workStatus === 'night_shift'
-                                              ? 'bg-blue-100 text-blue-800'
-                                              : 'bg-green-100 text-green-800'
-                                          }`}>
-                                            <span>現在: {currentStatus.workStatus === 'day_off' ? '休暇' : 
-                                                   currentStatus.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
-                                            {currentStatus.registeredBy === 'driver' && (
-                                              <span 
-                                                className="inline-flex items-center text-xs" 
-                                                title="ドライバーが登録した勤務状態"
-                                              >
-                                                👤
-                                              </span>
-                                            )}
-                                          </span>
-                                        )}
+                                        <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
+                                          currentStatus?.workStatus === 'day_off'
+                                            ? 'bg-red-100 text-red-800'
+                                            : currentStatus?.workStatus === 'night_shift'
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : 'bg-green-100 text-green-800'
+                                        }`}>
+                                          <span>現在: {currentStatus?.workStatus === 'day_off' ? '休暇' :
+                                                 currentStatus?.workStatus === 'night_shift' ? '夜勤' : '出勤'}</span>
+                                          {currentStatus?.registeredBy === 'driver' && (
+                                            <span
+                                              className="inline-flex items-center text-xs"
+                                              title="ドライバーが登録した勤務状態"
+                                            >
+                                              👤
+                                            </span>
+                                          )}
+                                        </span>
                                       </p>
                                       {currentStatus?.specialNote && (
                                         <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">
@@ -2298,39 +2295,29 @@ export default function VacationManagement({
                                         </p>
                                       )}
                                     </div>
-                                    <div className="flex items-center space-x-2">
+                                    <div className="flex items-center space-x-3">
                                       {quickUpdateLoading.has(driver.id) ? (
-                                        <div className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600">
+                                        <div className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600 font-medium">
                                           更新中...
                                         </div>
                                       ) : (
                                         <>
                                           <button
-                                            onClick={() => handleQuickStatusUpdate(driver.id, 'working')}
-                                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                              currentStatus?.workStatus === 'working' 
-                                                ? 'bg-green-600 text-white font-medium'
-                                                : 'bg-green-100 hover:bg-green-200 text-green-800'
-                                            }`}
-                                          >
-                                            出勤
-                                          </button>
-                                          <button
                                             onClick={() => handleQuickStatusUpdate(driver.id, 'day_off')}
-                                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                              currentStatus?.workStatus === 'day_off' 
-                                                ? 'bg-red-600 text-white font-medium'
-                                                : 'bg-red-100 hover:bg-red-200 text-red-800'
+                                            className={`px-4 py-2 text-sm rounded-lg font-medium transition-all ${
+                                              currentStatus?.workStatus === 'day_off'
+                                                ? 'bg-red-600 text-white shadow-md'
+                                                : 'bg-red-100 hover:bg-red-200 text-red-800 hover:shadow-sm'
                                             }`}
                                           >
                                             休暇
                                           </button>
                                           <button
                                             onClick={() => handleQuickStatusUpdate(driver.id, 'night_shift')}
-                                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                              currentStatus?.workStatus === 'night_shift' 
-                                                ? 'bg-blue-600 text-white font-medium'
-                                                : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
+                                            className={`px-4 py-2 text-sm rounded-lg font-medium transition-all ${
+                                              currentStatus?.workStatus === 'night_shift'
+                                                ? 'bg-blue-600 text-white shadow-md'
+                                                : 'bg-blue-100 hover:bg-blue-200 text-blue-800 hover:shadow-sm'
                                             }`}
                                           >
                                             夜勤
