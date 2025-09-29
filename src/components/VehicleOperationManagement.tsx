@@ -28,7 +28,8 @@ import {
   Edit3,
   ClipboardList,
   Trash2,
-  Archive
+  Archive,
+  Search
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { ja } from 'date-fns/locale'
@@ -101,7 +102,14 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   
   // 点検予約管理用状態（特定の点検期限日単位で管理）
   const [inspectionBookings, setInspectionBookings] = useState<{[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}}>({})
-  
+
+  // 点検予約リスト検索用状態
+  const [searchDeadlineFrom, setSearchDeadlineFrom] = useState('')
+  const [searchDeadlineTo, setSearchDeadlineTo] = useState('')
+  const [searchImplementationFrom, setSearchImplementationFrom] = useState('')
+  const [searchImplementationTo, setSearchImplementationTo] = useState('')
+  const [searchVehiclePlate, setSearchVehiclePlate] = useState('')
+
   // 一時的車両割り当て用状態
   const [showTempAssignModal, setShowTempAssignModal] = useState(false)
   const [tempAssignDriverId, setTempAssignDriverId] = useState<number | null>(null)
@@ -2719,13 +2727,53 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         }
       })
     
-    const reservationList = Array.from(uniqueReservations.values())
+    let reservationList = Array.from(uniqueReservations.values())
       .sort((a, b) => {
         if (a.reservationDate && b.reservationDate) {
           return a.reservationDate.getTime() - b.reservationDate.getTime()
         }
         return 0
       })
+
+    // 検索フィルターを適用
+    if (searchDeadlineFrom || searchDeadlineTo || searchImplementationFrom || searchImplementationTo || searchVehiclePlate) {
+      reservationList = reservationList.filter((item) => {
+        // 車両番号検索
+        if (searchVehiclePlate && !item.vehicle.plateNumber.toLowerCase().includes(searchVehiclePlate.toLowerCase())) {
+          return false
+        }
+
+        // 点検期限日検索
+        if (searchDeadlineFrom) {
+          const deadlineFromDate = new Date(searchDeadlineFrom + 'T00:00:00')
+          if (item.inspectionDeadline < deadlineFromDate) {
+            return false
+          }
+        }
+        if (searchDeadlineTo) {
+          const deadlineToDate = new Date(searchDeadlineTo + 'T23:59:59')
+          if (item.inspectionDeadline > deadlineToDate) {
+            return false
+          }
+        }
+
+        // 点検実施日検索
+        if (searchImplementationFrom && item.reservationDate) {
+          const implementationFromDate = new Date(searchImplementationFrom + 'T00:00:00')
+          if (item.reservationDate < implementationFromDate) {
+            return false
+          }
+        }
+        if (searchImplementationTo && item.reservationDate) {
+          const implementationToDate = new Date(searchImplementationTo + 'T23:59:59')
+          if (item.reservationDate > implementationToDate) {
+            return false
+          }
+        }
+
+        return true
+      })
+    }
 
 
     return (
@@ -2739,6 +2787,96 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
             <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
               {reservationList.length}件の予約
             </span>
+          </div>
+
+          {/* 検索フィルター */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-medium text-gray-900 flex items-center">
+                <Search className="h-4 w-4 mr-2" />
+                検索・フィルター
+              </h4>
+              <button
+                onClick={() => {
+                  setSearchDeadlineFrom('')
+                  setSearchDeadlineTo('')
+                  setSearchImplementationFrom('')
+                  setSearchImplementationTo('')
+                  setSearchVehiclePlate('')
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                クリア
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* 車両番号検索 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  車両番号
+                </label>
+                <input
+                  type="text"
+                  value={searchVehiclePlate}
+                  onChange={(e) => setSearchVehiclePlate(e.target.value)}
+                  placeholder="車両番号を入力"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* 点検期限日（開始） */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  点検期限（開始）
+                </label>
+                <input
+                  type="date"
+                  value={searchDeadlineFrom}
+                  onChange={(e) => setSearchDeadlineFrom(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* 点検期限日（終了） */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  点検期限（終了）
+                </label>
+                <input
+                  type="date"
+                  value={searchDeadlineTo}
+                  onChange={(e) => setSearchDeadlineTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* 点検実施日（開始） */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  実施日（開始）
+                </label>
+                <input
+                  type="date"
+                  value={searchImplementationFrom}
+                  onChange={(e) => setSearchImplementationFrom(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* 点検実施日（終了） */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  実施日（終了）
+                </label>
+                <input
+                  type="date"
+                  value={searchImplementationTo}
+                  onChange={(e) => setSearchImplementationTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
           </div>
 
           {reservationList.length === 0 ? (
