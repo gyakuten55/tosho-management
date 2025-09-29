@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { DriverNotification } from '@/types'
 import { Database } from '@/types/supabase'
+import { format } from 'date-fns'
 
 type DriverNotificationRow = Database['public']['Tables']['driver_notifications']['Row']
 type DriverNotificationInsert = Database['public']['Tables']['driver_notifications']['Insert']
@@ -204,7 +205,7 @@ export class DriverNotificationService {
       employee_id: employeeId || '',
       type: 'vehicle_inspection',
       title: '車両点検のお知らせ',
-      message: `担当車両 ${vehiclePlateNumber} の点検期限が近づいています。期限日: ${inspectionDate.toLocaleDateString('ja-JP')}`,
+      message: `担当車両 ${vehiclePlateNumber} の点検期限が近づいています。期限日: ${format(inspectionDate, 'yyyy/M/d')}`,
       priority: 'medium',
       is_read: false,
       action_required: true,
@@ -240,7 +241,7 @@ export class DriverNotificationService {
       employee_id: employeeId || '',
       type: 'inspection_reserved',
       title: '点検予約完了のお知らせ',
-      message: `担当車両 ${vehiclePlateNumber} の点検が ${reservedDate.toLocaleDateString('ja-JP')} に予約されました。`,
+      message: `担当車両 ${vehiclePlateNumber} の点検が ${format(reservedDate, 'yyyy/M/d')} に予約されました。`,
       priority: 'medium',
       is_read: false,
       action_required: false,
@@ -278,7 +279,7 @@ export class DriverNotificationService {
       employee_id: employeeId || '',
       type: 'inspection_reserved',
       title: '点検予約完了のお知らせ',
-      message: `担当車両 ${vehiclePlateNumber} の点検が ${reservedDate.toLocaleDateString('ja-JP')} に予約されました。${memoText}`,
+      message: `担当車両 ${vehiclePlateNumber} の点検が ${format(reservedDate, 'yyyy/M/d')} に予約されました。${memoText}`,
       priority: 'medium',
       is_read: false,
       action_required: false,
@@ -406,7 +407,7 @@ export class DriverNotificationService {
         employee_id: employeeId || '',
         type: 'vehicle_inspection',
         title: '点検予約キャンセルのお知らせ',
-        message: `担当車両 ${vehiclePlateNumber} の点検予約（${cancelledDate.toLocaleDateString('ja-JP')}）がキャンセルされました。`,
+        message: `担当車両 ${vehiclePlateNumber} の点検予約（${format(cancelledDate, 'yyyy/M/d')}）がキャンセルされました。`,
         priority: 'high',
         is_read: false,
         action_required: true,

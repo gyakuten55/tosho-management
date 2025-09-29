@@ -31,7 +31,8 @@ import { DriverNotificationService } from '@/services/driverNotificationService'
 import { InspectionReservationService } from '@/services/inspectionReservationService'
 import { DepartureTimeService } from '@/services/departureTimeService'
 import { useAuth } from '@/contexts/AuthContext'
-import { isSameDay, differenceInDays, addDays } from 'date-fns'
+import { isSameDay, differenceInDays, addDays, format } from 'date-fns'
+import { ja } from 'date-fns/locale'
 
 interface DriverDashboardProps {
   onLogout: () => void
@@ -346,7 +347,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
         if (startDate.getTime() === endDate.getTime()) {
           dateRangeText = ''
         } else {
-          dateRangeText = `${startDate.toLocaleDateString('ja-JP')} ~ ${endDate.toLocaleDateString('ja-JP')}`
+          dateRangeText = `${format(startDate, 'yyyy/M/d')} ~ ${format(endDate, 'yyyy/M/d')}`
         }
       }
       
@@ -521,19 +522,11 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                   <div className="text-sm opacity-75">
                     {countdown.dateRange ? (
                       <div>
-                        <div>{countdown.inspectionDate.toLocaleDateString('ja-JP', { 
-                          month: 'long', 
-                          day: 'numeric',
-                          weekday: 'short'
-                        })}〜</div>
+                        <div>{format(countdown.inspectionDate, 'M月d日(E)', { locale: ja })}〜</div>
                         <div className="text-xs">{countdown.dateRange}</div>
                       </div>
                     ) : (
-                      countdown.inspectionDate.toLocaleDateString('ja-JP', { 
-                        month: 'long', 
-                        day: 'numeric',
-                        weekday: 'short'
-                      })
+                      format(countdown.inspectionDate, 'M月d日(E)', { locale: ja })
                     )}
                   </div>
                 </div>

@@ -16,6 +16,7 @@ import {
 import { Vehicle, Driver, DriverNotification } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { format } from 'date-fns'
 
 interface VehicleInspectionNotificationSystemProps {
   vehicles: Vehicle[]
@@ -74,19 +75,19 @@ export default function VehicleInspectionNotificationSystem({
           if (daysUntilInspection === 30) {
             alertType = '30_days'
             priority = 'low'
-            message = `${vehicle.plateNumber}の点検が1ヶ月後（${inspectionDate.toLocaleDateString('ja-JP')}）に予定されています。`
+            message = `${vehicle.plateNumber}の点検が1ヶ月後（${format(inspectionDate, 'yyyy/M/d')}）に予定されています。`
           } else if (daysUntilInspection === 7) {
             alertType = '7_days'
             priority = 'medium'
-            message = `${vehicle.plateNumber}の点検が1週間後（${inspectionDate.toLocaleDateString('ja-JP')}）に予定されています。代替車両の準備を検討してください。`
+            message = `${vehicle.plateNumber}の点検が1週間後（${format(inspectionDate, 'yyyy/M/d')}）に予定されています。代替車両の準備を検討してください。`
           } else if (daysUntilInspection === 2) {
             alertType = '2_days'
             priority = 'high'
-            message = `${vehicle.plateNumber}の点検が前々日（${inspectionDate.toLocaleDateString('ja-JP')}）に予定されています。必ず代替車両を確認してください。`
+            message = `${vehicle.plateNumber}の点検が前々日（${format(inspectionDate, 'yyyy/M/d')}）に予定されています。必ず代替車両を確認してください。`
           } else if (daysUntilInspection === 1) {
             alertType = '1_day'
             priority = 'urgent'
-            message = `${vehicle.plateNumber}の点検が明日（${inspectionDate.toLocaleDateString('ja-JP')}）に予定されています。この車両は使用できません。代替車両に変更してください。`
+            message = `${vehicle.plateNumber}の点検が明日（${format(inspectionDate, 'yyyy/M/d')}）に予定されています。この車両は使用できません。代替車両に変更してください。`
           } else if (daysUntilInspection <= 0) {
             alertType = '1_day'
             priority = 'urgent'
@@ -337,7 +338,7 @@ export default function VehicleInspectionNotificationSystem({
                           {alert.driverName}
                         </span>
                         <span className="text-xs px-2 py-1 bg-white bg-opacity-50 rounded">
-                          {alert.inspectionDate.toLocaleDateString('ja-JP')}
+                          {format(alert.inspectionDate, 'yyyy/M/d')}
                         </span>
                       </div>
                       <p className="text-sm">{alert.message}</p>

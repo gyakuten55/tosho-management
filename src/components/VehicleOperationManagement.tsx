@@ -790,9 +790,9 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
       // 担当ドライバーに通知を送信（日付範囲対応）
       if (driverInfo) {
-        const dateRangeMessage = isSameDay(startDate, endDate) 
-          ? startDate.toLocaleDateString('ja-JP')
-          : `${startDate.toLocaleDateString('ja-JP')} ~ ${endDate.toLocaleDateString('ja-JP')}`
+        const dateRangeMessage = isSameDay(startDate, endDate)
+          ? format(startDate, 'yyyy/M/d')
+          : `${format(startDate, 'yyyy/M/d')} ~ ${format(endDate, 'yyyy/M/d')}`
         
         const memoText = inspectionMemo?.trim() ? `\n備考: ${inspectionMemo}` : ''
         const inspectionTypeName = inspectionType === 'crane_annual' ? 'クレーン年次点検' : '定期点検'
@@ -2707,8 +2707,13 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               key,
               booking,
               vehicle,
-              reservationDate: booking.reservationDate ? new Date(booking.reservationDate) : null,
-              inspectionDeadline: new Date(booking.inspectionDeadline)
+              reservationDate: booking.reservationDate ?
+                (typeof booking.reservationDate === 'string' && !booking.reservationDate.includes('T') ?
+                  new Date(booking.reservationDate + 'T00:00:00') :
+                  new Date(booking.reservationDate)) : null,
+              inspectionDeadline: typeof booking.inspectionDeadline === 'string' && !booking.inspectionDeadline.includes('T') ?
+                new Date(booking.inspectionDeadline + 'T00:00:00') :
+                new Date(booking.inspectionDeadline)
             })
           }
         }
