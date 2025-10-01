@@ -770,10 +770,39 @@ export default function VacationManagement({
       
       // 仮想レコードを無効化 - 実データのみ表示
       const virtualWorkingDrivers: any[] = []
-      
+
       const dayVacations = dayRequests.filter(req => req.workStatus === 'day_off')
       const dayNightShifts = dayRequests.filter(req => req.workStatus === 'night_shift')
       const dayWorking = dayRequests.filter(req => req.workStatus === 'working')
+
+      // デバッグ: 休暇データの詳細をログ出力
+      if (dayVacations.length > 0 || dayNightShifts.length > 0) {
+        console.log(`[休暇カウントDebug] 日付: ${format(day, 'yyyy-MM-dd')}`)
+        console.log(`  休暇(day_off):`, dayVacations.map(v => ({
+          id: v.id,
+          driverId: v.driverId,
+          name: v.driverName,
+          team: v.team,
+          workStatus: v.workStatus,
+          isOff: v.isOff,
+          type: v.type
+        })))
+        console.log(`  夜勤(night_shift):`, dayNightShifts.map(v => ({
+          id: v.id,
+          driverId: v.driverId,
+          name: v.driverName,
+          team: v.team,
+          workStatus: v.workStatus,
+          isOff: v.isOff,
+          type: v.type
+        })))
+        console.log(`  全データ:`, dayRequests.map(v => ({
+          id: v.id,
+          name: v.driverName,
+          workStatus: v.workStatus,
+          isOff: v.isOff
+        })))
+      }
       
       const internalDriverVacations = dayVacations.filter(v => !v.isExternalDriver)
       const externalDriverVacations = dayVacations.filter(v => v.isExternalDriver)
@@ -928,9 +957,9 @@ export default function VacationManagement({
       // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
       if (selectedWorkStatus === 'day_off') {
         const existingVacations = getExistingVacations()
-        // 同じチームの内部ドライバーのみをカウント
-        const existingTeamVacations = existingVacations.filter(v => 
-          !v.isExternalDriver && v.team === driver.team
+        // 同じチームの内部ドライバーのみをカウント（変更対象のドライバー自身は除外）
+        const existingTeamVacations = existingVacations.filter(v =>
+          !v.isExternalDriver && v.team === driver.team && v.driverId !== driver.id
         )
         
         // 新しい統一設定から上限を取得
@@ -1139,9 +1168,9 @@ export default function VacationManagement({
       // 1日あたりの最大休暇人数制限チェック（休暇の場合のみ）
       if (workStatus === 'day_off') {
         const existingVacations = getExistingVacations()
-        // 同じチームの内部ドライバーのみをカウント
-        const existingTeamVacations = existingVacations.filter(v => 
-          !v.isExternalDriver && v.team === driver.team
+        // 同じチームの内部ドライバーのみをカウント（変更対象のドライバー自身は除外）
+        const existingTeamVacations = existingVacations.filter(v =>
+          !v.isExternalDriver && v.team === driver.team && v.driverId !== driver.id
         )
         
         // 新しい統一設定から上限を取得
@@ -1645,6 +1674,17 @@ export default function VacationManagement({
                         dayInfo.vacations.forEach(v => {
                           teamVacations[v.team] = (teamVacations[v.team] || 0) + 1
                         })
+
+                        // デバッグ: チーム別カウント結果をログ出力
+                        if (Object.keys(teamVacations).length > 0) {
+                          console.log(`[チーム別カウントDebug] 日付: ${format(dayInfo.date, 'yyyy-MM-dd')}`)
+                          console.log(`  チーム別休暇人数:`, teamVacations)
+                          console.log(`  dayInfo.vacations配列:`, dayInfo.vacations.map(v => ({
+                            driverId: v.driverId,
+                            name: v.driverName,
+                            team: v.team
+                          })))
+                        }
 
                         // 各チームの上限を取得して表示
                         const teams = ['配送センターチーム', '配送センター外注', '常駐チーム', 'Bチーム']
