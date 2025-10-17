@@ -60,6 +60,7 @@ export default function DriverVacationCalendar({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [requestType, setRequestType] = useState<'day_off'>('day_off')
+  const [specialNote, setSpecialNote] = useState('')
   const [showDayModal, setShowDayModal] = useState(false)
   const [dayModalData, setDayModalData] = useState<{
     date: Date
@@ -293,6 +294,7 @@ export default function DriverVacationCalendar({
     } else if (dayInfo.canRequest) {
       // 新規申請
       setSelectedDate(dayInfo.date)
+      setSpecialNote('')
       setShowRequestModal(true)
     } else if (!dayInfo.canRequest && dayInfo.isCurrentMonth) {
       alert('直近10日以内の日付は申請できません。余裕を持って申請してください。')
@@ -314,10 +316,13 @@ export default function DriverVacationCalendar({
       reason: '',
       status: 'approved',
       isExternalDriver: currentUser.employeeId.startsWith('E'),
+      hasSpecialNote: specialNote.trim() !== '',
+      specialNote: specialNote.trim() || '',
       registeredBy: 'driver' as const
     }
 
     onRequestSubmit(newRequest)
+    setSpecialNote('')
     setShowRequestModal(false)
     setSelectedDate(null)
   }
@@ -867,6 +872,38 @@ export default function DriverVacationCalendar({
                     <span className="text-base font-medium text-blue-900">休暇申請</span>
                   </div>
                 </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                  特記事項（任意）
+                </label>
+                <textarea
+                  value={specialNote}
+                  onChange={(e) => setSpecialNote(e.target.value)}
+                  placeholder="管理者に伝えたい事項があれば入力してください..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={3}
+                />
+                <div className="mt-2 flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {/* 特記事項は申請時に自動保存 */}}
+                    className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors font-medium disabled:opacity-50"
+                    disabled
+                    title="申請ボタンを押すと自動的に保存されます"
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpecialNote('')}
+                    className="px-3 py-1.5 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors font-medium"
+                  >
+                    クリア
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">※ 申請ボタンを押すと自動的に保存されます</p>
               </div>
 
               <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">

@@ -94,14 +94,29 @@ export default function VacationManagement({
   const [holidaySyncLoading, setHolidaySyncLoading] = useState(false) // 祝日同期ローディング状態
   const [holidays, setHolidays] = useState<Holiday[]>([]) // 祝日データ
 
-  // 特記事項をデータベースに自動保存する関数
-  const saveSpecialNoteToDatabase = async (driverId: number, note: string, enabled: boolean) => {
+  // 特記事項管理用ヘルパー関数
+  const updateSpecialNote = (driverId: number, note: string = '') => {
+    setSpecialNotes(prev => {
+      const newMap = new Map(prev)
+      newMap.set(driverId, note)
+      return newMap
+    })
+  }
+
+  const getSpecialNote = (driverId: number) => {
+    return specialNotes.get(driverId) || ''
+  }
+
+  // 特記事項を保存する関数
+  const saveSpecialNote = async (driverId: number) => {
     if (!selectedDate) return
+
+    const note = getSpecialNote(driverId)
 
     try {
       // 既存の勤務状態レコードを探す
       const existingRequest = vacationRequests.find(req =>
-        req.driverId === driverId && 
+        req.driverId === driverId &&
         isSameDay(req.date, selectedDate) &&
         req.id > 0 // DBに保存済み
       )
@@ -110,56 +125,60 @@ export default function VacationManagement({
         // 既存レコードがある場合は特記事項を更新
         const updatedRequestData = {
           ...existingRequest,
-          hasSpecialNote: enabled,
-          specialNote: enabled ? note : undefined
+          hasSpecialNote: note.trim() !== '',
+          specialNote: note.trim() !== '' ? note : ''
         }
 
         const savedRequest = await VacationService.update(existingRequest.id, updatedRequestData)
-        setVacationRequests(vacationRequests.map(req => 
+        setVacationRequests(vacationRequests.map(req =>
           req.id === existingRequest.id ? savedRequest : req
         ))
+        alert('特記事項を保存しました')
+      } else {
+        alert('勤務状態が登録されていないため、特記事項のみを保存できません')
       }
     } catch (error) {
       console.error('特記事項の保存に失敗しました:', error)
+      alert('特記事項の保存に失敗しました')
     }
   }
 
-  // デバウンス用のタイマー管理
-  const [debounceTimers, setDebounceTimers] = useState<Map<number, NodeJS.Timeout>>(new Map())
+  // 特記事項を削除する関数
+  const deleteSpecialNote = async (driverId: number) => {
+    if (!selectedDate) return
 
-  // 特記事項管理用ヘルパー関数
-  const updateSpecialNote = (driverId: number, note: string = '') => {
-    setSpecialNotes(prev => {
-      const newMap = new Map(prev)
-      newMap.set(driverId, note)
-      return newMap
-    })
+    try {
+      // 既存の勤務状態レコードを探す
+      const existingRequest = vacationRequests.find(req =>
+        req.driverId === driverId &&
+        isSameDay(req.date, selectedDate) &&
+        req.id > 0 // DBに保存済み
+      )
 
-    // 既存のタイマーをクリア
-    const existingTimer = debounceTimers.get(driverId)
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-    }
+      if (existingRequest) {
+        // DBから特記事項を削除
+        const updatedRequestData = {
+          ...existingRequest,
+          hasSpecialNote: false,
+          specialNote: ''
+        }
 
-    // 新しいタイマーを設定（500ms後に自動保存）
-    const newTimer = setTimeout(() => {
-      saveSpecialNoteToDatabase(driverId, note, note.trim() !== '')
-      setDebounceTimers(prev => {
+        const savedRequest = await VacationService.update(existingRequest.id, updatedRequestData)
+        setVacationRequests(vacationRequests.map(req =>
+          req.id === existingRequest.id ? savedRequest : req
+        ))
+      }
+
+      // UI状態もクリア
+      setSpecialNotes(prev => {
         const newMap = new Map(prev)
         newMap.delete(driverId)
         return newMap
       })
-    }, 500)
-
-    setDebounceTimers(prev => {
-      const newMap = new Map(prev)
-      newMap.set(driverId, newTimer)
-      return newMap
-    })
-  }
-
-  const getSpecialNote = (driverId: number) => {
-    return specialNotes.get(driverId) || ''
+    } catch (error) {
+      console.error('特記事項の削除に失敗しました:', error)
+      alert('特記事項の削除に失敗しました')
+    }
   }
 
   // エスケープキーでモーダルを閉じる
@@ -178,6 +197,11 @@ export default function VacationManagement({
     // 初回読み込み
     loadVacationData(true)
 
+    // モーダルが閉じられた時は即座に再読み込み
+    if (!showVacationForm) {
+      loadVacationData(false)
+    }
+
     // 5秒間隔で更新（フォームやモーダルが開いていない時のみ）
     const interval = setInterval(() => {
       if (!showVacationForm) {
@@ -191,16 +215,10 @@ export default function VacationManagement({
   // 既存のvacationRequestsから特記事項をspecialNotesに読み込む（選択日が変更された時のみ）
   useEffect(() => {
     if (!selectedDate) return
-    
-    // 日付が変わった時は既存のデバウンスタイマーをクリア
-    debounceTimers.forEach((timer) => {
-      clearTimeout(timer)
-    })
-    setDebounceTimers(new Map())
-    
+
     setSpecialNotes(() => {
       const newSpecialNotes = new Map<number, string>()
-      
+
       // 選択された日付の特記事項のみを読み込み（データベース保存済みのもののみ）
       vacationRequests.forEach(request => {
         if (isSameDay(request.date, selectedDate)) {
@@ -210,7 +228,7 @@ export default function VacationManagement({
           }
         }
       })
-      
+
       return newSpecialNotes
     })
   }, [selectedDate, vacationRequests]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1186,14 +1204,6 @@ export default function VacationManagement({
         }
       }
 
-      // 特記事項の情報を取得（既存の設定 or 現在のUI状態）
-      const currentSpecialNote = getSpecialNote(driver.id)
-      const existingSpecialNote = existingRequest?.hasSpecialNote && existingRequest?.specialNote ? 
-        existingRequest.specialNote : ''
-      
-      // UI状態を優先し、なければ既存データを使用
-      const finalSpecialNote = currentSpecialNote.trim() !== '' ? currentSpecialNote : existingSpecialNote
-      
       const requestData = {
         driverId: driver.id,
         driverName: driver.name,
@@ -1207,8 +1217,8 @@ export default function VacationManagement({
         status: 'approved' as const,
         requestDate: new Date(),
         isExternalDriver: driver.employeeId.startsWith('E'),
-        hasSpecialNote: finalSpecialNote.trim() !== '',
-        specialNote: finalSpecialNote.trim() !== '' ? finalSpecialNote : undefined,
+        hasSpecialNote: existingRequest?.hasSpecialNote || false,
+        specialNote: existingRequest?.specialNote || '',
         registeredBy: 'admin' as const
       }
 
@@ -2270,6 +2280,20 @@ export default function VacationManagement({
                                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
                                   rows={2}
                                 />
+                                <div className="mt-2 flex space-x-2">
+                                  <button
+                                    onClick={() => saveSpecialNote(driver.id)}
+                                    className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors font-medium"
+                                  >
+                                    保存
+                                  </button>
+                                  <button
+                                    onClick={() => deleteSpecialNote(driver.id)}
+                                    className="px-3 py-1.5 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors font-medium"
+                                  >
+                                    削除
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )
@@ -2374,6 +2398,20 @@ export default function VacationManagement({
                                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
                                       rows={2}
                                     />
+                                    <div className="mt-2 flex space-x-2">
+                                      <button
+                                        onClick={() => saveSpecialNote(driver.id)}
+                                        className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors font-medium"
+                                      >
+                                        保存
+                                      </button>
+                                      <button
+                                        onClick={() => deleteSpecialNote(driver.id)}
+                                        className="px-3 py-1.5 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors font-medium"
+                                      >
+                                        削除
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               )

@@ -13,10 +13,10 @@ export class VacationService {
     console.log('VacationService.getAll - Retrieving all vacation data using chunked approach')
 
     try {
-      // 動的に日付範囲を計算（過去3ヶ月から未来3ヶ月）
+      // 動的に日付範囲を計算（過去12ヶ月から未来12ヶ月）
       const today = getCurrentDate()
-      const startDate = new Date(today.getFullYear(), today.getMonth() - 3, 1)
-      const endDate = new Date(today.getFullYear(), today.getMonth() + 3 + 1, 0)
+      const startDate = new Date(today.getFullYear(), today.getMonth() - 12, 1)
+      const endDate = new Date(today.getFullYear(), today.getMonth() + 12 + 1, 0)
       const startDateString = formatDateForDB(startDate)
       const endDateString = formatDateForDB(endDate)
       
