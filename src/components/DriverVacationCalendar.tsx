@@ -69,6 +69,7 @@ export default function DriverVacationCalendar({
   } | null>(null)
   const [allDrivers, setAllDrivers] = useState<Driver[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [workingDaySpecialNote, setWorkingDaySpecialNote] = useState('')
 
   // エスケープキーでモーダルを閉じる
   useEscapeKey(() => {
@@ -250,28 +251,35 @@ export default function DriverVacationCalendar({
 
   const handleDateClick = (dayInfo: DailyInfo) => {
     if (!dayInfo.isCurrentMonth) return
-    
+
     console.log('DriverVacationCalendar - handleDateClick:', {
       date: dayInfo.date,
       totalVacations: dayInfo.vacations.length,
       allDriversCount: allDrivers.length
     })
-    
+
     // 日付クリック時：その日の出勤・休暇状況を表示
     // 休暇者のみを正しくフィルタリング（workStatus === 'day_off'）
     const actualVacationDrivers = dayInfo.vacations.filter(v => v.workStatus === 'day_off')
-    
+
     // 出勤者の計算：休暇を取っていない全ドライバー
     const workingDrivers = allDrivers.filter(driver => {
       const hasVacation = actualVacationDrivers.some(v => v.driverId === driver.id)
       return !hasVacation
     })
-    
+
     console.log('DriverVacationCalendar - filtered data:', {
       actualVacationDrivers: actualVacationDrivers.length,
       workingDrivers: workingDrivers.length
     })
-    
+
+    // 自分の既存特記事項を読み込む
+    if (currentUser && dayInfo.vacationRequest?.hasSpecialNote) {
+      setWorkingDaySpecialNote(dayInfo.vacationRequest.specialNote || '')
+    } else {
+      setWorkingDaySpecialNote('')
+    }
+
     setDayModalData({
       date: dayInfo.date,
       workingDrivers,
@@ -327,6 +335,104 @@ export default function DriverVacationCalendar({
     setSelectedDate(null)
   }
 
+  // 出勤時の特記事項を保存
+  const handleSaveWorkingDayNote = async () => {
+    if (!dayModalData?.date || !currentUser) return
+
+    const note = workingDaySpecialNote.trim()
+
+    // 空の特記事項は保存しない
+    if (note === '') {
+      alert('特記事項を入力してください')
+      return
+    }
+
+    // 10日以上先かチェック
+    const daysDifference = differenceInDays(dayModalData.date, new Date())
+    if (daysDifference < 10) {
+      alert('10日以上先の日付のみ特記事項を登録できます')
+      return
+    }
+
+    try {
+      // 既存のレコードを探す
+      const existingRequest = allVacationRequests.find(req =>
+        req.driverId === currentUser.id &&
+        isSameDay(req.date, dayModalData.date)
+      )
+
+      if (existingRequest) {
+        // 既存レコードがあれば特記事項のみ更新（直接VacationService.updateを呼ぶ）
+        await VacationService.update(existingRequest.id, {
+          hasSpecialNote: true,
+          specialNote: note
+        })
+
+        alert('特記事項を保存しました。ページを更新してください。')
+        // モーダルを閉じてページを自動リロード
+        setShowDayModal(false)
+        window.location.reload()
+      } else {
+        // レコードがない場合は「出勤」状態で新規作成
+        const newRequest: Omit<VacationRequest, 'id' | 'requestDate'> = {
+          driverId: currentUser.id,
+          driverName: currentUser.name,
+          team: currentUser.team,
+          employeeId: currentUser.employeeId,
+          date: dayModalData.date,
+          workStatus: 'working',
+          isOff: false,
+          type: 'working',
+          reason: '出勤（特記事項あり）',
+          status: 'approved',
+          isExternalDriver: currentUser.employeeId.startsWith('E'),
+          hasSpecialNote: true,
+          specialNote: note,
+          registeredBy: 'driver' as const
+        }
+        onRequestSubmit(newRequest)
+        alert('出勤状態を登録し、特記事項を保存しました')
+      }
+
+      setWorkingDaySpecialNote('')
+    } catch (error) {
+      console.error('特記事項の保存に失敗しました:', error)
+      alert('特記事項の保存に失敗しました')
+    }
+  }
+
+  // 出勤時の特記事項を削除
+  const handleDeleteWorkingDayNote = async () => {
+    if (!dayModalData?.date || !currentUser) return
+
+    try {
+      // 既存のレコードを探す
+      const existingRequest = allVacationRequests.find(req =>
+        req.driverId === currentUser.id &&
+        isSameDay(req.date, dayModalData.date)
+      )
+
+      if (existingRequest) {
+        // 特記事項をクリア（直接VacationService.updateを呼ぶ）
+        await VacationService.update(existingRequest.id, {
+          hasSpecialNote: false,
+          specialNote: ''
+        })
+
+        setWorkingDaySpecialNote('')
+        alert('特記事項を削除しました。ページを更新してください。')
+        // モーダルを閉じてページを自動リロード
+        setShowDayModal(false)
+        window.location.reload()
+      } else {
+        setWorkingDaySpecialNote('')
+        alert('削除する特記事項がありません')
+      }
+    } catch (error) {
+      console.error('特記事項の削除に失敗しました:', error)
+      alert('特記事項の削除に失敗しました')
+    }
+  }
 
   const handlePrevMonth = () => {
     setCurrentDate(prev => subMonths(prev, 1))
@@ -755,6 +861,72 @@ export default function DriverVacationCalendar({
                   <X className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
+
+              {/* あなたの状態セクション */}
+              {currentUser && (() => {
+                // 自分のレコードを1回だけ検索（最適化）
+                const myRequest = allVacationRequests.find(req =>
+                  req.driverId === currentUser.id &&
+                  isSameDay(req.date, dayModalData.date)
+                )
+
+                return (
+                  <div className="mb-4 sm:mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm sm:text-base font-semibold text-blue-900 mb-3">あなたの状態</h4>
+                    {myRequest ? (
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                          getStatusColor(myRequest.workStatus)
+                        }`}>
+                          {getStatusLabel(myRequest.workStatus)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-700">出勤</div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* 特記事項入力セクション（10日以上先のみ、休暇登録していない場合のみ） */}
+              {currentUser &&
+                differenceInDays(dayModalData.date, new Date()) >= 10 &&
+                !allVacationRequests.find(req =>
+                  req.driverId === currentUser.id &&
+                  isSameDay(req.date, dayModalData.date) &&
+                  req.workStatus === 'day_off'
+                ) && (
+                <div className="mb-4 sm:mb-6 p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
+                  <h4 className="text-sm sm:text-base font-semibold text-yellow-900 mb-2 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    特記事項（10日以上先のみ登録可能）
+                  </h4>
+                  <p className="text-xs text-yellow-700 mb-3">
+                    管理者への連絡事項（遅刻・早退・業務連絡など）を入力してください
+                  </p>
+                  <textarea
+                    value={workingDaySpecialNote}
+                    onChange={(e) => setWorkingDaySpecialNote(e.target.value)}
+                    placeholder="例: 午後から病院のため早退予定"
+                    className="w-full px-3 py-2 text-sm border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none mb-3"
+                    rows={3}
+                  />
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handleSaveWorkingDayNote}
+                      className="px-4 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors font-medium"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={handleDeleteWorkingDayNote}
+                      className="px-4 py-2 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors font-medium"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* 出勤者リスト */}

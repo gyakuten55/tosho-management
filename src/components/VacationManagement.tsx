@@ -113,7 +113,20 @@ export default function VacationManagement({
 
     const note = getSpecialNote(driverId)
 
+    // 空の特記事項は保存しない
+    if (note.trim() === '') {
+      alert('特記事項を入力してください')
+      return
+    }
+
     try {
+      // ドライバー情報を取得
+      const driver = drivers.find(d => d.id === driverId)
+      if (!driver) {
+        alert('ドライバーが見つかりません')
+        return
+      }
+
       // 既存の勤務状態レコードを探す
       const existingRequest = vacationRequests.find(req =>
         req.driverId === driverId &&
@@ -125,8 +138,8 @@ export default function VacationManagement({
         // 既存レコードがある場合は特記事項を更新
         const updatedRequestData = {
           ...existingRequest,
-          hasSpecialNote: note.trim() !== '',
-          specialNote: note.trim() !== '' ? note : ''
+          hasSpecialNote: true,
+          specialNote: note
         }
 
         const savedRequest = await VacationService.update(existingRequest.id, updatedRequestData)
@@ -135,7 +148,27 @@ export default function VacationManagement({
         ))
         alert('特記事項を保存しました')
       } else {
-        alert('勤務状態が登録されていないため、特記事項のみを保存できません')
+        // レコードがない場合は「出勤」状態で新規作成
+        const newRequest = await VacationService.create({
+          driverId: driver.id,
+          driverName: driver.name,
+          team: driver.team,
+          employeeId: driver.employeeId,
+          date: selectedDate,
+          workStatus: 'working',
+          isOff: false,
+          type: 'working',
+          reason: '出勤（特記事項あり）',
+          status: 'approved',
+          requestDate: new Date(),
+          isExternalDriver: driver.employeeId.startsWith('E'),
+          hasSpecialNote: true,
+          specialNote: note,
+          registeredBy: 'admin' as const
+        })
+
+        setVacationRequests([...vacationRequests, newRequest])
+        alert('出勤状態を登録し、特記事項を保存しました')
       }
     } catch (error) {
       console.error('特記事項の保存に失敗しました:', error)
