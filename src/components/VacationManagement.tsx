@@ -1136,11 +1136,11 @@ export default function VacationManagement({
         } else {
           // 降順: 出勤 → 出勤の特記 → 夜勤 → 休暇の特記 → 休暇
           if (status === 'working') {
-            return hasSpecialNote ? 2 : 1  // 出勤の特記は2、出勤は1
+            return hasSpecialNote ? 4 : 5  // 出勤の特記は4、出勤は5
           } else if (status === 'night_shift') {
             return 3  // 夜勤は3
           } else if (status === 'day_off') {
-            return hasSpecialNote ? 4 : 5  // 休暇の特記は4、休暇は5
+            return hasSpecialNote ? 2 : 1  // 休暇の特記は2、休暇は1
           }
           return 6
         }
