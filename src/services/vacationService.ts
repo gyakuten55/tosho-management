@@ -376,7 +376,9 @@ export class VacationService {
       isExternalDriver: row.is_external_driver,
       hasSpecialNote: row.has_special_note || false,
       specialNote: row.special_note || '',
-      registeredBy: row.registered_by as VacationRequest['registeredBy'] || 'admin'
+      registeredBy: (row.registered_by === 'driver' || row.registered_by === 'admin')
+        ? row.registered_by as VacationRequest['registeredBy']
+        : 'admin'
     }
   }
 }

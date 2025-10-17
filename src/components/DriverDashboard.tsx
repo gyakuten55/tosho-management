@@ -162,27 +162,35 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
   // 指定日付とチームに対する休暇上限を取得する関数
   const getVacationLimitForDate = (date: Date, team: string): number => {
     if (!vacationSettings) return 3 // デフォルト値
-    
+
     const month = date.getMonth() + 1 // 1-12
     const weekday = date.getDay() // 0-6（日曜日=0）
+    const dateString = format(date, 'yyyy-MM-dd')
 
-    console.log('Getting vacation limit:', { date, team, month, weekday, vacationSettings })
+    console.log('Getting vacation limit:', { date, team, month, weekday, dateString, vacationSettings })
 
-    // 1. チーム別月別曜日設定
+    // 1. 特定日付設定（最優先）
+    if (vacationSettings.specificDateLimits?.[dateString]?.[team] !== undefined) {
+      const limit = vacationSettings.specificDateLimits[dateString][team]
+      console.log('Using specific date limit:', limit)
+      return limit
+    }
+
+    // 2. チーム別月別曜日設定
     if (vacationSettings.teamMonthlyWeekdayLimits?.[team]?.[month]?.[weekday] !== undefined) {
       const limit = vacationSettings.teamMonthlyWeekdayLimits[team][month][weekday]
       console.log('Using team monthly weekday limit:', limit)
       return limit
     }
 
-    // 2. 旧設定からのフォールバック（後方互換性）
+    // 3. 旧設定からのフォールバック（後方互換性）
     if (vacationSettings.maxDriversOffPerDay?.[team] !== undefined) {
       const limit = vacationSettings.maxDriversOffPerDay[team]
       console.log('Using legacy team limit:', limit)
       return limit
     }
 
-    // 3. デフォルト値
+    // 4. デフォルト値
     const defaultLimit = vacationSettings.globalMaxDriversOffPerDay || 3
     console.log('Using default limit:', defaultLimit)
     return defaultLimit
