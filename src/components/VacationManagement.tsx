@@ -1173,11 +1173,19 @@ export default function VacationManagement({
     if (existingDriverRequest && existingDriverRequest.registeredBy === 'driver') {
       const driverName = drivers.find(d => d.id === driverId)?.name || 'ドライバー'
       const statusText = workStatus === 'day_off' ? '休暇' : '夜勤'
-      const currentStatusText = existingDriverRequest.workStatus === 'day_off' ? '休暇' : 
+      const currentStatusText = existingDriverRequest.workStatus === 'day_off' ? '休暇' :
                                 existingDriverRequest.workStatus === 'night_shift' ? '夜勤' : '出勤'
-      
-      if (!confirm(`${driverName}が登録した「${currentStatusText}」を「${statusText}」に変更しますか？\n\nドライバーからの登録情報を上書きします。`)) {
-        return
+
+      // 同じ状態のボタンが押された場合は解除（出勤に戻す）
+      if (existingDriverRequest.workStatus === workStatus) {
+        if (!confirm(`${driverName}が登録した「${statusText}」を解除して出勤に戻しますか？\n\nドライバーからの登録情報を削除します。`)) {
+          return
+        }
+      } else {
+        // 異なる状態に変更する場合
+        if (!confirm(`${driverName}が登録した「${currentStatusText}」を「${statusText}」に変更しますか？\n\nドライバーからの登録情報を上書きします。`)) {
+          return
+        }
       }
     }
 
@@ -2162,9 +2170,9 @@ export default function VacationManagement({
                       >
                         <option value="all">全て</option>
                         <option value="配送センターチーム">配送センターチーム</option>
+                        <option value="配送センター外注">配送センター外注</option>
                         <option value="常駐チーム">常駐チーム</option>
                         <option value="Bチーム">Bチーム</option>
-                        <option value="配送センター外注">配送センター外注</option>
                       </select>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -2209,7 +2217,7 @@ export default function VacationManagement({
 
                       if (quickTeamFilter === 'all') {
                         // 全チーム表示の場合：チーム別に分けて表示
-                        const teams = ['配送センターチーム', '常駐チーム', 'Bチーム', '配送センター外注']
+                        const teams = ['配送センターチーム', '配送センター外注', '常駐チーム', 'Bチーム']
                         return teams.map(team => {
                           const teamDrivers = filteredDrivers.filter(d => d.team === team)
                           if (teamDrivers.length === 0) return null

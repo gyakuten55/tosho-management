@@ -77,8 +77,8 @@ export default function DepartureTimeManagement() {
 
       // CSV形式に変換（ヘッダーを日本語に）
       const csvDataWithHeaders = [
-        ['日付', '出庫時間', 'ドライバー名', '車両番号'],
-        ...csvData.map(row => [row.date, row.time, row.driverName, row.vehiclePlateNumber])
+        ['日付・出庫時間', 'ドライバー名', '車両番号'],
+        ...csvData.map(row => [row.time, row.driverName, row.vehiclePlateNumber])
       ]
       
       const csvContent = Papa.unparse(csvDataWithHeaders)

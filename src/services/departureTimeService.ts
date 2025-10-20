@@ -250,7 +250,7 @@ export class DepartureTimeService {
       
       return departureTimes.map(dt => ({
         date: `${dt.departureDate.getFullYear()}/${(dt.departureDate.getMonth() + 1).toString().padStart(2, '0')}/${dt.departureDate.getDate().toString().padStart(2, '0')}`,
-        time: `${dt.departureTime}:00`,
+        time: `${dt.departureDate.getFullYear()}/${(dt.departureDate.getMonth() + 1).toString().padStart(2, '0')}/${dt.departureDate.getDate().toString().padStart(2, '0')} ${dt.departureTime}:00`,
         driverName: dt.driverName,
         vehiclePlateNumber: dt.vehiclePlateNumber || '未割当'
       }))
