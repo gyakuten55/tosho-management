@@ -203,7 +203,7 @@ export default function DriverVacationCalendar({
     })
   }
 
-  const calendarDays = useMemo(() => generateCalendarDays(), [currentDate, allVacationRequests, existingRequests, currentUser, vacationSettings])
+  const calendarDays = useMemo(() => generateCalendarDays(), [currentDate, allVacationRequests, existingRequests, currentUser, vacationSettings, generateCalendarDays])
 
   if (!currentUser) {
     return (
@@ -613,7 +613,7 @@ export default function DriverVacationCalendar({
                             <div className="mt-1">
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300">
                                 <AlertCircle className="h-3 w-3 mr-1" />
-                                管理者からの特記事項あり
+                                特記事項あり
                               </span>
                             </div>
                           )}
@@ -694,7 +694,7 @@ export default function DriverVacationCalendar({
                         <div className="mt-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-400 rounded-r-lg shadow-sm">
                           <div className="flex items-center space-x-2 mb-3">
                             <AlertCircle className="h-4 w-4 text-yellow-600" />
-                            <span className="text-sm font-semibold text-yellow-800">管理者からの重要な特記事項</span>
+                            <span className="text-sm font-semibold text-yellow-800">特記事項</span>
                           </div>
                           <div className="bg-white p-3 rounded-md border border-yellow-200">
                             <p className="text-sm text-gray-800 font-medium leading-relaxed">
@@ -768,9 +768,9 @@ export default function DriverVacationCalendar({
                         )}
                         {isCurrentMonth && dayInfo.vacationRequest?.hasSpecialNote && (
                           <div className="mt-1">
-                            <span 
+                            <span
                               className="inline-flex items-center justify-center w-5 h-5 bg-yellow-400 text-yellow-900 rounded-full text-xs font-bold cursor-pointer shadow-sm border border-yellow-500 animate-pulse"
-                              title={`管理者からの特記事項: ${dayInfo.vacationRequest.specialNote}`}
+                              title={`特記事項: ${dayInfo.vacationRequest.specialNote}`}
                             >
                               !
                             </span>
