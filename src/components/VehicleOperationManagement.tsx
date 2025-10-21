@@ -26,6 +26,8 @@ import {
   Info,
   FileText,
   Edit3,
+  Edit,
+  Check,
   ClipboardList,
   Trash2,
   Archive,
@@ -419,9 +421,16 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   const [inspectionMemo, setInspectionMemo] = useState('')
   const [inspectionType, setInspectionType] = useState<'regular' | 'crane_annual'>('regular')
 
+  // 点検予約編集モーダル用状態
+  const [showEditReservationModal, setShowEditReservationModal] = useState(false)
+  const [editingReservation, setEditingReservation] = useState<{ id: number; key: string; scheduledDate: Date } | null>(null)
+  const [editScheduledDate, setEditScheduledDate] = useState('')
+
   // エスケープキーでモーダルを閉じる（優先順位順）
   useEscapeKey(() => {
-    if (showInspectionReservationModal) {
+    if (showEditReservationModal) {
+      setShowEditReservationModal(false)
+    } else if (showInspectionReservationModal) {
       setShowInspectionReservationModal(false)
     } else if (showEditInoperativeModal) {
       setShowEditInoperativeModal(false)
@@ -887,6 +896,158 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       ? format(startDate, 'yyyy年MM月dd日', { locale: ja })
       : `${format(startDate, 'yyyy年MM月dd日', { locale: ja })} ~ ${format(endDate, 'yyyy年MM月dd日', { locale: ja })}`
     alert(`${selectedInspectionVehicle.plateNumber} の点検予約を ${dateRangeText} で設定しました${isSameDay(reservationDate, today) ? '（車両ステータスを「点検中」に変更しました）' : ''}${memoText}`)
+  }
+
+  // 点検予約完了処理
+  const handleCompleteReservation = async (bookingKey: string, vehiclePlateNumber: string) => {
+    if (!confirm(`${vehiclePlateNumber} の点検を完了としてマークしますか？`)) return
+
+    try {
+      const booking = inspectionBookings[bookingKey]
+      if (booking) {
+        const reservations = await InspectionReservationService.getByVehicleId(booking.vehicleId)
+        const targetReservation = reservations.find(r =>
+          r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
+          r.status === 'scheduled'
+        )
+
+        if (targetReservation) {
+          await InspectionReservationService.updateStatus(targetReservation.id, 'completed')
+          alert('点検を完了としてマークしました')
+
+          // データベースから最新データを再取得
+          const updatedReservations = await InspectionReservationService.getAll()
+          const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+
+          updatedReservations.forEach(reservation => {
+            if (reservation.status === 'scheduled') {
+              const memo = reservation.memo || ''
+              const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+
+              if (dateRangeMatch) {
+                const [, startDateStr, endDateStr] = dateRangeMatch
+                const startDate = new Date(startDateStr + 'T00:00:00')
+                const endDate = new Date(endDateStr + 'T00:00:00')
+
+                eachDayOfInterval({ start: startDate, end: endDate }).forEach(date => {
+                  const key = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+                  bookingsMap[key] = {
+                    isReservationCompleted: false,
+                    memo: memo,
+                    hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+                    reservationDate: format(date, 'yyyy-MM-dd'),
+                    vehicleId: reservation.vehicleId,
+                    inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+                  }
+                })
+              } else {
+                const key = `${reservation.vehicleId}_${format(reservation.scheduledDate, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+                bookingsMap[key] = {
+                  isReservationCompleted: false,
+                  memo: memo,
+                  hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+                  reservationDate: format(reservation.scheduledDate, 'yyyy-MM-dd'),
+                  vehicleId: reservation.vehicleId,
+                  inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+                }
+              }
+            }
+          })
+
+          setInspectionBookings(bookingsMap)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to complete reservation:', error)
+      alert('点検完了の処理に失敗しました')
+    }
+  }
+
+  // 点検予約編集処理
+  const handleEditReservation = async (bookingKey: string) => {
+    try {
+      const booking = inspectionBookings[bookingKey]
+      if (booking) {
+        const reservations = await InspectionReservationService.getByVehicleId(booking.vehicleId)
+        const targetReservation = reservations.find(r =>
+          r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
+          r.status === 'scheduled'
+        )
+
+        if (targetReservation) {
+          setEditingReservation({
+            id: targetReservation.id,
+            key: bookingKey,
+            scheduledDate: targetReservation.scheduledDate
+          })
+          setEditScheduledDate(format(targetReservation.scheduledDate, 'yyyy-MM-dd'))
+          setShowEditReservationModal(true)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load reservation for editing:', error)
+      alert('予約情報の読み込みに失敗しました')
+    }
+  }
+
+  // 点検予約更新処理
+  const handleSaveEditReservation = async () => {
+    if (!editingReservation) return
+
+    try {
+      const newScheduledDate = new Date(editScheduledDate + 'T00:00:00')
+      await InspectionReservationService.update(editingReservation.id, {
+        scheduledDate: newScheduledDate
+      })
+
+      alert('予約日を更新しました')
+      setShowEditReservationModal(false)
+      setEditingReservation(null)
+
+      // データベースから最新データを再取得
+      const updatedReservations = await InspectionReservationService.getAll()
+      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+
+      updatedReservations.forEach(reservation => {
+        if (reservation.status === 'scheduled') {
+          const memo = reservation.memo || ''
+          const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+
+          if (dateRangeMatch) {
+            const [, startDateStr, endDateStr] = dateRangeMatch
+            const startDate = new Date(startDateStr + 'T00:00:00')
+            const endDate = new Date(endDateStr + 'T00:00:00')
+
+            eachDayOfInterval({ start: startDate, end: endDate }).forEach(date => {
+              const key = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+              bookingsMap[key] = {
+                isReservationCompleted: false,
+                memo: memo,
+                hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+                reservationDate: format(date, 'yyyy-MM-dd'),
+                vehicleId: reservation.vehicleId,
+                inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+              }
+            })
+          } else {
+            const key = `${reservation.vehicleId}_${format(reservation.scheduledDate, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+            bookingsMap[key] = {
+              isReservationCompleted: false,
+              memo: memo,
+              hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+              reservationDate: format(reservation.scheduledDate, 'yyyy-MM-dd'),
+              vehicleId: reservation.vehicleId,
+              inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+            }
+          }
+        }
+      })
+
+      setInspectionBookings(bookingsMap)
+    } catch (error) {
+      console.error('Failed to update reservation:', error)
+      alert('予約日の更新に失敗しました')
+    }
   }
 
   // 点検予約取り消し処理
@@ -2893,9 +3054,10 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                 const today = new Date()
                 const daysUntilReservation = reservationDate ? Math.ceil((reservationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0
                 const daysUntilDeadline = Math.ceil((inspectionDeadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-                
-                const isUrgent = daysUntilDeadline <= 7
-                const isWarning = daysUntilDeadline <= 14 && daysUntilDeadline > 7
+
+                // ステータス判定：実施日（予約日）基準
+                const isUrgent = daysUntilReservation <= 7
+                const isWarning = daysUntilReservation <= 14 && daysUntilReservation > 7
 
                 return (
                   <div key={key} className={`p-4 rounded-lg border ${
@@ -2926,32 +3088,28 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                               <span>予約日: {
                                 (() => {
                                   if (!reservationDate) return '未設定'
-                                  
+
                                   // memoから日付範囲情報を抽出
                                   const memo = booking.memo || ''
                                   const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
-                                  
+
                                   if (dateRangeMatch) {
                                     const [, startDateStr, endDateStr] = dateRangeMatch
                                     const startDate = new Date(startDateStr + 'T00:00:00')
                                     const endDate = new Date(endDateStr + 'T00:00:00')
                                     return `${format(startDate, 'yyyy年MM月dd日(E)', { locale: ja })} ~ ${format(endDate, 'yyyy年MM月dd日(E)', { locale: ja })}`
                                   }
-                                  
+
                                   return format(reservationDate, 'yyyy年MM月dd日(E)', { locale: ja })
                                 })()
                               }</span>
-                            </div>
-                            <div className="flex items-center text-sm text-gray-600">
-                              <Clock className="h-4 w-4 mr-2" />
-                              <span>点検期限: {format(inspectionDeadline, 'yyyy年MM月dd日(E)', { locale: ja })}</span>
-                              {daysUntilDeadline > 0 && (
+                              {daysUntilReservation > 0 && (
                                 <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
                                   isUrgent ? 'bg-red-100 text-red-800' :
                                   isWarning ? 'bg-orange-100 text-orange-800' :
                                   'bg-gray-100 text-gray-800'
                                 }`}>
-                                  あと{daysUntilDeadline}日
+                                  あと{daysUntilReservation}日
                                 </span>
                               )}
                             </div>
@@ -2995,13 +3153,29 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                         )}
                       </div>
 
-                      <button
-                        onClick={() => handleCancelReservation(key, vehicle.plateNumber)}
-                        className="ml-4 flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span>取り消し</span>
-                      </button>
+                      <div className="ml-4 flex items-center space-x-2">
+                        <button
+                          onClick={() => handleEditReservation(key)}
+                          className="flex items-center space-x-1 px-3 py-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span>編集</span>
+                        </button>
+                        <button
+                          onClick={() => handleCompleteReservation(key, vehicle.plateNumber)}
+                          className="flex items-center space-x-1 px-3 py-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>完了</span>
+                        </button>
+                        <button
+                          onClick={() => handleCancelReservation(key, vehicle.plateNumber)}
+                          className="flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>取り消し</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -3009,6 +3183,53 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
             </div>
           )}
         </div>
+
+        {/* 点検予約編集モーダル */}
+        {showEditReservationModal && editingReservation && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">点検予約日の編集</h3>
+                <button
+                  onClick={() => setShowEditReservationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    予約日（実施予定日）
+                  </label>
+                  <input
+                    type="date"
+                    value={editScheduledDate}
+                    onChange={(e) => setEditScheduledDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowEditReservationModal(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleSaveEditReservation}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>保存</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
