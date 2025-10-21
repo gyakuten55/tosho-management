@@ -379,6 +379,50 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
     return 'bg-blue-100 text-blue-800 border-blue-200'
   }
 
+  // Bチーム全車両の点検情報を取得
+  const getBTeamVehiclesInspectionInfo = () => {
+    if (user?.team !== 'Bチーム') return []
+
+    const bTeamVehicles = allVehicles.filter(v => v.team === 'Bチーム')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    return bTeamVehicles.map(vehicle => {
+      // この車両の点検予約を取得
+      const vehicleInspections = inspectionReservations.filter(inspection =>
+        inspection.vehicleId === vehicle.id &&
+        inspection.status === 'scheduled' &&
+        inspection.scheduledDate >= new Date()
+      )
+
+      // 最も近い点検予約を取得
+      const nextInspection = vehicleInspections.length > 0
+        ? vehicleInspections.sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime())[0]
+        : null
+
+      let daysUntilInspection = null
+      if (nextInspection) {
+        const inspectionDate = new Date(nextInspection.scheduledDate)
+        inspectionDate.setHours(0, 0, 0, 0)
+        daysUntilInspection = Math.ceil((inspectionDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      }
+
+      return {
+        vehicle,
+        inspectionDeadline: vehicle.inspectionDate,
+        nextInspection,
+        daysUntilInspection,
+        showCountdown: daysUntilInspection !== null && daysUntilInspection <= 10 && daysUntilInspection >= 0
+      }
+    }).sort((a, b) => {
+      // 点検実施日が近い順、予約なしは後ろ
+      if (a.daysUntilInspection === null && b.daysUntilInspection === null) return 0
+      if (a.daysUntilInspection === null) return 1
+      if (b.daysUntilInspection === null) return -1
+      return a.daysUntilInspection - b.daysUntilInspection
+    })
+  }
+
   const renderDashboard = () => (
     <div className="space-y-4 sm:space-y-6">
       {/* ヘッダー */}
@@ -558,6 +602,74 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Bチーム全車両の点検情報 */}
+      {user?.team === 'Bチーム' && (() => {
+        const vehiclesInfo = getBTeamVehiclesInspectionInfo()
+        if (vehiclesInfo.length === 0) return null
+
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <Wrench className="h-5 w-5 mr-2 text-blue-600" />
+              Bチーム全車両の点検情報
+            </h2>
+            <div className="space-y-3">
+              {vehiclesInfo.map(({ vehicle, inspectionDeadline, nextInspection, daysUntilInspection, showCountdown }) => (
+                <div
+                  key={vehicle.id}
+                  className={`p-4 rounded-lg border ${
+                    showCountdown && daysUntilInspection !== null
+                      ? getCountdownColor(daysUntilInspection)
+                      : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Car className="h-5 w-5" />
+                        <span className="font-bold text-lg">{vehicle.plateNumber}</span>
+                        <span className="text-sm text-gray-600">({vehicle.model})</span>
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-600">点検期限:</span>
+                          <span className="font-medium">
+                            {inspectionDeadline ? format(inspectionDeadline, 'yyyy/M/d(E)', { locale: ja }) : '未設定'}
+                          </span>
+                        </div>
+                        {nextInspection ? (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-600">実施予定:</span>
+                            <span className="font-medium">
+                              {format(nextInspection.scheduledDate, 'yyyy/M/d(E)', { locale: ja })}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-600">実施予定:</span>
+                            <span className="text-orange-600 font-medium">未予約</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {showCountdown && daysUntilInspection !== null && (
+                      <div className="text-right ml-4">
+                        <div className="text-2xl font-bold">
+                          {daysUntilInspection === 0 ? '当日' : `あと${daysUntilInspection}日`}
+                        </div>
+                        <div className="text-xs opacity-75">
+                          {daysUntilInspection === 0 ? '🚨 本日実施' : '📅 カウントダウン'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )
