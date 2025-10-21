@@ -19,6 +19,7 @@ import DriverManagement from '@/components/DriverManagement'
 import SettingsComponent from '@/components/Settings'
 import Login from '@/components/Login'
 import DriverDashboard from '@/components/DriverDashboard'
+import ViewerDashboard from '@/components/ViewerDashboard'
 import DriverVacationRequest from '@/components/DriverVacationRequest'
 import DriverVehicleInfo from '@/components/DriverVehicleInfo'
 import VehicleOperationManagement from '@/components/VehicleOperationManagement'
@@ -28,7 +29,7 @@ import VacationManagement from '@/components/VacationManagement'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function Home() {
-  const { user, loading, signOut, isAdmin, isDriver } = useAuth()
+  const { user, loading, signOut, isAdmin, isDriver, isViewer } = useAuth()
   const [currentView, setCurrentView] = useState('vehicles')
   const [notifications, setNotifications] = useState<DriverNotification[]>([])
 
@@ -62,7 +63,16 @@ export default function Home() {
   // 運転手の場合は専用UIを表示
   if (isDriver) {
     return (
-      <DriverDashboard 
+      <DriverDashboard
+        onLogout={handleLogout}
+      />
+    )
+  }
+
+  // 閲覧専用の場合は専用UIを表示
+  if (isViewer) {
+    return (
+      <ViewerDashboard
         onLogout={handleLogout}
       />
     )

@@ -8,7 +8,7 @@ interface UserProfile {
   uid: string
   employeeId: string
   displayName: string
-  role: 'admin' | 'driver'
+  role: 'admin' | 'driver' | 'viewer'
   team: string
   createdAt: Date
   lastLogin: Date | null
@@ -24,6 +24,7 @@ interface AuthContextType {
   signOut: () => Promise<void>
   isAdmin: boolean
   isDriver: boolean
+  isViewer: boolean
 }
 
 // 認証コンテキストの作成
@@ -87,6 +88,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
+      // 閲覧専用の固定アカウントチェック
+      if (employeeId.toLowerCase() === 'viewer@tosho-management.com') {
+        if (password !== 'viewer12345') {
+          throw new Error('社員番号またはパスワードが正しくありません')
+        }
+
+        // 閲覧専用の固定プロファイル
+        const viewerUserData: UserProfile = {
+          uid: 'viewer-fixed-id',
+          employeeId: 'viewer@tosho-management.com',
+          displayName: '閲覧ユーザー',
+          role: 'viewer',
+          team: '閲覧',
+          createdAt: new Date(),
+          lastLogin: new Date(),
+        }
+
+        setUser(viewerUserData)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('currentUser', JSON.stringify(viewerUserData))
+        }
+        return
+      }
+
       // ドライバーの認証（パスワード必須）
       const driver = await DriverService.authenticateDriver(employeeId, password)
       if (driver) {
@@ -141,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 権限チェック
   const isAdmin = user?.role === 'admin'
   const isDriver = user?.role === 'driver'
+  const isViewer = user?.role === 'viewer'
 
   const value: AuthContextType = {
     user,
@@ -151,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     isAdmin,
     isDriver,
+    isViewer,
   }
 
   return (
