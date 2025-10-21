@@ -59,7 +59,7 @@ export default function DriverVacationCalendar({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
-  const [requestType, setRequestType] = useState<'day_off'>('day_off')
+  const [requestType, setRequestType] = useState<'day_off' | 'night_shift'>('day_off')
   const [specialNote, setSpecialNote] = useState('')
   const [showDayModal, setShowDayModal] = useState(false)
   const [dayModalData, setDayModalData] = useState<{
@@ -303,6 +303,7 @@ export default function DriverVacationCalendar({
       // 新規申請
       setSelectedDate(dayInfo.date)
       setSpecialNote('')
+      setRequestType('day_off')
       setShowRequestModal(true)
     } else if (!dayInfo.canRequest && dayInfo.isCurrentMonth) {
       alert('直近10日以内の日付は申請できません。余裕を持って申請してください。')
@@ -318,9 +319,9 @@ export default function DriverVacationCalendar({
       team: currentUser.team,
       employeeId: currentUser.employeeId,
       date: selectedDate,
-      workStatus: 'day_off',
-      isOff: true,
-      type: 'day_off',
+      workStatus: requestType,
+      isOff: requestType === 'day_off',
+      type: requestType,
       reason: '',
       status: 'approved',
       isExternalDriver: currentUser.employeeId.startsWith('E'),
@@ -333,6 +334,7 @@ export default function DriverVacationCalendar({
     setSpecialNote('')
     setShowRequestModal(false)
     setSelectedDate(null)
+    setRequestType('day_off')
   }
 
   // 出勤時の特記事項を保存
@@ -1020,7 +1022,7 @@ export default function DriverVacationCalendar({
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900">休暇申請</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900">休暇・夜勤申請</h3>
                 <button
                   onClick={() => setShowRequestModal(false)}
                   className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 touch-manipulation"
@@ -1038,11 +1040,29 @@ export default function DriverVacationCalendar({
 
               <div className="mb-6">
                 <p className="text-xs sm:text-sm text-gray-600 mb-3">申請種類:</p>
-                <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
-                  <div className="flex items-center">
-                    <span className="text-lg mr-3">📋</span>
-                    <span className="text-base font-medium text-blue-900">休暇申請</span>
-                  </div>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setRequestType('day_off')}
+                    className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                      requestType === 'day_off'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    休暇
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestType('night_shift')}
+                    className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                      requestType === 'night_shift'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    夜勤
+                  </button>
                 </div>
               </div>
 
@@ -1087,7 +1107,11 @@ export default function DriverVacationCalendar({
                 </button>
                 <button
                   onClick={handleSubmitRequest}
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm sm:text-base font-medium touch-manipulation"
+                  className={`flex-1 px-4 py-3 text-white rounded-lg text-sm sm:text-base font-medium touch-manipulation ${
+                    requestType === 'day_off'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
                   申請する
                 </button>

@@ -35,6 +35,7 @@ export default function DriverVacationRequest({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [vacationType, setVacationType] = useState<'day_off' | 'night_shift'>('day_off')
 
   if (!currentUser) {
     return (
@@ -48,7 +49,7 @@ export default function DriverVacationRequest({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!selectedDate || !currentUser) return
 
     const newRequest: Omit<VacationRequest, 'id' | 'requestDate'> = {
@@ -57,9 +58,9 @@ export default function DriverVacationRequest({
       team: currentUser.team,
       employeeId: currentUser.employeeId,
       date: selectedDate,
-      workStatus: 'day_off',
-      isOff: true,
-      type: 'day_off',
+      workStatus: vacationType,
+      isOff: vacationType === 'day_off',
+      type: vacationType,
       reason: '',
       status: 'approved',
       isExternalDriver: currentUser.employeeId.startsWith('E'),
@@ -69,6 +70,7 @@ export default function DriverVacationRequest({
     onRequestSubmit(newRequest)
     setIsFormOpen(false)
     setSelectedDate(null)
+    setVacationType('day_off')
   }
 
   // 申請制限の判定
@@ -87,29 +89,30 @@ export default function DriverVacationRequest({
   const handleDateClick = (date: Date) => {
     const today = new Date()
     const isPast = date < today && !isSameDay(date, today)
-    
+
     if (isPast) {
       return  // 過去の日付はクリック不可
     }
-    
+
     if (isWithinRestrictionPeriod(date)) {
-      alert('直近10日間の休暇申請はできません。余裕を持って申請してください。')
+      alert('直近10日間の休暇・夜勤申請はできません。余裕を持って申請してください。')
       return
     }
-    
+
     setSelectedDate(date)
+    setVacationType('day_off')
     setIsFormOpen(true)
   }
 
   const handleDeleteRequest = (requestId: number) => {
     const request = existingRequests.find(req => req.id === requestId)
     if (!request) return
-    
+
     if (!canDeleteRequest(request)) {
-      alert('10日以内の休暇申請の削除は管理者にお問い合わせください。')
+      alert('10日以内の休暇・夜勤申請の削除は管理者にお問い合わせください。')
       return
     }
-    
+
     if (onRequestDelete) {
       onRequestDelete(requestId)
     }
@@ -132,8 +135,8 @@ export default function DriverVacationRequest({
   }
 
   const getDayVacations = (date: Date) => {
-    return existingRequests.filter(req => 
-      isSameDay(req.date, date) && req.isOff
+    return existingRequests.filter(req =>
+      isSameDay(req.date, date) && (req.isOff || req.workStatus === 'night_shift')
     )
   }
 
@@ -156,14 +159,14 @@ export default function DriverVacationRequest({
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1))
 
   const selectedDateVacations = selectedDate ? getDayVacations(selectedDate) : []
-  const userHasVacationOnSelectedDate = selectedDate ? 
-    getUserRequests().some(req => isSameDay(req.date, selectedDate) && req.isOff) : false
+  const userHasVacationOnSelectedDate = selectedDate ?
+    getUserRequests().some(req => isSameDay(req.date, selectedDate) && (req.isOff || req.workStatus === 'night_shift')) : false
 
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">休暇申請</h2>
+        <h2 className="text-2xl font-bold text-gray-900">休暇・夜勤申請</h2>
       </div>
 
       {/* 月間休暇状況表示 */}
@@ -261,8 +264,11 @@ export default function DriverVacationRequest({
             const isPast = date < new Date() && !isToday
             const isRestricted = isWithinRestrictionPeriod(date)
             const dayOfWeek = date.getDay()
-            const userHasVacation = getUserRequests().some(req => 
+            const userHasVacation = getUserRequests().some(req =>
               isSameDay(req.date, date) && req.isOff
+            )
+            const userHasNightShift = getUserRequests().some(req =>
+              isSameDay(req.date, date) && req.workStatus === 'night_shift'
             )
 
             return (
@@ -271,11 +277,12 @@ export default function DriverVacationRequest({
                 onClick={() => handleDateClick(date)}
                 className={`
                   relative min-h-[80px] p-2 border rounded-lg
-                  ${isPast ? 'bg-gray-50 cursor-not-allowed' : 
+                  ${isPast ? 'bg-gray-50 cursor-not-allowed' :
                     isRestricted ? 'bg-yellow-50 border-yellow-200 cursor-not-allowed' :
                     'cursor-pointer hover:bg-gray-50'}
                   ${isToday ? 'ring-2 ring-blue-500' : ''}
                   ${userHasVacation ? 'bg-blue-50 border-blue-200' : ''}
+                  ${userHasNightShift ? 'bg-indigo-50 border-indigo-200' : ''}
                 `}
                 title={isRestricted ? '直近10日間は申請できません' : ''}
               >
@@ -306,6 +313,11 @@ export default function DriverVacationRequest({
                 {userHasVacation && (
                   <div className="absolute top-1 right-1">
                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  </div>
+                )}
+                {userHasNightShift && (
+                  <div className="absolute top-1 right-1">
+                    <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
                   </div>
                 )}
               </div>
@@ -348,6 +360,11 @@ export default function DriverVacationRequest({
                           <span className="text-xs text-gray-500">
                             ({vacation.isExternalDriver ? '外部' : '正社員'})
                           </span>
+                          {vacation.workStatus === 'night_shift' && (
+                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                              夜勤
+                            </span>
+                          )}
                         </div>
                         {vacation.driverId === currentUser.id && onRequestDelete && (
                           canDeleteRequest(vacation) ? (
@@ -370,12 +387,47 @@ export default function DriverVacationRequest({
                 </div>
               )}
 
-              {/* 休暇申請フォーム */}
+              {/* 休暇・夜勤申請フォーム */}
               {!userHasVacationOnSelectedDate ? (
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      {format(selectedDate, 'MM月dd日 (E)', { locale: ja })} に休暇を申請しますか？
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      申請種別を選択
+                    </label>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setVacationType('day_off')}
+                        className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                          vacationType === 'day_off'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        休暇
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVacationType('night_shift')}
+                        className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                          vacationType === 'night_shift'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        夜勤
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`p-3 rounded-lg ${
+                    vacationType === 'day_off' ? 'bg-blue-50' : 'bg-indigo-50'
+                  }`}>
+                    <p className={`text-sm ${
+                      vacationType === 'day_off' ? 'text-blue-800' : 'text-indigo-800'
+                    }`}>
+                      {format(selectedDate, 'MM月dd日 (E)', { locale: ja })} に
+                      {vacationType === 'day_off' ? '休暇' : '夜勤'}を申請しますか？
                     </p>
                   </div>
 
@@ -389,7 +441,11 @@ export default function DriverVacationRequest({
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className={`flex-1 py-2 px-4 text-white rounded-lg ${
+                        vacationType === 'day_off'
+                          ? 'bg-blue-600 hover:bg-blue-700'
+                          : 'bg-indigo-600 hover:bg-indigo-700'
+                      }`}
                     >
                       申請する
                     </button>
@@ -397,7 +453,7 @@ export default function DriverVacationRequest({
                 </form>
               ) : (
                 <div className="text-center text-gray-600">
-                  <p>この日は既に休暇申請済みです</p>
+                  <p>この日は既に申請済みです</p>
                 </div>
               )}
             </div>

@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  Clock, 
-  Car, 
-  Calendar, 
-  Bell, 
-  CheckCircle, 
+import {
+  Clock,
+  Car,
+  Calendar,
+  Bell,
+  CheckCircle,
   AlertTriangle,
   MapPin,
   Settings,
@@ -17,7 +17,8 @@ import {
   RefreshCw,
   Home,
   X,
-  Menu
+  Menu,
+  FileText
 } from 'lucide-react'
 import { Vehicle, DriverNotification, VacationRequest, MonthlyVacationStats, VacationSettings, Driver, InspectionReservation, DepartureTime } from '@/types'
 import { getNextInspectionDate } from '@/utils/inspectionUtils'
@@ -940,6 +941,15 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
               <Clock className="h-4 w-4" />
               <span>出庫時間</span>
             </button>
+            <a
+              href="https://tosho-stock.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors text-gray-600 hover:bg-gray-100"
+            >
+              <FileText className="h-4 w-4" />
+              <span>資料ストック</span>
+            </a>
           </div>
 
           {/* モバイルメニューボタン */}
@@ -1011,6 +1021,16 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
                 <Clock className="h-5 w-5" />
                 <span>出庫時間</span>
               </button>
+              <a
+                href="https://tosho-stock.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors text-left text-gray-600 hover:bg-gray-100"
+              >
+                <FileText className="h-5 w-5" />
+                <span>資料ストック</span>
+              </a>
             </div>
           </div>
         )}
