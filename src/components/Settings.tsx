@@ -96,6 +96,7 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   
   // 特定日付設定用のstate
   const [selectedSpecificTeam, setSelectedSpecificTeam] = useState('配送センターチーム')
+  const [selectedSpecificYear, setSelectedSpecificYear] = useState(new Date().getFullYear())
   const [selectedSpecificMonth, setSelectedSpecificMonth] = useState(1)
   const [selectedSpecificDate, setSelectedSpecificDate] = useState(1)
   const [customLimit, setCustomLimit] = useState(0)
@@ -121,21 +122,21 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
   // 基本設定変更時に特定日付のcustomLimitをリアルタイム更新
   useEffect(() => {
     if (!vacationSettings) return
-    
-    const currentYear = new Date().getFullYear()
-    const tempDate = new Date(currentYear, selectedSpecificMonth - 1, selectedSpecificDate)
+
+    const tempDate = new Date(selectedSpecificYear, selectedSpecificMonth - 1, selectedSpecificDate)
     const weekday = tempDate.getDay()
     const baseLimit = vacationSettings?.teamMonthlyWeekdayLimits[selectedSpecificTeam]?.[selectedSpecificMonth]?.[weekday] ?? 0
-    
+
     // 既存の特定日付設定がない場合のみ、基本設定値に自動更新
-    const dateString = `${currentYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
+    const dateString = `${selectedSpecificYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
     if (!vacationSettings?.specificDateLimits[dateString]?.[selectedSpecificTeam]) {
       setCustomLimit(baseLimit)
     }
   }, [
-    vacationSettings?.teamMonthlyWeekdayLimits, 
-    selectedSpecificTeam, 
-    selectedSpecificMonth, 
+    vacationSettings?.teamMonthlyWeekdayLimits,
+    selectedSpecificTeam,
+    selectedSpecificYear,
+    selectedSpecificMonth,
     selectedSpecificDate,
     vacationSettings?.specificDateLimits
   ])
@@ -640,24 +641,25 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
     if (!vacationSettings) return null
     
     const teams = Object.keys(vacationSettings.teamMonthlyWeekdayLimits)
+    const currentYear = new Date().getFullYear()
+    const years = Array.from({length: 5}, (_, i) => currentYear - 2 + i) // 現在年の前後2年
     const months = Array.from({length: 12}, (_, i) => i + 1)
-    const daysInMonth = new Date(2025, selectedSpecificMonth, 0).getDate()
+    const daysInMonth = new Date(selectedSpecificYear, selectedSpecificMonth, 0).getDate()
     const dates = Array.from({length: daysInMonth}, (_, i) => i + 1)
-    
+
     // 基本フローで設定された上限値を取得する関数（リアルタイム更新対応）
     const getBaseLimit = (team: string, month: number, date: number) => {
-      const tempDate = new Date(2025, month - 1, date)
+      const tempDate = new Date(selectedSpecificYear, month - 1, date)
       const weekday = tempDate.getDay()
       return vacationSettings.teamMonthlyWeekdayLimits[team]?.[month]?.[weekday] ?? 0
     }
     
     // 特定日付を追加する関数
     const handleAddSpecificDateLimit = () => {
-      const currentYear = new Date().getFullYear()
-      const dateString = `${currentYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
-      
+      const dateString = `${selectedSpecificYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(selectedSpecificDate).padStart(2, '0')}`
+
       // より詳細なデバッグ情報
-      const selectedDate = new Date(currentYear, selectedSpecificMonth - 1, selectedSpecificDate)
+      const selectedDate = new Date(selectedSpecificYear, selectedSpecificMonth - 1, selectedSpecificDate)
       console.log('Adding specific date limit:', {
         dateString,
         customLimit,
@@ -721,10 +723,32 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
           </div>
         </div>
 
-        {/* ステップ2: 月選択 */}
+        {/* ステップ2: 年選択 */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            2. 月選択
+            2. 年選択
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {years.map((year) => (
+              <button
+                key={year}
+                onClick={() => setSelectedSpecificYear(year)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedSpecificYear === year
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {year}年
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ステップ3: 月選択 */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            3. 月選択
           </label>
           <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
             {months.map((month) => (
@@ -743,20 +767,19 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
           </div>
         </div>
 
-        {/* ステップ3: 日付選択 */}
+        {/* ステップ4: 日付選択 */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            3. 日付選択（{selectedSpecificMonth}月）
+            4. 日付選択（{selectedSpecificYear}年{selectedSpecificMonth}月）
           </label>
           <div className="grid grid-cols-7 gap-2 max-h-40 overflow-y-auto">
             {dates.map((date) => {
-              const currentYear = new Date().getFullYear()
-              const tempDate = new Date(currentYear, selectedSpecificMonth - 1, date)
+              const tempDate = new Date(selectedSpecificYear, selectedSpecificMonth - 1, date)
               const weekdayName = ['日', '月', '火', '水', '木', '金', '土'][tempDate.getDay()]
               const baseLimit = getBaseLimit(selectedSpecificTeam, selectedSpecificMonth, date)
-              
+
               // 既存の特定日付設定があるかチェック
-              const dateString = `${currentYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(date).padStart(2, '0')}`
+              const dateString = `${selectedSpecificYear}-${String(selectedSpecificMonth).padStart(2, '0')}-${String(date).padStart(2, '0')}`
               const hasSpecificSetting = vacationSettings.specificDateLimits[dateString]?.[selectedSpecificTeam] !== undefined
               const specificLimit = vacationSettings.specificDateLimits[dateString]?.[selectedSpecificTeam]
               
@@ -809,10 +832,10 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
           </div>
         </div>
 
-        {/* ステップ4: 上限設定と変更 */}
+        {/* ステップ5: 上限設定と変更 */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            4. {selectedSpecificMonth}月{selectedSpecificDate}日の上限設定
+            5. {selectedSpecificYear}年{selectedSpecificMonth}月{selectedSpecificDate}日の上限設定
           </label>
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="mb-3">
@@ -846,45 +869,60 @@ export default function Settings({ vacationSettings: propVacationSettings, onVac
 
         {/* 設定済み日付一覧 */}
         <div>
-          <h5 className="text-md font-medium text-gray-900 mb-4">設定済み特定日付</h5>
-          <div className="border border-gray-200 rounded-lg">
-            <div className="divide-y divide-gray-200">
-              {Object.entries(vacationSettings.specificDateLimits).flatMap(([date, teamLimits]) =>
-                Object.entries(teamLimits || {}).map(([team, limit]) => (
-                  <div key={`${date}-${team}`} className="px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <CalendarDays className="h-4 w-4 text-gray-400" />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{date} - {team}</div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(date).toLocaleDateString('ja-JP', { 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric',
-                            weekday: 'short'
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-sm font-medium text-gray-900">{limit}人</span>
-                      <button
-                        onClick={() => handleRemoveDateLimit(date)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-              {Object.values(vacationSettings.specificDateLimits).every(teamLimits => Object.keys(teamLimits || {}).length === 0) && Object.keys(vacationSettings.specificDateLimits).length === 0 && (
-                <div className="px-4 py-8 text-center text-gray-500">
-                  設定された特定日付がありません
+          {(() => {
+            const totalCount = Object.entries(vacationSettings.specificDateLimits).reduce(
+              (count, [_, teamLimits]) => count + Object.keys(teamLimits || {}).length,
+              0
+            )
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h5 className="text-md font-medium text-gray-900">設定済み特定日付</h5>
+                  <span className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                    {totalCount}件
+                  </span>
                 </div>
-              )}
-            </div>
-          </div>
+                <div className="border border-gray-200 rounded-lg max-h-96 overflow-y-auto">
+                  <div className="divide-y divide-gray-200">
+                    {Object.entries(vacationSettings.specificDateLimits).flatMap(([date, teamLimits]) =>
+                      Object.entries(teamLimits || {}).map(([team, limit]) => (
+                        <div key={`${date}-${team}`} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+                          <div className="flex items-center space-x-3">
+                            <CalendarDays className="h-4 w-4 text-gray-400" />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{date} - {team}</div>
+                              <div className="text-xs text-gray-500">
+                                {new Date(date).toLocaleDateString('ja-JP', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  weekday: 'short'
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-sm font-medium text-gray-900">{limit}人</span>
+                            <button
+                              onClick={() => handleRemoveDateLimit(date)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {totalCount === 0 && (
+                      <div className="px-4 py-8 text-center text-gray-500">
+                        設定された特定日付がありません
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </div>
     )
