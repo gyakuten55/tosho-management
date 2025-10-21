@@ -2082,37 +2082,32 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                           </div>
                         )}
                         
-                        {/* 点検車両台数 */}
-                        {dayInfo.inspectionVehicles && dayInfo.inspectionVehicles.length > 0 && (
-                          <div className="space-y-1">
-                            {(() => {
-                              const normalInspections = dayInfo.inspectionVehicles.filter(v => !(v as any).isReserved)
-                              const reservedInspections = dayInfo.inspectionVehicles.filter(v => (v as any).isReserved)
-                              
-                              return (
-                                <>
-                                  {normalInspections.length > 0 && (
-                                    <div className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded text-center">
-                                      点検期限: {normalInspections.length}台
-                                    </div>
-                                  )}
-                                  {reservedInspections.length > 0 && (
-                                    <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded text-center">
-                                      予約完了: {reservedInspections.length}台
-                                    </div>
-                                  )}
-                                </>
-                              )
-                            })()}
-                          </div>
-                        )}
-                        
-                        {/* 全車両稼働中 */}
-                        {dayInfo.inactiveVehicles === 0 && (!dayInfo.inspectionVehicles || dayInfo.inspectionVehicles.length === 0) && (
-                          <div className="text-xs text-green-600 text-center py-2 bg-green-50 rounded">
-                            全車両稼働中
-                          </div>
-                        )}
+                        {/* 点検実施車両台数 */}
+                        {(() => {
+                          const dateString = format(dayInfo.date, 'yyyy-MM-dd')
+                          const scheduledInspectionsCount = Object.values(inspectionBookings).filter(
+                            booking => booking.reservationDate === dateString
+                          ).length
+
+                          if (scheduledInspectionsCount > 0) {
+                            return (
+                              <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded text-center">
+                                点検実施: {scheduledInspectionsCount}台
+                              </div>
+                            )
+                          }
+
+                          // 全車両稼働中の表示
+                          if (dayInfo.inactiveVehicles === 0) {
+                            return (
+                              <div className="text-xs text-green-600 text-center py-2 bg-green-50 rounded">
+                                全車両稼働中
+                              </div>
+                            )
+                          }
+
+                          return null
+                        })()}
                       </div>
                     )}
                   </div>
