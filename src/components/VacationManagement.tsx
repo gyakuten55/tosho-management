@@ -1300,6 +1300,101 @@ export default function VacationManagement({
     }
   }
 
+  // チーム一括設定処理
+  const handleTeamBulkStatus = async (team: string, workStatus: 'working' | 'day_off') => {
+    if (!selectedDate) return
+
+    const teamDrivers = drivers.filter(driver => driver.team === team)
+
+    if (teamDrivers.length === 0) {
+      alert(`${team}に所属するドライバーがいません。`)
+      return
+    }
+
+    // 休暇設定の場合は上限チェック
+    if (workStatus === 'day_off') {
+      const vacationLimit = getVacationLimitForDate(selectedDate, team)
+
+      if (vacationLimit === 0) {
+        alert(`この日は${team}の休暇申請が禁止されています。（上限: 0人）`)
+        return
+      }
+
+      // 現在の休暇者数（チーム一括設定対象外のドライバー）
+      const currentVacations = vacationRequests.filter(req =>
+        isSameDay(req.date, selectedDate) &&
+        req.workStatus === 'day_off' &&
+        req.team === team &&
+        !teamDrivers.some(td => td.id === req.driverId) // 今回の設定対象外
+      ).length
+
+      const newVacationCount = currentVacations + teamDrivers.length
+
+      if (newVacationCount > vacationLimit) {
+        alert(`${team}の休暇上限を超えます。（現在: ${currentVacations}人 + 追加: ${teamDrivers.length}人 = ${newVacationCount}人、上限: ${vacationLimit}人）`)
+        return
+      }
+    }
+
+    const statusText = workStatus === 'working' ? '出勤' : '休暇'
+    const confirmMessage = `${format(selectedDate, 'yyyy年MM月dd日', { locale: ja })}に${team}の全員（${teamDrivers.length}人）を${statusText}に設定しますか？\n\n対象ドライバー:\n${teamDrivers.map(d => `・${d.name}`).join('\n')}\n\n※ 既存の設定は上書きされます。`
+
+    if (!confirm(confirmMessage)) return
+
+    try {
+      // その日のチームドライバーの既存設定をデータベースから削除
+      const existingRequests = vacationRequests.filter(req =>
+        isSameDay(req.date, selectedDate) &&
+        teamDrivers.some(driver => driver.id === req.driverId) &&
+        req.id > 0 // データベースに実際に保存されているレコードのみ
+      )
+
+      for (const req of existingRequests) {
+        await VacationService.delete(req.id)
+      }
+
+      let updatedRequests = vacationRequests.filter(req =>
+        !(isSameDay(req.date, selectedDate) && teamDrivers.some(driver => driver.id === req.driverId))
+      )
+
+      // 指定された勤務状態でチームドライバーをデータベースに保存
+      for (const driver of teamDrivers) {
+        const requestData = {
+          driverId: driver.id,
+          driverName: driver.name,
+          team: driver.team,
+          employeeId: driver.employeeId,
+          date: selectedDate,
+          workStatus: workStatus,
+          isOff: workStatus === 'day_off',
+          type: workStatus,
+          reason: `${team}一括設定`,
+          status: 'approved' as const,
+          requestDate: new Date(),
+          isExternalDriver: driver.employeeId.startsWith('E'),
+          registeredBy: 'admin' as const
+        }
+
+        const savedRequest = await VacationService.create(requestData)
+        updatedRequests.push(savedRequest)
+      }
+
+      setVacationRequests(updatedRequests)
+
+      // チームドライバーの統計を更新
+      teamDrivers.forEach(driver => {
+        updateMonthlyStats(driver.id, selectedDate, updatedRequests)
+      })
+
+      // フォームをリセット
+      setSelectedDriverId('')
+      setSelectedWorkStatus('day_off')
+    } catch (error) {
+      console.error('Failed to update team bulk status:', error)
+      alert('チーム一括設定の保存に失敗しました')
+    }
+  }
+
   // 祝日チーム一括設定処理
   const handleHolidayTeamBulkStatus = async (holidayTeam: string, workStatus: 'working' | 'day_off') => {
     if (!selectedDate) return
@@ -2090,6 +2185,46 @@ export default function VacationManagement({
       </div>
 
             <div className="p-8 space-y-8">
+              {/* チーム一括設定 */}
+              <div className="bg-gray-50 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-200">チーム一括設定</h4>
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-3">
+                    チーム単位で一括して出勤・休暇を設定できます
+                  </p>
+                  <div className="grid grid-cols-4 gap-3">
+                    {['配送センターチーム', '配送センター外注', '常駐チーム', 'Bチーム'].map((team) => {
+                      const teamDrivers = drivers.filter(driver => driver.team === team)
+
+                      return (
+                        <div key={team} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow">
+                          <div className="text-center mb-3">
+                            <span className="font-bold text-base text-gray-900">{team.replace('配送センター', 'センター')}</span>
+                            <p className="text-sm text-gray-500 mt-1">{teamDrivers.length}人</p>
+                          </div>
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => handleTeamBulkStatus(team, 'working')}
+                              className="w-full py-2.5 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={teamDrivers.length === 0}
+                            >
+                              出勤設定
+                            </button>
+                            <button
+                              onClick={() => handleTeamBulkStatus(team, 'day_off')}
+                              className="w-full py-2.5 px-4 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={teamDrivers.length === 0}
+                            >
+                              休暇設定
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
               {/* 祝日チーム一括設定 */}
               <div className="bg-gray-50 rounded-xl p-6">
                 <h4 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-200">祝日チーム一括設定</h4>
@@ -2111,13 +2246,20 @@ export default function VacationManagement({
                             <span className="font-bold text-xl text-gray-900">{team.replace('祝日', '').replace('チーム', '')}</span>
                             <p className="text-sm text-gray-500 mt-1">{teamDrivers.length}人</p>
                           </div>
-                          <div>
+                          <div className="space-y-2">
                             <button
                               onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'working')}
                               className="w-full py-3 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={teamDrivers.length === 0}
                             >
                               出勤設定
+                            </button>
+                            <button
+                              onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'day_off')}
+                              className="w-full py-3 px-4 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={teamDrivers.length === 0}
+                            >
+                              休暇設定
                             </button>
                           </div>
                         </div>
