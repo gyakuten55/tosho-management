@@ -816,7 +816,7 @@ export default function DriverDashboard({ onLogout }: DriverDashboardProps) {
               <textarea
                 value={selectedRemarks}
                 onChange={(e) => setSelectedRemarks(e.target.value)}
-                placeholder="備考があれば入力してください..."
+                placeholder="「行先」or「車両乗り換えがある場合時間と車番」を入力"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 rows={3}
               />
