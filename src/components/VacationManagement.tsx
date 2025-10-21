@@ -2113,11 +2113,11 @@ export default function VacationManagement({
                           </div>
                           <div>
                             <button
-                              onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'day_off')}
-                              className="w-full py-3 px-4 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => handleHolidayTeamBulkStatus(team.replace('チーム', ''), 'working')}
+                              className="w-full py-3 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={teamDrivers.length === 0}
                             >
-                              休暇設定
+                              出勤設定
                             </button>
                           </div>
                         </div>
