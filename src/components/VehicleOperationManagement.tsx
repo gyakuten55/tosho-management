@@ -103,7 +103,8 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   const [swapReason, setSwapReason] = useState('')
   
   // 点検予約管理用状態（特定の点検期限日単位で管理）
-  const [inspectionBookings, setInspectionBookings] = useState<{[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}}>({})
+  // キー: `${vehicleId}_${date}_${inspectionType}` で複数の点検種別を同時管理
+  const [inspectionBookings, setInspectionBookings] = useState<{[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string, inspectionType: string}}>({})
 
   // 点検予約リスト検索用状態
   const [searchDeadlineFrom, setSearchDeadlineFrom] = useState('')
@@ -166,65 +167,69 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
         }
         
         // 点検予約データをinspectionBookingsのフォーマットに変換
-        const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+        const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string, inspectionType: string}} = {}
         const duplicateKeys: string[] = []
-        
+
         console.log(`Loading ${inspectionReservations.length} inspection reservations from database`)
-        
+
         inspectionReservations.forEach(reservation => {
           if (reservation.status === 'scheduled') {
-            // memoから日付範囲情報を抽出
+            // memoから日付範囲情報と点検種別を抽出
             const memo = reservation.memo || ''
             const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
-            
+            const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+            const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+            const isCraneInspection = inspectionTypeName === 'クレーン年次点検'
+
             const bookingData = {
               isReservationCompleted: true,
               memo: reservation.memo || '',
-              hasCraneInspection: false, // 必要に応じて車両情報から判定
+              hasCraneInspection: isCraneInspection,
               reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
               vehicleId: reservation.vehicleId,
-              inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+              inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0],
+              inspectionType: inspectionTypeName
             }
-            
+
             if (dateRangeMatch) {
-              // 期間予約の場合：期間内の全日付にキーを作成
+              // 期間予約の場合：期間内の全日付にキーを作成（点検種別を含む）
               const startDateStr = dateRangeMatch[1]
               const endDateStr = dateRangeMatch[2]
               const startDate = new Date(startDateStr + 'T00:00:00')
               const endDate = new Date(endDateStr + 'T00:00:00')
               const dates = eachDayOfInterval({ start: startDate, end: endDate })
-              
+
               dates.forEach(date => {
-                const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}`
-                
+                const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${inspectionTypeName}`
+
                 // 重複チェック
                 if (bookingsMap[dateKey]) {
                   duplicateKeys.push(dateKey)
                   console.warn(`Duplicate booking key detected: ${dateKey}`)
                 }
-                
+
                 bookingsMap[dateKey] = bookingData
               })
             } else {
-              // 単日予約の場合：従来通り
-              const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}`
-              
+              // 単日予約の場合：点検種別を含むキーを生成
+              const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}_${inspectionTypeName}`
+
               // 重複チェック
               if (bookingsMap[bookingKey]) {
                 duplicateKeys.push(bookingKey)
                 console.warn(`Duplicate booking key detected: ${bookingKey}`)
               }
-              
+
               bookingsMap[bookingKey] = bookingData
             }
           }
         })
-        
+
         console.log(`Created ${Object.keys(bookingsMap).length} unique inspection bookings`)
         if (duplicateKeys.length > 0) {
           console.warn(`Found ${duplicateKeys.length} duplicate keys:`, duplicateKeys)
         }
-        
+
         setInspectionBookings(bookingsMap)
         
       } catch (err) {
@@ -416,15 +421,30 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   // 点検予約モーダル用状態
   const [showInspectionReservationModal, setShowInspectionReservationModal] = useState(false)
   const [selectedInspectionVehicle, setSelectedInspectionVehicle] = useState<Vehicle | null>(null)
-  const [inspectionReservationStartDate, setInspectionReservationStartDate] = useState('')
-  const [inspectionReservationEndDate, setInspectionReservationEndDate] = useState('')
-  const [inspectionMemo, setInspectionMemo] = useState('')
-  const [inspectionType, setInspectionType] = useState<'regular' | 'crane_annual'>('regular')
+
+  // 定期点検用
+  const [enableRegularInspection, setEnableRegularInspection] = useState(true)
+  const [regularInspectionStartDate, setRegularInspectionStartDate] = useState('')
+  const [regularInspectionEndDate, setRegularInspectionEndDate] = useState('')
+  const [regularInspectionMemo, setRegularInspectionMemo] = useState('')
+
+  // クレーン年次点検用
+  const [enableCraneInspection, setEnableCraneInspection] = useState(false)
+  const [craneInspectionStartDate, setCraneInspectionStartDate] = useState('')
+  const [craneInspectionEndDate, setCraneInspectionEndDate] = useState('')
+  const [craneInspectionMemo, setCraneInspectionMemo] = useState('')
 
   // 点検予約編集モーダル用状態
   const [showEditReservationModal, setShowEditReservationModal] = useState(false)
   const [editingReservation, setEditingReservation] = useState<{ id: number; key: string; scheduledDate: Date } | null>(null)
   const [editScheduledDate, setEditScheduledDate] = useState('')
+  const [editStartDate, setEditStartDate] = useState('')
+  const [editEndDate, setEditEndDate] = useState('')
+  const [editMemo, setEditMemo] = useState('')
+  const [editInspectionType, setEditInspectionType] = useState('')
+
+  // 点検期限車両セクション用状態
+  const [selectedInspectionMonth, setSelectedInspectionMonth] = useState<Date | null>(null)
 
   // エスケープキーでモーダルを閉じる（優先順位順）
   useEscapeKey(() => {
@@ -751,151 +771,245 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
   // 点検予約処理関数
   const handleInspectionReservation = async () => {
-    if (!selectedInspectionVehicle || !inspectionReservationStartDate || !inspectionReservationEndDate) {
-      alert('車両と予約期間を選択してください')
+    if (!selectedInspectionVehicle) {
+      alert('車両を選択してください')
       return
     }
 
-    // 日付文字列をローカル時間で正しく解釈する
-    const startDate = new Date(inspectionReservationStartDate + 'T00:00:00')
-    const endDate = new Date(inspectionReservationEndDate + 'T00:00:00')
-    
-    // 日付の妥当性チェック
-    if (startDate > endDate) {
-      alert('開始日は終了日より前の日付を選択してください')
+    // 少なくとも1つの点検種別が選択されているかチェック
+    if (!enableRegularInspection && !enableCraneInspection) {
+      alert('少なくとも1つの点検種別を選択してください')
       return
     }
-    
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    startDate.setHours(0, 0, 0, 0)
-    
-    if (startDate < today) {
-      alert('開始日は今日以降の日付を選択してください')
-      return
+
+    // バリデーション: 定期点検
+    if (enableRegularInspection) {
+      if (!regularInspectionStartDate || !regularInspectionEndDate) {
+        alert('定期点検の開始日と終了日を入力してください')
+        return
+      }
+
+      const regStartDate = new Date(regularInspectionStartDate + 'T00:00:00')
+      const regEndDate = new Date(regularInspectionEndDate + 'T00:00:00')
+      regStartDate.setHours(0, 0, 0, 0)
+
+      if (regStartDate > regEndDate) {
+        alert('定期点検：開始日は終了日より前の日付を選択してください')
+        return
+      }
+
+      if (regStartDate < today) {
+        alert('定期点検：開始日は今日以降の日付を選択してください')
+        return
+      }
+
+      const regularDeadline = getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+      if (regEndDate > regularDeadline) {
+        alert('定期点検：終了日は点検期限を超えることはできません')
+        return
+      }
     }
-    
-    // 点検種別に応じて期限を計算
-    const inspectionDeadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
-      ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
-      : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
-    
-    if (endDate > inspectionDeadline) {
-      alert('終了日は点検期限を超えることはできません')
-      return
+
+    // バリデーション: クレーン年次点検
+    if (enableCraneInspection) {
+      if (!selectedInspectionVehicle.craneAnnualInspectionDate) {
+        alert('この車両にはクレーン年次点検の設定がありません')
+        return
+      }
+
+      if (!craneInspectionStartDate || !craneInspectionEndDate) {
+        alert('クレーン年次点検の開始日と終了日を入力してください')
+        return
+      }
+
+      const craneStartDate = new Date(craneInspectionStartDate + 'T00:00:00')
+      const craneEndDate = new Date(craneInspectionEndDate + 'T00:00:00')
+      craneStartDate.setHours(0, 0, 0, 0)
+
+      if (craneStartDate > craneEndDate) {
+        alert('クレーン年次点検：開始日は終了日より前の日付を選択してください')
+        return
+      }
+
+      if (craneStartDate < today) {
+        alert('クレーン年次点検：開始日は今日以降の日付を選択してください')
+        return
+      }
+
+      const craneDeadline = getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+      if (craneEndDate > craneDeadline) {
+        alert('クレーン年次点検：終了日は点検期限を超えることはできません')
+        return
+      }
     }
-    
-    // 開始日を予約日として使用（期間内のいずれかの日として）
-    const reservationDate = startDate
-    
+
     // 点検予約をデータベースに保存
+    const createdReservations: string[] = []
     try {
       const driverInfo = drivers.find(d => d.name === selectedInspectionVehicle.driver)
-      
-      await InspectionReservationService.createFromVehicleInspection(
-        selectedInspectionVehicle.id,
-        selectedInspectionVehicle.plateNumber,
-        driverInfo?.id,
-        driverInfo?.name,
-        reservationDate,
-        inspectionDeadline,
-        // 日付範囲情報と点検種別をmemoに追加
-        `点検種別: ${inspectionType === 'crane_annual' ? 'クレーン年次点検' : '定期点検'}\n${isSameDay(startDate, endDate) 
-          ? inspectionMemo
-          : `日付範囲: ${format(startDate, 'yyyy-MM-dd')} ~ ${format(endDate, 'yyyy-MM-dd')}${inspectionMemo ? `\n${inspectionMemo}` : ''}`}`
-      )
 
-      // 担当ドライバーに通知を送信（日付範囲対応）
-      if (driverInfo) {
-        const dateRangeMessage = isSameDay(startDate, endDate)
-          ? format(startDate, 'yyyy/M/d')
-          : `${format(startDate, 'yyyy/M/d')} ~ ${format(endDate, 'yyyy/M/d')}`
-        
-        const memoText = inspectionMemo?.trim() ? `\n備考: ${inspectionMemo}` : ''
-        const inspectionTypeName = inspectionType === 'crane_annual' ? 'クレーン年次点検' : '定期点検'
-        const customMessage = `担当車両 ${selectedInspectionVehicle.plateNumber} の${inspectionTypeName}が ${dateRangeMessage} で予約されました。${memoText}`
-        
-        await DriverNotificationService.create({
-          driverId: driverInfo.id,
-          type: 'inspection_reserved',
-          title: `${inspectionTypeName}予約完了のお知らせ`,
-          message: customMessage,
-          priority: 'medium',
-          isRead: false,
-          actionRequired: false,
-          scheduledFor: reservationDate
-        })
+      // 定期点検の予約作成
+      if (enableRegularInspection) {
+        const regStartDate = new Date(regularInspectionStartDate + 'T00:00:00')
+        const regEndDate = new Date(regularInspectionEndDate + 'T00:00:00')
+        const regularDeadline = getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
+
+        const regularMemo = `点検種別: 定期点検\n${isSameDay(regStartDate, regEndDate)
+          ? regularInspectionMemo
+          : `日付範囲: ${format(regStartDate, 'yyyy-MM-dd')} ~ ${format(regEndDate, 'yyyy-MM-dd')}${regularInspectionMemo ? `\n${regularInspectionMemo}` : ''}`}`
+
+        await InspectionReservationService.createFromVehicleInspection(
+          selectedInspectionVehicle.id,
+          selectedInspectionVehicle.plateNumber,
+          driverInfo?.id,
+          driverInfo?.name,
+          regStartDate,
+          regularDeadline,
+          regularMemo
+        )
+
+        const dateRangeText = isSameDay(regStartDate, regEndDate)
+          ? format(regStartDate, 'yyyy年MM月dd日', { locale: ja })
+          : `${format(regStartDate, 'yyyy年MM月dd日', { locale: ja })} ~ ${format(regEndDate, 'yyyy年MM月dd日', { locale: ja })}`
+        createdReservations.push(`定期点検: ${dateRangeText}`)
+
+        // ドライバー通知
+        if (driverInfo) {
+          const dateRangeMessage = isSameDay(regStartDate, regEndDate)
+            ? format(regStartDate, 'yyyy/M/d')
+            : `${format(regStartDate, 'yyyy/M/d')} ~ ${format(regEndDate, 'yyyy/M/d')}`
+
+          const memoText = regularInspectionMemo?.trim() ? `\n備考: ${regularInspectionMemo}` : ''
+          const customMessage = `担当車両 ${selectedInspectionVehicle.plateNumber} の定期点検が ${dateRangeMessage} で予約されました。${memoText}`
+
+          await DriverNotificationService.create({
+            driverId: driverInfo.id,
+            type: 'inspection_reserved',
+            title: '定期点検予約完了のお知らせ',
+            message: customMessage,
+            priority: 'medium',
+            isRead: false,
+            actionRequired: false,
+            scheduledFor: regStartDate
+          })
+        }
+      }
+
+      // クレーン年次点検の予約作成
+      if (enableCraneInspection && selectedInspectionVehicle.craneAnnualInspectionDate) {
+        const craneStartDate = new Date(craneInspectionStartDate + 'T00:00:00')
+        const craneEndDate = new Date(craneInspectionEndDate + 'T00:00:00')
+        const craneDeadline = getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
+
+        const craneMemo = `点検種別: クレーン年次点検\n${isSameDay(craneStartDate, craneEndDate)
+          ? craneInspectionMemo
+          : `日付範囲: ${format(craneStartDate, 'yyyy-MM-dd')} ~ ${format(craneEndDate, 'yyyy-MM-dd')}${craneInspectionMemo ? `\n${craneInspectionMemo}` : ''}`}`
+
+        await InspectionReservationService.createFromVehicleInspection(
+          selectedInspectionVehicle.id,
+          selectedInspectionVehicle.plateNumber,
+          driverInfo?.id,
+          driverInfo?.name,
+          craneStartDate,
+          craneDeadline,
+          craneMemo
+        )
+
+        const dateRangeText = isSameDay(craneStartDate, craneEndDate)
+          ? format(craneStartDate, 'yyyy年MM月dd日', { locale: ja })
+          : `${format(craneStartDate, 'yyyy年MM月dd日', { locale: ja })} ~ ${format(craneEndDate, 'yyyy年MM月dd日', { locale: ja })}`
+        createdReservations.push(`クレーン年次点検: ${dateRangeText}`)
+
+        // ドライバー通知
+        if (driverInfo) {
+          const dateRangeMessage = isSameDay(craneStartDate, craneEndDate)
+            ? format(craneStartDate, 'yyyy/M/d')
+            : `${format(craneStartDate, 'yyyy/M/d')} ~ ${format(craneEndDate, 'yyyy/M/d')}`
+
+          const memoText = craneInspectionMemo?.trim() ? `\n備考: ${craneInspectionMemo}` : ''
+          const customMessage = `担当車両 ${selectedInspectionVehicle.plateNumber} のクレーン年次点検が ${dateRangeMessage} で予約されました。${memoText}`
+
+          await DriverNotificationService.create({
+            driverId: driverInfo.id,
+            type: 'inspection_reserved',
+            title: 'クレーン年次点検予約完了のお知らせ',
+            message: customMessage,
+            priority: 'medium',
+            isRead: false,
+            actionRequired: false,
+            scheduledFor: craneStartDate
+          })
+        }
       }
 
       // データベース保存成功後、最新の点検予約データを再取得
       const updatedReservations = await InspectionReservationService.getAll()
-      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
-      
+      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string, inspectionType: string}} = {}
+
       updatedReservations.forEach(reservation => {
         if (reservation.status === 'scheduled') {
-          // memoから日付範囲情報を抽出
+          // memoから日付範囲情報と点検種別を抽出
           const memo = reservation.memo || ''
           const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
-          
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          const isCraneInspection = inspectionTypeName === 'クレーン年次点検'
+
           const bookingData = {
             isReservationCompleted: true,
             memo: reservation.memo || '',
-            hasCraneInspection: false,
+            hasCraneInspection: isCraneInspection,
             reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
             vehicleId: reservation.vehicleId,
-            inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+            inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0],
+            inspectionType: inspectionTypeName
           }
-          
+
           if (dateRangeMatch) {
-            // 期間予約の場合：期間内の全日付にキーを作成
+            // 期間予約の場合：期間内の全日付にキーを作成（点検種別を含む）
             const startDateStr = dateRangeMatch[1]
             const endDateStr = dateRangeMatch[2]
             const startDate = new Date(startDateStr + 'T00:00:00')
             const endDate = new Date(endDateStr + 'T00:00:00')
             const dates = eachDayOfInterval({ start: startDate, end: endDate })
-            
+
             dates.forEach(date => {
-              const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}`
+              const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${inspectionTypeName}`
               bookingsMap[dateKey] = bookingData
             })
           } else {
-            // 単日予約の場合：従来通り
-            const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}`
+            // 単日予約の場合：点検種別を含むキーを生成
+            const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}_${inspectionTypeName}`
             bookingsMap[bookingKey] = bookingData
           }
         }
       })
-      
+
       setInspectionBookings(bookingsMap)
-      
+
     } catch (error) {
       console.error('Failed to save inspection reservation:', error)
       alert('点検予約の保存に失敗しました。')
       return
     }
 
-    // 予約日が今日の場合、車両のステータスを「点検中」に変更
-    if (isSameDay(reservationDate, today)) {
-      const updatedVehicles = vehicles.map(vehicle => 
-        vehicle.id === selectedInspectionVehicle.id 
-          ? { ...vehicle, status: 'inspection' as const }
-          : vehicle
-      )
-      setVehicles(updatedVehicles)
-    }
-
     // モーダルを閉じてリセット
+    const vehiclePlateNumber = selectedInspectionVehicle.plateNumber
     setShowInspectionReservationModal(false)
     setSelectedInspectionVehicle(null)
-    setInspectionReservationStartDate('')
-    setInspectionReservationEndDate('')
-    setInspectionMemo('')
+    setEnableRegularInspection(true)
+    setRegularInspectionStartDate('')
+    setRegularInspectionEndDate('')
+    setRegularInspectionMemo('')
+    setEnableCraneInspection(false)
+    setCraneInspectionStartDate('')
+    setCraneInspectionEndDate('')
+    setCraneInspectionMemo('')
 
-    const memoText = inspectionMemo.trim() ? `\n備考: ${inspectionMemo}` : ''
-    const dateRangeText = isSameDay(startDate, endDate) 
-      ? format(startDate, 'yyyy年MM月dd日', { locale: ja })
-      : `${format(startDate, 'yyyy年MM月dd日', { locale: ja })} ~ ${format(endDate, 'yyyy年MM月dd日', { locale: ja })}`
-    alert(`${selectedInspectionVehicle.plateNumber} の点検予約を ${dateRangeText} で設定しました${isSameDay(reservationDate, today) ? '（車両ステータスを「点検中」に変更しました）' : ''}${memoText}`)
+    alert(`${vehiclePlateNumber} の点検予約を設定しました\n\n${createdReservations.join('\n')}`)
   }
 
   // 点検予約完了処理
@@ -906,10 +1020,14 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       const booking = inspectionBookings[bookingKey]
       if (booking) {
         const reservations = await InspectionReservationService.getByVehicleId(booking.vehicleId)
-        const targetReservation = reservations.find(r =>
-          r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
-          r.status === 'scheduled'
-        )
+        const targetReservation = reservations.find(r => {
+          const memo = r.memo || ''
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          return r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
+            r.status === 'scheduled' &&
+            inspectionTypeName === booking.inspectionType
+        })
 
         if (targetReservation) {
           await InspectionReservationService.updateStatus(targetReservation.id, 'completed')
@@ -917,12 +1035,15 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
           // データベースから最新データを再取得
           const updatedReservations = await InspectionReservationService.getAll()
-          const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+          const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string, inspectionType: string}} = {}
 
           updatedReservations.forEach(reservation => {
             if (reservation.status === 'scheduled') {
               const memo = reservation.memo || ''
               const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+              const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+              const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+              const isCraneInspection = inspectionTypeName === 'クレーン年次点検'
 
               if (dateRangeMatch) {
                 const [, startDateStr, endDateStr] = dateRangeMatch
@@ -930,25 +1051,27 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                 const endDate = new Date(endDateStr + 'T00:00:00')
 
                 eachDayOfInterval({ start: startDate, end: endDate }).forEach(date => {
-                  const key = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+                  const key = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${inspectionTypeName}`
                   bookingsMap[key] = {
-                    isReservationCompleted: false,
+                    isReservationCompleted: true,
                     memo: memo,
-                    hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+                    hasCraneInspection: isCraneInspection,
                     reservationDate: format(date, 'yyyy-MM-dd'),
                     vehicleId: reservation.vehicleId,
-                    inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+                    inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd'),
+                    inspectionType: inspectionTypeName
                   }
                 })
               } else {
-                const key = `${reservation.vehicleId}_${format(reservation.scheduledDate, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+                const key = `${reservation.vehicleId}_${format(reservation.scheduledDate, 'yyyy-MM-dd')}_${inspectionTypeName}`
                 bookingsMap[key] = {
-                  isReservationCompleted: false,
+                  isReservationCompleted: true,
                   memo: memo,
-                  hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+                  hasCraneInspection: isCraneInspection,
                   reservationDate: format(reservation.scheduledDate, 'yyyy-MM-dd'),
                   vehicleId: reservation.vehicleId,
-                  inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+                  inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd'),
+                  inspectionType: inspectionTypeName
                 }
               }
             }
@@ -969,18 +1092,41 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       const booking = inspectionBookings[bookingKey]
       if (booking) {
         const reservations = await InspectionReservationService.getByVehicleId(booking.vehicleId)
-        const targetReservation = reservations.find(r =>
-          r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
-          r.status === 'scheduled'
-        )
+        const targetReservation = reservations.find(r => {
+          const memo = r.memo || ''
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          return r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
+            r.status === 'scheduled' &&
+            inspectionTypeName === booking.inspectionType
+        })
 
         if (targetReservation) {
+          // メモから点検種別、日付範囲、その他メモを抽出
+          const memo = targetReservation.memo || ''
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+
+          const inspectionType = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          const startDate = dateRangeMatch ? dateRangeMatch[1] : format(targetReservation.scheduledDate, 'yyyy-MM-dd')
+          const endDate = dateRangeMatch ? dateRangeMatch[2] : format(targetReservation.scheduledDate, 'yyyy-MM-dd')
+
+          // メモから点検種別と日付範囲を除いた部分を取得
+          let userMemo = memo
+            .replace(/点検種別: (クレーン年次点検|定期点検)\n?/, '')
+            .replace(/日付範囲: \d{4}-\d{2}-\d{2} ~ \d{4}-\d{2}-\d{2}\n?/, '')
+            .trim()
+
           setEditingReservation({
             id: targetReservation.id,
             key: bookingKey,
             scheduledDate: targetReservation.scheduledDate
           })
           setEditScheduledDate(format(targetReservation.scheduledDate, 'yyyy-MM-dd'))
+          setEditStartDate(startDate)
+          setEditEndDate(endDate)
+          setEditMemo(userMemo)
+          setEditInspectionType(inspectionType)
           setShowEditReservationModal(true)
         }
       }
@@ -994,24 +1140,64 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   const handleSaveEditReservation = async () => {
     if (!editingReservation) return
 
+    // バリデーション
+    if (!editScheduledDate) {
+      alert('予約日（実施予定日）を入力してください')
+      return
+    }
+
+    if (!editStartDate || !editEndDate) {
+      alert('開始日と終了日を入力してください')
+      return
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const scheduledDate = new Date(editScheduledDate + 'T00:00:00')
+    const startDate = new Date(editStartDate + 'T00:00:00')
+    const endDate = new Date(editEndDate + 'T00:00:00')
+
+    if (startDate > endDate) {
+      alert('開始日は終了日以前である必要があります')
+      return
+    }
+
+    if (scheduledDate < startDate || scheduledDate > endDate) {
+      alert('予約日（実施予定日）は開始日と終了日の範囲内である必要があります')
+      return
+    }
+
     try {
-      const newScheduledDate = new Date(editScheduledDate + 'T00:00:00')
+      // メモを再構築（点検種別と日付範囲を含む）
+      const dateRangeText = `${format(startDate, 'yyyy-MM-dd')} ~ ${format(endDate, 'yyyy-MM-dd')}`
+      let reconstructedMemo = `点検種別: ${editInspectionType}\n日付範囲: ${dateRangeText}`
+
+      // ユーザーが入力したメモがあれば追加
+      if (editMemo.trim()) {
+        reconstructedMemo += `\n${editMemo.trim()}`
+      }
+
       await InspectionReservationService.update(editingReservation.id, {
-        scheduledDate: newScheduledDate
+        scheduledDate: scheduledDate,
+        memo: reconstructedMemo
       })
 
-      alert('予約日を更新しました')
+      alert('点検予約を更新しました')
       setShowEditReservationModal(false)
       setEditingReservation(null)
 
       // データベースから最新データを再取得
       const updatedReservations = await InspectionReservationService.getAll()
-      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
+      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string, inspectionType: string}} = {}
 
       updatedReservations.forEach(reservation => {
         if (reservation.status === 'scheduled') {
           const memo = reservation.memo || ''
           const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          const isCraneInspection = inspectionTypeName === 'クレーン年次点検'
 
           if (dateRangeMatch) {
             const [, startDateStr, endDateStr] = dateRangeMatch
@@ -1019,25 +1205,27 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
             const endDate = new Date(endDateStr + 'T00:00:00')
 
             eachDayOfInterval({ start: startDate, end: endDate }).forEach(date => {
-              const key = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+              const key = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${inspectionTypeName}`
               bookingsMap[key] = {
-                isReservationCompleted: false,
+                isReservationCompleted: true,
                 memo: memo,
-                hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+                hasCraneInspection: isCraneInspection,
                 reservationDate: format(date, 'yyyy-MM-dd'),
                 vehicleId: reservation.vehicleId,
-                inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+                inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd'),
+                inspectionType: inspectionTypeName
               }
             })
           } else {
-            const key = `${reservation.vehicleId}_${format(reservation.scheduledDate, 'yyyy-MM-dd')}_${format(reservation.deadlineDate, 'yyyy-MM-dd')}`
+            const key = `${reservation.vehicleId}_${format(reservation.scheduledDate, 'yyyy-MM-dd')}_${inspectionTypeName}`
             bookingsMap[key] = {
-              isReservationCompleted: false,
+              isReservationCompleted: true,
               memo: memo,
-              hasCraneInspection: reservation.inspectionType === 'クレーン年次点検',
+              hasCraneInspection: isCraneInspection,
               reservationDate: format(reservation.scheduledDate, 'yyyy-MM-dd'),
               vehicleId: reservation.vehicleId,
-              inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd')
+              inspectionDeadline: format(reservation.deadlineDate, 'yyyy-MM-dd'),
+              inspectionType: inspectionTypeName
             }
           }
         }
@@ -1059,15 +1247,19 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       const booking = inspectionBookings[bookingKey]
       if (booking) {
         const reservations = await InspectionReservationService.getByVehicleId(booking.vehicleId)
-        const targetReservation = reservations.find(r => 
-          r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
-          r.status === 'scheduled'
-        )
-        
+        const targetReservation = reservations.find(r => {
+          const memo = r.memo || ''
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          return r.scheduledDate.toISOString().split('T')[0] === booking.reservationDate &&
+            r.status === 'scheduled' &&
+            inspectionTypeName === booking.inspectionType
+        })
+
         if (targetReservation) {
           // データベースから完全に削除
           await InspectionReservationService.delete(targetReservation.id)
-          
+
           // 担当ドライバーにキャンセル通知を送信
           const vehicle = vehicles.find(v => v.id === booking.vehicleId)
           if (vehicle && vehicle.driver) {
@@ -1087,43 +1279,47 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
       // データベースから最新の点検予約データを再取得して状態を更新
       const updatedReservations = await InspectionReservationService.getAll()
-      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string}} = {}
-      
+      const bookingsMap: {[key: string]: {isReservationCompleted: boolean, memo: string, hasCraneInspection: boolean, reservationDate?: string, vehicleId: number, inspectionDeadline: string, inspectionType: string}} = {}
+
       updatedReservations.forEach(reservation => {
         if (reservation.status === 'scheduled') {
-          // memoから日付範囲情報を抽出
+          // memoから日付範囲情報と点検種別を抽出
           const memo = reservation.memo || ''
           const dateRangeMatch = memo.match(/日付範囲: (\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})/)
-          
+          const inspectionTypeMatch = memo.match(/点検種別: (クレーン年次点検|定期点検)/)
+          const inspectionTypeName = inspectionTypeMatch ? inspectionTypeMatch[1] : '定期点検'
+          const isCraneInspection = inspectionTypeName === 'クレーン年次点検'
+
           const bookingData = {
             isReservationCompleted: true,
             memo: reservation.memo || '',
-            hasCraneInspection: false,
+            hasCraneInspection: isCraneInspection,
             reservationDate: reservation.scheduledDate.toISOString().split('T')[0],
             vehicleId: reservation.vehicleId,
-            inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0]
+            inspectionDeadline: reservation.deadlineDate.toISOString().split('T')[0],
+            inspectionType: inspectionTypeName
           }
-          
+
           if (dateRangeMatch) {
-            // 期間予約の場合：期間内の全日付にキーを作成
+            // 期間予約の場合：期間内の全日付にキーを作成（点検種別を含む）
             const startDateStr = dateRangeMatch[1]
             const endDateStr = dateRangeMatch[2]
             const startDate = new Date(startDateStr + 'T00:00:00')
             const endDate = new Date(endDateStr + 'T00:00:00')
             const dates = eachDayOfInterval({ start: startDate, end: endDate })
-            
+
             dates.forEach(date => {
-              const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}`
+              const dateKey = `${reservation.vehicleId}_${format(date, 'yyyy-MM-dd')}_${inspectionTypeName}`
               bookingsMap[dateKey] = bookingData
             })
           } else {
-            // 単日予約の場合：従来通り
-            const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}`
+            // 単日予約の場合：点検種別を含むキーを生成
+            const bookingKey = `${reservation.vehicleId}_${reservation.scheduledDate.toISOString().split('T')[0]}_${inspectionTypeName}`
             bookingsMap[bookingKey] = bookingData
           }
         }
       })
-      
+
       setInspectionBookings(bookingsMap)
 
       alert(`${vehiclePlateNumber} の点検予約を取り消しました。担当ドライバーに通知を送信しました。`)
@@ -1349,16 +1545,25 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
     }
 
     // 2. 点検予約日チェック（車両ステータスより優先）
-    const bookingKey = `${vehicle.id}_${format(date, 'yyyy-MM-dd')}`
-    const booking = inspectionBookings[bookingKey]
-    
-    if (booking && booking.isReservationCompleted) {
+    // 複数の点検種別をチェック（定期点検とクレーン年次点検）
+    const dateKey = `${vehicle.id}_${format(date, 'yyyy-MM-dd')}`
+    const regularInspectionKey = `${dateKey}_定期点検`
+    const craneInspectionKey = `${dateKey}_クレーン年次点検`
+
+    const hasRegularInspection = inspectionBookings[regularInspectionKey]?.isReservationCompleted
+    const hasCraneInspection = inspectionBookings[craneInspectionKey]?.isReservationCompleted
+
+    if (hasRegularInspection || hasCraneInspection) {
+      const inspectionTypes = []
+      if (hasRegularInspection) inspectionTypes.push('定期点検')
+      if (hasCraneInspection) inspectionTypes.push('クレーン年次点検')
+
       return {
         vehicleId: vehicle.id,
         plateNumber: vehicle.plateNumber,
         date,
         status: 'inactive_inspection',
-        reason: '点検予約実施日',
+        reason: `点検予約実施日 (${inspectionTypes.join('・')})`,
         assignedDriverName: vehicle.driver
       }
     }
@@ -1484,16 +1689,25 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
       
       // 通常の点検車両に予約完了情報を追加
       dayInspectionVehicles.forEach(inspection => {
-        // その日の点検日をキーとして予約情報を確認
-        const bookingKey = `${inspection.vehicleId}_${format(day, 'yyyy-MM-dd')}`
-        const booking = inspectionBookings[bookingKey]
-        
-        if (booking?.isReservationCompleted) {
+        // その日の点検日をキーとして予約情報を確認（点検種別を含む）
+        const dateKey = `${inspection.vehicleId}_${format(day, 'yyyy-MM-dd')}`
+        const regularInspectionKey = `${dateKey}_定期点検`
+        const craneInspectionKey = `${dateKey}_クレーン年次点検`
+
+        const regularBooking = inspectionBookings[regularInspectionKey]
+        const craneBooking = inspectionBookings[craneInspectionKey]
+
+        // 該当する点検種別の予約があるかチェック
+        if (regularBooking?.isReservationCompleted || craneBooking?.isReservationCompleted) {
+          const reservedTypes = []
+          if (regularBooking?.isReservationCompleted) reservedTypes.push('定期点検')
+          if (craneBooking?.isReservationCompleted) reservedTypes.push('クレーン年次点検')
+
           // 予約完了の場合は表示タイプを変更
-          inspection.inspectionType = '点検（予約完了）'
+          inspection.inspectionType = `点検（予約完了: ${reservedTypes.join('・')}）`
           ;(inspection as any).isReserved = true
-          ;(inspection as any).reservationDate = booking.reservationDate
-          ;(inspection as any).memo = booking.memo
+          ;(inspection as any).reservationDate = regularBooking?.reservationDate || craneBooking?.reservationDate
+          ;(inspection as any).memo = regularBooking?.memo || craneBooking?.memo
         }
       })
       
@@ -1830,114 +2044,132 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
         {/* 車両管理情報 */}
         <div className="grid grid-cols-1 gap-6">
-          {/* 点検期限車両（3ヶ月分） */}
+          {/* 点検期限車両（12ヶ月分） */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                 <Wrench className="h-5 w-5 mr-2 text-blue-500" />
-                点検期限車両（3ヶ月分）
+                点検期限車両（12ヶ月分）
               </h3>
-              <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                {(() => {
-                  // 当月・翌月・翌々月の3ヶ月分
-                  const today = new Date()
-                  const nextMonth = addMonths(today, 1)
-                  const monthAfterNext = addMonths(today, 2)
+              <div className="w-64">
+                <select
+                  value={selectedInspectionMonth ? format(selectedInspectionMonth, 'yyyy-MM') : ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [year, month] = e.target.value.split('-')
+                      setSelectedInspectionMonth(new Date(parseInt(year), parseInt(month) - 1, 1))
+                    } else {
+                      setSelectedInspectionMonth(null)
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                >
+                  <option value="">月を選択してください</option>
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const month = addMonths(new Date(), i)
+                    const monthKey = format(month, 'yyyy-MM')
 
-                  const inspectionVehicles = vehicles.filter(vehicle => {
-                    // 今後3ヶ月分の点検から、予約完了済みでない車両のみを抽出
-                    const inspections = getAllInspectionDates(
-                      vehicle.inspectionDate,
-                      vehicle.craneAnnualInspectionDate
+                    // この月の点検期限車両数を計算
+                    const vehicleCount = vehicles.filter(vehicle => {
+                      const inspections = getAllInspectionDates(
+                        vehicle.inspectionDate,
+                        vehicle.craneAnnualInspectionDate
+                      )
+
+                      const upcomingInspections = inspections.filter(inspection => {
+                        const date = new Date(inspection.date)
+                        const isInSelectedMonth = (
+                          date.getMonth() === month.getMonth() &&
+                          date.getFullYear() === month.getFullYear()
+                        )
+
+                        if (!isInSelectedMonth) return false
+
+                        // この特定の点検期限に対して予約完了していないかチェック
+                        const isReserved = Object.values(inspectionBookings).some(booking =>
+                          booking.vehicleId === vehicle.id &&
+                          booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
+                          booking.isReservationCompleted
+                        )
+                        return !isReserved
+                      })
+
+                      return upcomingInspections.length > 0
+                    }).length
+
+                    return (
+                      <option key={monthKey} value={monthKey}>
+                        {format(month, 'yyyy年MM月', { locale: ja })} ({vehicleCount}台)
+                      </option>
                     )
-
-                    const upcomingInspections = inspections.filter(inspection => {
-                      const date = new Date(inspection.date)
-                      const isInThreeMonths = (
-                        (date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()) ||
-                        (date.getMonth() === nextMonth.getMonth() && date.getFullYear() === nextMonth.getFullYear()) ||
-                        (date.getMonth() === monthAfterNext.getMonth() && date.getFullYear() === monthAfterNext.getFullYear())
-                      )
-
-                      if (!isInThreeMonths) return false
-
-                      // この特定の点検期限に対して予約完了していないかチェック
-                      const isReserved = Object.values(inspectionBookings).some(booking =>
-                        booking.vehicleId === vehicle.id &&
-                        booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
-                        booking.isReservationCompleted
-                      )
-                      return !isReserved
-                    })
-
-                    return upcomingInspections.length > 0
-                  })
-
-                  return inspectionVehicles.length
-                })()}台
-              </span>
+                  })}
+                </select>
+              </div>
             </div>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {(() => {
-                // 当月・翌月・翌々月の3ヶ月分
-                const today = new Date()
-                const nextMonth = addMonths(today, 1)
-                const monthAfterNext = addMonths(today, 2)
-                
+                // 月が選択されていない場合
+                if (!selectedInspectionMonth) {
+                  return (
+                    <div className="text-center py-8">
+                      <Info className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-sm text-gray-600">月を選択して点検期限車両を表示してください</p>
+                    </div>
+                  )
+                }
+
+                // 選択された月の点検期限車両を抽出
                 const inspectionVehicles = vehicles.filter(vehicle => {
-                  // 今後3ヶ月分の点検から、予約完了済みでない車両のみを抽出
                   const inspections = getAllInspectionDates(
                     vehicle.inspectionDate,
                     vehicle.craneAnnualInspectionDate
                   )
-                  
+
                   const upcomingInspections = inspections.filter(inspection => {
                     const date = new Date(inspection.date)
-                    const isInThreeMonths = (
-                      (date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()) ||
-                      (date.getMonth() === nextMonth.getMonth() && date.getFullYear() === nextMonth.getFullYear()) ||
-                      (date.getMonth() === monthAfterNext.getMonth() && date.getFullYear() === monthAfterNext.getFullYear())
+                    const isInSelectedMonth = (
+                      date.getMonth() === selectedInspectionMonth.getMonth() &&
+                      date.getFullYear() === selectedInspectionMonth.getFullYear()
                     )
-                    
-                    if (!isInThreeMonths) return false
-                    
+
+                    if (!isInSelectedMonth) return false
+
                     // この特定の点検期限に対して予約完了していないかチェック
-                    const isReserved = Object.values(inspectionBookings).some(booking => 
+                    const isReserved = Object.values(inspectionBookings).some(booking =>
                       booking.vehicleId === vehicle.id &&
                       booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
                       booking.isReservationCompleted
                     )
                     return !isReserved
                   })
-                  
+
                   return upcomingInspections.length > 0
                 })
                 .map(vehicle => {
-                  // この車両の3ヶ月分の点検日を取得（予約完了していないもののみ）
+                  // この車両の選択された月の点検日を取得（予約完了していないもののみ）
                   const inspections = getAllInspectionDates(
                     vehicle.inspectionDate,
                     vehicle.craneAnnualInspectionDate
                   )
-                  
+
                   const upcomingInspections = inspections.filter(inspection => {
                     const date = new Date(inspection.date)
-                    const isInThreeMonths = (
-                      (date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()) ||
-                      (date.getMonth() === nextMonth.getMonth() && date.getFullYear() === nextMonth.getFullYear()) ||
-                      (date.getMonth() === monthAfterNext.getMonth() && date.getFullYear() === monthAfterNext.getFullYear())
+                    const isInSelectedMonth = (
+                      date.getMonth() === selectedInspectionMonth.getMonth() &&
+                      date.getFullYear() === selectedInspectionMonth.getFullYear()
                     )
-                    
-                    if (!isInThreeMonths) return false
-                    
+
+                    if (!isInSelectedMonth) return false
+
                     // この特定の点検期限に対して予約完了していないかチェック
-                    const isReserved = Object.values(inspectionBookings).some(booking => 
+                    const isReserved = Object.values(inspectionBookings).some(booking =>
                       booking.vehicleId === vehicle.id &&
                       booking.inspectionDeadline === format(date, 'yyyy-MM-dd') &&
                       booking.isReservationCompleted
                     )
                     return !isReserved
                   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                  
+
                   return {
                     ...vehicle,
                     inspections: upcomingInspections
@@ -1953,21 +2185,27 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
 
                 if (inspectionVehicles.length === 0) {
                   return (
-                    <p className="text-sm text-gray-600">今後3ヶ月の点検期限車両はありません。</p>
+                    <p className="text-sm text-gray-600">
+                      {format(selectedInspectionMonth, 'yyyy年MM月', { locale: ja })}の点検期限車両はありません。
+                    </p>
                   )
                 }
 
                 return inspectionVehicles.map(vehicle => (
-                  <div 
-                    key={vehicle.id} 
+                  <div
+                    key={vehicle.id}
                     className="p-3 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
                     onClick={() => {
                       setSelectedInspectionVehicle(vehicle)
                       setShowInspectionReservationModal(true)
-                      setInspectionReservationStartDate('')
-                      setInspectionReservationEndDate('')
-                      setInspectionMemo('')
-                  setInspectionType('regular')
+                      setEnableRegularInspection(true)
+                      setRegularInspectionStartDate('')
+                      setRegularInspectionEndDate('')
+                      setRegularInspectionMemo('')
+                      setEnableCraneInspection(false)
+                      setCraneInspectionStartDate('')
+                      setCraneInspectionEndDate('')
+                      setCraneInspectionMemo('')
                     }}
                   >
                     <div className="flex items-center justify-between">
@@ -2857,13 +3095,13 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
   const renderReservationList = () => {
     // 重複を除去するためにユニークキーでグループ化
     const uniqueReservations = new Map()
-    
+
     Object.entries(inspectionBookings)
       .filter(([_, booking]) => booking.isReservationCompleted)
       .forEach(([key, booking]) => {
-        // 車両ID + 予約日 + 期限日の組み合わせでユニークキーを作成
-        const uniqueKey = `${booking.vehicleId}_${booking.reservationDate}_${booking.inspectionDeadline}`
-        
+        // 車両ID + 予約日 + 期限日 + 点検種別の組み合わせでユニークキーを作成
+        const uniqueKey = `${booking.vehicleId}_${booking.reservationDate}_${booking.inspectionDeadline}_${booking.inspectionType}`
+
         if (!uniqueReservations.has(uniqueKey)) {
           const vehicle = vehicles.find(v => v.id === booking.vehicleId)
           if (vehicle) {
@@ -3079,6 +3317,19 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                           <div className="space-y-2">
                             <div className="flex items-center text-sm text-gray-600">
+                              <Wrench className="h-4 w-4 mr-2" />
+                              <span className="font-medium">
+                                {booking.inspectionType}
+                              </span>
+                              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                                booking.inspectionType === 'クレーン年次点検'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {booking.inspectionType === 'クレーン年次点検' ? 'クレーン' : '定期'}
+                              </span>
+                            </div>
+                            <div className="flex items-center text-sm text-gray-600">
                               <Calendar className="h-4 w-4 mr-2" />
                               <span>予約日: {
                                 (() => {
@@ -3184,7 +3435,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">点検予約日の編集</h3>
+                <h3 className="text-lg font-semibold text-gray-900">点検予約の編集</h3>
                 <button
                   onClick={() => setShowEditReservationModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -3194,6 +3445,17 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               </div>
 
               <div className="space-y-4">
+                {/* 点検種別（読み取り専用） */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    点検種別
+                  </label>
+                  <div className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700">
+                    {editInspectionType}
+                  </div>
+                </div>
+
+                {/* 予約日（実施予定日） */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     予約日（実施予定日）
@@ -3203,6 +3465,46 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                     value={editScheduledDate}
                     onChange={(e) => setEditScheduledDate(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* 開始日 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    開始日
+                  </label>
+                  <input
+                    type="date"
+                    value={editStartDate}
+                    onChange={(e) => setEditStartDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* 終了日 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    終了日
+                  </label>
+                  <input
+                    type="date"
+                    value={editEndDate}
+                    onChange={(e) => setEditEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* メモ */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    メモ
+                  </label>
+                  <textarea
+                    value={editMemo}
+                    onChange={(e) => setEditMemo(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="備考・メモを入力してください"
                   />
                 </div>
 
@@ -3290,7 +3592,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                   この日の車両稼働状況の確認と、未稼働車両への代替ドライバー割り当てができます。
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
-                  ※ 点検予約は上部の「点検期限車両（3ヶ月分）」セクションで行ってください
+                  ※ 点検予約は上部の「点検期限車両（12ヶ月分）」セクションで行ってください
                 </p>
               </div>
             </div>
@@ -3787,10 +4089,14 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                 onClick={() => {
                   setShowInspectionReservationModal(false)
                   setSelectedInspectionVehicle(null)
-                  setInspectionReservationStartDate('')
-                  setInspectionReservationEndDate('')
-                  setInspectionMemo('')
-                  setInspectionType('regular')
+                  setEnableRegularInspection(true)
+                  setRegularInspectionStartDate('')
+                  setRegularInspectionEndDate('')
+                  setRegularInspectionMemo('')
+                  setEnableCraneInspection(false)
+                  setCraneInspectionStartDate('')
+                  setCraneInspectionEndDate('')
+                  setCraneInspectionMemo('')
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
@@ -3798,7 +4104,7 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-6">
               {/* 車両情報 */}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="flex items-center space-x-3">
@@ -3808,140 +4114,156 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                     <div className="text-sm text-gray-600">{selectedInspectionVehicle.model}</div>
                     <div className="text-sm text-gray-600">担当: {selectedInspectionVehicle.driver || '未割当'}</div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium text-red-600">{inspectionType === 'crane_annual' ? 'クレーン年次' : '定期'}点検期限</div>
-                    <div className="text-sm text-red-700">
-                      {(() => {
-                        const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
-                          ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
-                          : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
-                        return format(deadline, 'yyyy年MM月dd日', { locale: ja })
-                      })()}
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* 点検種別選択 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  点検種別 <span className="text-red-500">*</span>
+              {/* 定期点検セクション */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <label className="flex items-center mb-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableRegularInspection}
+                    onChange={(e) => setEnableRegularInspection(e.target.checked)}
+                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <div className="ml-3 flex-1">
+                    <div className="text-sm font-medium text-gray-900">定期点検（3ヶ月間隔）</div>
+                    <div className="text-xs text-gray-600">通常の3ヶ月ごとの定期点検</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-medium text-red-600">期限</div>
+                    <div className="text-xs text-red-700">
+                      {format(getNextInspectionDate(selectedInspectionVehicle.inspectionDate), 'yyyy年MM月dd日', { locale: ja })}
+                    </div>
+                  </div>
                 </label>
-                <div className="grid grid-cols-1 gap-3">
-                  <label className="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+
+                {enableRegularInspection && (
+                  <div className="space-y-3 pl-8 border-l-2 border-blue-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          開始日 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                          value={regularInspectionStartDate}
+                          onChange={(e) => setRegularInspectionStartDate(e.target.value)}
+                          min={format(new Date(), 'yyyy-MM-dd')}
+                          max={format(getNextInspectionDate(selectedInspectionVehicle.inspectionDate), 'yyyy-MM-dd')}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          終了日 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                          value={regularInspectionEndDate}
+                          onChange={(e) => setRegularInspectionEndDate(e.target.value)}
+                          min={regularInspectionStartDate || format(new Date(), 'yyyy-MM-dd')}
+                          max={format(getNextInspectionDate(selectedInspectionVehicle.inspectionDate), 'yyyy-MM-dd')}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        備考・メモ
+                      </label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
+                        rows={2}
+                        placeholder="点検内容や特記事項があれば入力してください"
+                        value={regularInspectionMemo}
+                        onChange={(e) => setRegularInspectionMemo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* クレーン年次点検セクション */}
+              {selectedInspectionVehicle.craneAnnualInspectionDate && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <label className="flex items-center mb-4 cursor-pointer">
                     <input
-                      type="radio"
-                      name="inspectionType"
-                      value="regular"
-                      checked={inspectionType === 'regular'}
-                      onChange={(e) => setInspectionType(e.target.value as 'regular' | 'crane_annual')}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      type="checkbox"
+                      checked={enableCraneInspection}
+                      onChange={(e) => setEnableCraneInspection(e.target.checked)}
+                      className="h-5 w-5 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
                     />
                     <div className="ml-3 flex-1">
-                      <div className="text-sm font-medium text-gray-900">定期点検（3ヶ月間隔）</div>
-                      <div className="text-sm text-gray-600">通常の3ヶ月ごとの定期点検</div>
+                      <div className="text-sm font-medium text-gray-900">クレーン年次点検（1年間隔）</div>
+                      <div className="text-xs text-gray-600">年1回のクレーン年次点検</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-medium text-red-600">期限</div>
+                      <div className="text-xs text-red-700">
+                        {format(getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate), 'yyyy年MM月dd日', { locale: ja })}
+                      </div>
                     </div>
                   </label>
-                  {selectedInspectionVehicle.craneAnnualInspectionDate && (
-                    <label className="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="inspectionType"
-                        value="crane_annual"
-                        checked={inspectionType === 'crane_annual'}
-                        onChange={(e) => setInspectionType(e.target.value as 'regular' | 'crane_annual')}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                      />
-                      <div className="ml-3 flex-1">
-                        <div className="text-sm font-medium text-gray-900">クレーン年次点検（1年間隔）</div>
-                        <div className="text-sm text-gray-600">年1回のクレーン年次点検</div>
+
+                  {enableCraneInspection && (
+                    <div className="space-y-3 pl-8 border-l-2 border-orange-200">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            開始日 <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                            value={craneInspectionStartDate}
+                            onChange={(e) => setCraneInspectionStartDate(e.target.value)}
+                            min={format(new Date(), 'yyyy-MM-dd')}
+                            max={format(getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate), 'yyyy-MM-dd')}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            終了日 <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                            value={craneInspectionEndDate}
+                            onChange={(e) => setCraneInspectionEndDate(e.target.value)}
+                            min={craneInspectionStartDate || format(new Date(), 'yyyy-MM-dd')}
+                            max={format(getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate), 'yyyy-MM-dd')}
+                          />
+                        </div>
                       </div>
-                    </label>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          備考・メモ
+                        </label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none text-sm"
+                          rows={2}
+                          placeholder="点検内容や特記事項があれば入力してください"
+                          value={craneInspectionMemo}
+                          onChange={(e) => setCraneInspectionMemo(e.target.value)}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
+              )}
 
-              {/* 予約期間選択 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  点検実施予約期間 <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      開始日
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={inspectionReservationStartDate}
-                      onChange={(e) => setInspectionReservationStartDate(e.target.value)}
-                      min={format(new Date(), 'yyyy-MM-dd')}
-                      max={(() => {
-                        const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
-                          ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
-                          : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
-                        return format(deadline, 'yyyy-MM-dd')
-                      })()}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      終了日
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={inspectionReservationEndDate}
-                      onChange={(e) => setInspectionReservationEndDate(e.target.value)}
-                      min={inspectionReservationStartDate || format(new Date(), 'yyyy-MM-dd')}
-                      max={(() => {
-                        const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
-                          ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
-                          : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
-                        return format(deadline, 'yyyy-MM-dd')
-                      })()}
-                    />
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  点検期限内の日付範囲で点検を予約します
-                </p>
-                <p className="text-xs text-red-600 mt-1">
-                  ※ 期限: {(() => {
-                    const deadline = inspectionType === 'crane_annual' && selectedInspectionVehicle.craneAnnualInspectionDate
-                      ? getNextAnnualInspectionDate(selectedInspectionVehicle.craneAnnualInspectionDate)
-                      : getNextInspectionDate(selectedInspectionVehicle.inspectionDate)
-                    return format(deadline, 'yyyy年MM月dd日', { locale: ja })
-                  })()}まで
-                </p>
-              </div>
-
-              {/* メモ */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  備考・メモ
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  rows={3}
-                  placeholder="点検内容や特記事項があれば入力してください"
-                  value={inspectionMemo}
-                  onChange={(e) => setInspectionMemo(e.target.value)}
-                />
-              </div>
-
-              {/* 点検種類表示 */}
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-sm text-gray-600">
-                  <div className="font-medium mb-1">予約する点検内容</div>
-                  {inspectionType === 'regular' ? (
-                    <div>• 定期点検（3ヶ月間隔）</div>
-                  ) : (
-                    <div>• クレーン年次点検（1年間隔）</div>
-                  )}
-                  <div className="text-xs text-red-600 mt-2">
-                    この期限内に実施する必要があります
+              {/* 注意事項 */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <div className="flex items-start">
+                  <Info className="h-4 w-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+                  <div className="text-xs text-yellow-800">
+                    <div className="font-medium mb-1">注意事項</div>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>少なくとも1つの点検種別を選択してください</li>
+                      <li>各点検の期限内に予約する必要があります</li>
+                      <li>両方の点検を同時に予約することも可能です</li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -3952,10 +4274,14 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
                 onClick={() => {
                   setShowInspectionReservationModal(false)
                   setSelectedInspectionVehicle(null)
-                  setInspectionReservationStartDate('')
-                  setInspectionReservationEndDate('')
-                  setInspectionMemo('')
-                  setInspectionType('regular')
+                  setEnableRegularInspection(true)
+                  setRegularInspectionStartDate('')
+                  setRegularInspectionEndDate('')
+                  setRegularInspectionMemo('')
+                  setEnableCraneInspection(false)
+                  setCraneInspectionStartDate('')
+                  setCraneInspectionEndDate('')
+                  setCraneInspectionMemo('')
                 }}
                 className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
               >
@@ -3963,11 +4289,11 @@ export default function VehicleOperationManagement({}: VehicleOperationManagemen
               </button>
               <button
                 onClick={handleInspectionReservation}
-                disabled={!inspectionReservationStartDate || !inspectionReservationEndDate}
+                disabled={!enableRegularInspection && !enableCraneInspection}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="h-4 w-4" />
-                <span>予約設定</span>
+                <span>予約を確定</span>
               </button>
             </div>
           </div>
